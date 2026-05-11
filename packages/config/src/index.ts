@@ -6,10 +6,12 @@ export {
   pluginSettingsSchema,
   providerSettingsSchema,
   permissionsConfigSchema,
+  embeddingsConfigSchema,
   watcherModeSchema,
   type MoxxyConfig,
   type PluginSettings,
   type ProviderSettings,
   type PermissionsConfig,
+  type EmbeddingsConfig,
   type WatcherMode,
 } from './schema.js';

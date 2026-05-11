@@ -16,6 +16,7 @@ export {
 export { parseMdFile, parseFrontmatter, renderFrontmatter } from './parse.js';
 export { recentExchanges, summarizeSession, type SessionFact } from './stm.js';
 export { TfIdfEmbedder, cosineSimilarity, tokenize } from './tfidf.js';
+export { EmbeddingIndex } from './embedding-cache.js';
 
 export interface BuildMemoryPluginOptions extends MemoryStoreOptions {}
 

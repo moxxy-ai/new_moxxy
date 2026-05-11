@@ -5,6 +5,7 @@ import { z } from 'zod';
 import type { EmbeddingProvider } from '@moxxy/sdk';
 import { parseMdFile, renderFrontmatter } from './parse.js';
 import { TfIdfEmbedder, cosineSimilarity, tokenize } from './tfidf.js';
+import { EmbeddingIndex } from './embedding-cache.js';
 
 export const memoryTypeSchema = z.enum(['fact', 'preference', 'project', 'reference']);
 export type MemoryType = z.infer<typeof memoryTypeSchema>;
@@ -36,6 +37,13 @@ export interface MemoryStoreOptions {
    * embedder is used. Pass `embedder: null` to force keyword-only recall.
    */
   readonly embedder?: EmbeddingProvider | null;
+  /**
+   * Cache computed embeddings on disk (`<dir>/.embeddings.json`) so unchanged
+   * memories aren't re-embedded on every recall. Defaults to true for all
+   * embedders EXCEPT TF-IDF (which derives vocab from the whole corpus, so
+   * per-entry caching doesn't help).
+   */
+  readonly persistEmbeddings?: boolean;
 }
 
 export function defaultMemoryDir(): string {
@@ -45,6 +53,7 @@ export function defaultMemoryDir(): string {
 export class MemoryStore {
   readonly dir: string;
   private readonly embedder: EmbeddingProvider | null;
+  private readonly index: EmbeddingIndex | null;
 
   constructor(opts: MemoryStoreOptions = {}) {
     this.dir = opts.dir ?? defaultMemoryDir();
@@ -55,6 +64,12 @@ export class MemoryStore {
     } else {
       this.embedder = new TfIdfEmbedder();
     }
+    // TF-IDF's vocab depends on the whole corpus, so per-entry caching is
+    // useless — recompute every recall. For neural embedders, caching is
+    // a big win since each entry's vector is corpus-independent.
+    const isTfIdf = this.embedder instanceof TfIdfEmbedder;
+    const persist = opts.persistEmbeddings ?? (this.embedder !== null && !isTfIdf);
+    this.index = persist && this.embedder ? new EmbeddingIndex(this.dir, this.embedder.name) : null;
   }
 
   get embedderName(): string {
@@ -185,21 +200,48 @@ export class MemoryStore {
     limit: number,
   ): Promise<ReadonlyArray<RankedMemory>> {
     if (!this.embedder) return [];
-    // For TF-IDF specifically, the embedder needs to see the corpus to build
-    // its vocabulary. Other providers (e.g., neural) embed independently.
     const corpus = all.map((e) => entryForEmbedding(e));
+
+    // TF-IDF special-cases the persistent cache (vocab is corpus-wide).
     if (this.embedder instanceof TfIdfEmbedder) {
       this.embedder.fit([...corpus, query]);
+      const vectors = await this.embedder.embed([...corpus, query]);
+      const queryVec = vectors[vectors.length - 1]!;
+      return rankCosine(all, vectors.slice(0, all.length), queryVec, limit);
     }
+
+    // Neural embedders: consult the persistent cache, only embed misses + query.
+    if (this.index) {
+      await this.index.load();
+      const cached: Array<ReadonlyArray<number> | null> = [];
+      const misses: { index: number; text: string }[] = [];
+      for (let i = 0; i < all.length; i++) {
+        const hit = this.index.lookup(all[i]!.frontmatter.name, corpus[i]!);
+        cached.push(hit);
+        if (!hit) misses.push({ index: i, text: corpus[i]! });
+      }
+      const queryIdx = misses.length;
+      const toEmbed = [...misses.map((m) => m.text), query];
+      const fresh = await this.embedder.embed(toEmbed);
+      const queryVec = fresh[queryIdx]!;
+      // Stitch results: cached + freshly-embedded
+      const vectors: ReadonlyArray<number>[] = [];
+      for (let i = 0; i < all.length; i++) {
+        vectors.push(cached[i] ?? fresh[misses.findIndex((m) => m.index === i)]!);
+      }
+      // Persist fresh vectors
+      for (const m of misses) {
+        this.index.set(all[m.index]!.frontmatter.name, m.text, fresh[misses.indexOf(m)]!);
+      }
+      this.index.prune(all.map((e) => e.frontmatter.name));
+      await this.index.flush();
+      return rankCosine(all, vectors, queryVec, limit);
+    }
+
+    // No cache configured — embed everything every time.
     const vectors = await this.embedder.embed([...corpus, query]);
     const queryVec = vectors[vectors.length - 1]!;
-    const ranked: RankedMemory[] = [];
-    for (let i = 0; i < all.length; i++) {
-      const score = cosineSimilarity(vectors[i]!, queryVec);
-      if (score > 0) ranked.push({ entry: all[i]!, score });
-    }
-    ranked.sort((a, b) => b.score - a.score);
-    return ranked.slice(0, limit);
+    return rankCosine(all, vectors.slice(0, all.length), queryVec, limit);
   }
 
   private fileFor(name: string): string {
@@ -231,6 +273,21 @@ export class MemoryStore {
 export interface RankedMemory {
   readonly entry: MemoryEntry;
   readonly score: number;
+}
+
+function rankCosine(
+  entries: ReadonlyArray<MemoryEntry>,
+  vectors: ReadonlyArray<ReadonlyArray<number>>,
+  query: ReadonlyArray<number>,
+  limit: number,
+): ReadonlyArray<RankedMemory> {
+  const ranked: RankedMemory[] = [];
+  for (let i = 0; i < entries.length; i++) {
+    const score = cosineSimilarity(vectors[i]!, query);
+    if (score > 0) ranked.push({ entry: entries[i]!, score });
+  }
+  ranked.sort((a, b) => b.score - a.score);
+  return ranked.slice(0, limit);
 }
 
 function entryForEmbedding(entry: MemoryEntry): string {

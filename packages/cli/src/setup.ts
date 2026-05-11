@@ -13,8 +13,8 @@ import {
   PermissionEngine,
   silentLogger,
 } from '@moxxy/core';
-import type { PermissionResolver, Plugin } from '@moxxy/sdk';
-import { loadConfig, type MoxxyConfig } from '@moxxy/config';
+import type { EmbeddingProvider, PermissionResolver, Plugin } from '@moxxy/sdk';
+import { loadConfig, type EmbeddingsConfig, type MoxxyConfig } from '@moxxy/config';
 import { anthropicPlugin } from '@moxxy/plugin-provider-anthropic';
 import { builtinToolsPlugin } from '@moxxy/tools-builtin';
 import { toolUseLoopPlugin } from '@moxxy/loop-tool-use';
@@ -27,7 +27,7 @@ import {
   resolveValue,
   type VaultStore,
 } from '@moxxy/plugin-vault';
-import { buildMemoryPlugin, type MemoryStore } from '@moxxy/plugin-memory';
+import { buildMemoryPlugin, TfIdfEmbedder, type MemoryStore } from '@moxxy/plugin-memory';
 import { buildTelegramPlugin } from '@moxxy/plugin-telegram';
 import { cliPlugin } from '@moxxy/plugin-cli';
 import { httpChannelPlugin } from '@moxxy/plugin-channel-http';
@@ -65,12 +65,10 @@ export async function setupSessionWithConfig(opts: SetupOptions): Promise<SetupR
     skipUser: opts.skipUserConfig,
   });
 
-  // Build vault + memory eagerly — both register tools we expose by default.
   const { plugin: vaultPlugin, vault } = buildVaultPlugin({ disableKeytar: opts.disableKeytar });
-  const { plugin: memoryPlugin, store: memory } = buildMemoryPlugin({});
+  const embedder = await buildEmbedder(rawConfig.embeddings, logger);
+  const { plugin: memoryPlugin, store: memory } = buildMemoryPlugin({ embedder });
 
-  // If the config references ${vault:...} placeholders, resolve them now
-  // (this triggers the master-key prompt if the vault isn't yet open).
   let config = rawConfig;
   if (containsPlaceholder(rawConfig)) {
     logger.info('resolving vault placeholders in config');
@@ -136,3 +134,54 @@ export async function setupSessionWithConfig(opts: SetupOptions): Promise<SetupR
 }
 
 export { createAllowListResolver, createCallbackResolver, denyByDefaultResolver };
+
+/**
+ * Build the configured EmbeddingProvider. `undefined` and `'tfidf'` both yield
+ * the built-in TfIdfEmbedder (zero deps). `'none'` returns `null` so the
+ * MemoryStore falls back to keyword recall. `'openai'` and `'transformers'`
+ * dynamically import their plugins so users without one or the other
+ * installed don't pay the load cost.
+ */
+async function buildEmbedder(
+  cfg: EmbeddingsConfig | undefined,
+  logger: { warn(msg: string, meta?: Record<string, unknown>): void },
+): Promise<EmbeddingProvider | null | undefined> {
+  if (!cfg || cfg.provider === 'tfidf') return new TfIdfEmbedder();
+  if (cfg.provider === 'none') return null;
+  if (cfg.provider === 'openai') {
+    try {
+      const mod = (await import('@moxxy/plugin-embeddings-openai')) as {
+        createOpenAIEmbedder: (opts: Record<string, unknown>) => EmbeddingProvider;
+      };
+      return mod.createOpenAIEmbedder({
+        ...(cfg.model ? { model: cfg.model } : {}),
+        ...(cfg.dimensions !== undefined ? { dimensions: cfg.dimensions } : {}),
+        ...(cfg.apiKey ? { apiKey: cfg.apiKey } : {}),
+        ...(cfg.batchSize !== undefined ? { batchSize: cfg.batchSize } : {}),
+      });
+    } catch (err) {
+      logger.warn('failed to load @moxxy/plugin-embeddings-openai; falling back to TF-IDF', {
+        err: err instanceof Error ? err.message : String(err),
+      });
+      return new TfIdfEmbedder();
+    }
+  }
+  if (cfg.provider === 'transformers') {
+    try {
+      const mod = (await import('@moxxy/plugin-embeddings-transformers')) as {
+        createTransformersEmbedder: (opts: Record<string, unknown>) => EmbeddingProvider;
+      };
+      return mod.createTransformersEmbedder({
+        ...(cfg.model ? { model: cfg.model } : {}),
+        ...(cfg.dimensions !== undefined ? { dimensions: cfg.dimensions } : {}),
+        ...(cfg.cacheDir ? { cacheDir: cfg.cacheDir } : {}),
+      });
+    } catch (err) {
+      logger.warn('failed to load @moxxy/plugin-embeddings-transformers; falling back to TF-IDF', {
+        err: err instanceof Error ? err.message : String(err),
+      });
+      return new TfIdfEmbedder();
+    }
+  }
+  return new TfIdfEmbedder();
+}

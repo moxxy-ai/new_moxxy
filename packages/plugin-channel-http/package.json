@@ -25,6 +25,9 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@moxxy/loop-tool-use": "workspace:*",
+    "@moxxy/testing": "workspace:*",
+    "@moxxy/tools-builtin": "workspace:*",
     "@moxxy/tsconfig": "workspace:*",
     "@moxxy/vitest-preset": "workspace:*",
     "@types/node": "^22.10.0",

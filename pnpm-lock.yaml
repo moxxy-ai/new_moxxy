@@ -198,6 +198,12 @@ importers:
       '@moxxy/plugin-cli':
         specifier: workspace:*
         version: link:../plugin-cli
+      '@moxxy/plugin-embeddings-openai':
+        specifier: workspace:*
+        version: link:../plugin-embeddings-openai
+      '@moxxy/plugin-embeddings-transformers':
+        specifier: workspace:*
+        version: link:../plugin-embeddings-transformers
       '@moxxy/plugin-memory':
         specifier: workspace:*
         version: link:../plugin-memory
@@ -403,6 +409,15 @@ importers:
         specifier: ^3.24.0
         version: 3.25.76
     devDependencies:
+      '@moxxy/loop-tool-use':
+        specifier: workspace:*
+        version: link:../loop-tool-use
+      '@moxxy/testing':
+        specifier: workspace:*
+        version: link:../testing
+      '@moxxy/tools-builtin':
+        specifier: workspace:*
+        version: link:../tools-builtin
       '@moxxy/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig

@@ -23,6 +23,8 @@
     "@moxxy/loop-tool-use": "workspace:*",
     "@moxxy/plugin-channel-http": "workspace:*",
     "@moxxy/plugin-cli": "workspace:*",
+    "@moxxy/plugin-embeddings-openai": "workspace:*",
+    "@moxxy/plugin-embeddings-transformers": "workspace:*",
     "@moxxy/plugin-memory": "workspace:*",
     "@moxxy/plugin-provider-anthropic": "workspace:*",
     "@moxxy/plugin-telegram": "workspace:*",

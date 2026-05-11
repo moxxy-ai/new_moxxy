@@ -35,6 +35,21 @@ export const permissionsConfigSchema = z.object({
     .optional(),
 });
 
+export const embeddingsConfigSchema = z.object({
+  /**
+   * 'tfidf' (default, zero deps) | 'openai' (text-embedding-3-*)
+   * | 'transformers' (local, @huggingface/transformers) | 'none' (disable).
+   */
+  provider: z.enum(['tfidf', 'openai', 'transformers', 'none']),
+  model: z.string().optional(),
+  dimensions: z.number().int().positive().optional(),
+  apiKey: z.string().optional(),
+  batchSize: z.number().int().positive().optional(),
+  cacheDir: z.string().optional(),
+  /** Persist computed embeddings to ~/.moxxy/memory/.embeddings.json. */
+  persistIndex: z.boolean().optional(),
+});
+
 export const moxxyConfigSchema = z.object({
   provider: providerSettingsSchema.optional(),
   loop: z.string().optional(),
@@ -50,6 +65,7 @@ export const moxxyConfigSchema = z.object({
       extraDirs: z.array(z.string()).optional(),
     })
     .optional(),
+  embeddings: embeddingsConfigSchema.optional(),
   plugins: z.record(z.string(), pluginSettingsSchema).optional(),
   channels: z.record(z.string(), z.record(z.string(), z.unknown())).optional(),
   permissions: permissionsConfigSchema.optional(),
@@ -61,3 +77,4 @@ export type PluginSettings = z.infer<typeof pluginSettingsSchema>;
 export type ProviderSettings = z.infer<typeof providerSettingsSchema>;
 export type WatcherMode = z.infer<typeof watcherModeSchema>;
 export type PermissionsConfig = z.infer<typeof permissionsConfigSchema>;
+export type EmbeddingsConfig = z.infer<typeof embeddingsConfigSchema>;
