@@ -17,7 +17,9 @@
   },
   "dependencies": {
     "@moxxy/compactor-summarize": "workspace:*",
+    "@moxxy/config": "workspace:*",
     "@moxxy/core": "workspace:*",
+    "@moxxy/loop-plan-execute": "workspace:*",
     "@moxxy/loop-tool-use": "workspace:*",
     "@moxxy/plugin-cli": "workspace:*",
     "@moxxy/plugin-provider-anthropic": "workspace:*",

@@ -1,0 +1,33 @@
+{
+  "name": "@moxxy/config",
+  "version": "0.0.0",
+  "description": "defineConfig + moxxy.config.ts loader. Walks the file tree from cwd, also reads ~/.moxxy/config.{ts,js,mjs}, merges by precedence, and resolves the final shape the CLI consumes.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf dist .turbo"
+  },
+  "dependencies": {
+    "@moxxy/sdk": "workspace:*",
+    "jiti": "^2.4.2",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@moxxy/tsconfig": "workspace:*",
+    "@moxxy/vitest-preset": "workspace:*",
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}
