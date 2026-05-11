@@ -11,6 +11,11 @@ export const providerSettingsSchema = z.object({
   name: z.string(),
   config: z.record(z.string(), z.unknown()).optional(),
   model: z.string().optional(),
+  /**
+   * Ordered list of provider names to fall back to when the primary's API key
+   * resolution fails. The first one with a working key wins.
+   */
+  fallbacks: z.array(z.string()).optional(),
 });
 
 export const permissionsConfigSchema = z.object({

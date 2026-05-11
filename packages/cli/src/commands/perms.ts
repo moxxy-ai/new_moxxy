@@ -18,10 +18,25 @@ function policyPath(): string {
 }
 
 export async function runPermsCommand(argv: ParsedArgv): Promise<number> {
-  const sub = argv.positional[0] ?? 'list';
+  // No subcommand + TTY → mount the Ink editor.
+  const sub = argv.positional[0];
+  if (!sub && process.stdin.isTTY) {
+    const [{ render }, React, { PermissionEditor }] = await Promise.all([
+      import('ink'),
+      import('react'),
+      import('@moxxy/plugin-cli'),
+    ]);
+    const { waitUntilExit } = render(
+      React.createElement(PermissionEditor, { policyPath: policyPath() }),
+    );
+    await waitUntilExit();
+    return 0;
+  }
+
+  const cmd = sub ?? 'list';
   const engine = await PermissionEngine.load(policyPath());
 
-  switch (sub) {
+  switch (cmd) {
     case 'list': {
       const policy = engine.policySnapshot;
       if (policy.allow.length === 0 && policy.deny.length === 0) {

@@ -1,64 +1,106 @@
-import * as readline from 'node:readline/promises';
+import { promises as fs } from 'node:fs';
+import * as path from 'node:path';
+import { anthropicModels } from '@moxxy/plugin-provider-anthropic';
+import { openAIModels } from '@moxxy/plugin-provider-openai';
 import { setupSessionWithConfig } from '../setup.js';
-import { PROVIDER_KEYS, resolveProviderApiKey } from '../provider-keys.js';
+import { PROVIDER_KEYS } from '../provider-keys.js';
 import type { ParsedArgv } from '../argv.js';
 
 /**
- * Interactive one-time setup. Walks the user through:
- *   1. Vault unlock (passphrase prompt, on first use).
- *   2. Provider API keys (one per known provider — anthropic, openai).
- *   3. Optionally, a starter project moxxy.config.yaml.
+ * Interactive first-time setup. Mounts the Ink-based SetupWizard, which walks
+ * the user through provider selection, API-key entry, model + loop + embedder
+ * picks, and emits a moxxy.config.yaml.
  *
- * Safe to re-run; entries already in the vault are left untouched.
+ * If stdin isn't a TTY, falls back to a minimal headless flow that just
+ * forwards env vars into the vault.
  */
 export async function runInitCommand(_argv: ParsedArgv): Promise<number> {
+  // Boot the session up front so the vault is unlocked once (keychain or
+  // passphrase) before we start prompting for keys.
+  const { vault } = await setupSessionWithConfig({
+    cwd: process.cwd(),
+    skipKeyPrompt: true,
+  });
+
   if (!process.stdin.isTTY) {
-    process.stderr.write('`moxxy init` must be run in an interactive terminal.\n');
-    return 1;
+    return await runHeadlessInit(vault);
   }
 
-  process.stdout.write('\nmoxxy — first-time setup\n\n');
-  process.stdout.write(
-    'This will store API keys in the encrypted vault at ~/.moxxy/vault.json.\n' +
-      'You can skip any provider by leaving the prompt empty.\n\n',
-  );
+  const [React, { render }, plugin] = await Promise.all([
+    import('react'),
+    import('ink'),
+    import('@moxxy/plugin-cli'),
+  ]);
+  const { SetupWizard } = plugin;
 
-  // Booting the session here triggers the vault master-key flow (keychain or
-  // passphrase) ONCE up front — better UX than asking again per provider.
-  const { vault } = await setupSessionWithConfig({ cwd: process.cwd() });
+  const providers = [
+    { id: 'anthropic', label: 'Anthropic', description: 'Claude — Sonnet / Opus / Haiku' },
+    { id: 'openai', label: 'OpenAI', description: 'GPT-4o / 4o-mini / 4-turbo' },
+  ];
 
-  const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
-  try {
-    for (const [provider, canonical] of Object.entries(PROVIDER_KEYS)) {
-      const existing = await vault.get(canonical).catch(() => null);
-      if (existing) {
-        process.stdout.write(`  ${provider}: ${canonical} already set (skipping).\n`);
-        continue;
-      }
-      const envValue = process.env[canonical];
-      if (envValue) {
-        const answer = (await rl.question(`  ${provider}: ${canonical} found in env. Save to vault? [Y/n] `)).trim();
-        if (answer === '' || /^y/i.test(answer)) {
-          await vault.set(canonical, envValue, [provider]);
-          process.stdout.write(`    saved from env.\n`);
-        }
-        continue;
-      }
-      const answer = (await rl.question(`  ${provider}: paste ${canonical} (or empty to skip): `)).trim();
-      if (!answer) {
-        process.stdout.write(`    skipped.\n`);
-        continue;
-      }
-      await resolveProviderApiKey(provider, vault, {
-        providerConfig: { apiKey: answer },
-      });
-      await vault.set(canonical, answer, [provider]);
-      process.stdout.write(`    saved.\n`);
+  const models = {
+    anthropic: anthropicModels.map((m) => ({ id: m.id, label: m.id })),
+    openai: openAIModels.map((m) => ({ id: m.id, label: m.id })),
+  };
+
+  const loops = [
+    { id: 'tool-use', label: 'tool-use', description: 'Default Claude Code-style loop (recommended)' },
+    { id: 'plan-execute', label: 'plan-execute', description: 'Plan-then-execute strategy' },
+  ];
+
+  const embedders = [
+    { id: 'tfidf', label: 'TF-IDF', description: 'Built-in, zero deps, no API key (recommended)' },
+    { id: 'openai', label: 'OpenAI', description: 'text-embedding-3-small (1536d) via OpenAI API' },
+    { id: 'transformers', label: 'Local (transformers.js)', description: 'all-MiniLM-L6-v2, no API key, ~80MB download' },
+    { id: 'none', label: 'None', description: 'Keyword recall only' },
+  ];
+
+  const target = path.join(process.cwd(), 'moxxy.config.yaml');
+
+  const controller = {
+    async saveApiKey(providerId: string, key: string): Promise<void> {
+      const canonical = PROVIDER_KEYS[providerId];
+      if (!canonical) throw new Error(`unknown provider: ${providerId}`);
+      await vault.set(canonical, key, [providerId]);
+    },
+    async writeConfig(yaml: string): Promise<string> {
+      await fs.mkdir(path.dirname(target), { recursive: true });
+      await fs.writeFile(target, yaml);
+      return target;
+    },
+  };
+
+  await new Promise<void>((resolve) => {
+    const { waitUntilExit } = render(
+      React.createElement(SetupWizard, {
+        providers,
+        models,
+        loops,
+        embedders,
+        controller,
+      }),
+    );
+    void waitUntilExit().then(() => resolve());
+  });
+
+  return 0;
+}
+
+async function runHeadlessInit(vault: import('@moxxy/plugin-vault').VaultStore): Promise<number> {
+  process.stderr.write('moxxy init: no TTY — running headless. Reading provider keys from env.\n');
+  let saved = 0;
+  for (const [provider, canonical] of Object.entries(PROVIDER_KEYS)) {
+    const value = process.env[canonical];
+    if (!value) continue;
+    try {
+      const existing = await vault.get(canonical);
+      if (existing) continue;
+      await vault.set(canonical, value, [provider]);
+      saved += 1;
+    } catch {
+      // skip
     }
-  } finally {
-    rl.close();
   }
-
-  process.stdout.write('\nDone. Try `moxxy -p "hello"` to verify.\n');
+  process.stderr.write(`moxxy init: saved ${saved} key(s) to vault.\n`);
   return 0;
 }

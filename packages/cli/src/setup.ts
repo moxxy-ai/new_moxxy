@@ -15,6 +15,7 @@ import {
 } from '@moxxy/core';
 import type { EmbeddingProvider, PermissionResolver, Plugin } from '@moxxy/sdk';
 import { buildConfigPlugin, loadConfig, type EmbeddingsConfig, type MoxxyConfig } from '@moxxy/config';
+import { buildSessionConfigApplier } from './config-applier.js';
 import { anthropicPlugin } from '@moxxy/plugin-provider-anthropic';
 import { openaiPlugin } from '@moxxy/plugin-provider-openai';
 import { builtinToolsPlugin } from '@moxxy/tools-builtin';
@@ -109,7 +110,13 @@ export async function setupSessionWithConfig(opts: SetupOptions): Promise<SetupR
       name: '@moxxy/memory-consolidate',
       plugin: buildMemoryConsolidatePlugin(memory, () => session.providers.getActive()),
     },
-    { name: '@moxxy/plugin-config', plugin: buildConfigPlugin({ cwd: opts.cwd }) },
+    {
+      name: '@moxxy/plugin-config',
+      plugin: buildConfigPlugin({
+        cwd: opts.cwd,
+        applier: buildSessionConfigApplier(session, config),
+      }),
+    },
     { name: '@moxxy/plugin-cli', plugin: cliPlugin },
     { name: '@moxxy/plugin-channel-http', plugin: httpChannelPlugin },
     { name: '@moxxy/plugin-telegram', plugin: buildTelegramPlugin({ vault }) },
@@ -124,18 +131,44 @@ export async function setupSessionWithConfig(opts: SetupOptions): Promise<SetupR
     session.pluginHost.registerStatic(plugin);
   }
 
-  const providerName = config.provider?.name ?? 'anthropic';
+  const primaryProvider = config.provider?.name ?? 'anthropic';
   const initialProviderConfig = { ...(config.provider?.config ?? {}), ...(opts.providerConfig ?? {}) };
-  const { providerConfig: resolvedProviderConfig } = await resolveProviderApiKey(
-    providerName,
-    vault,
-    {
-      providerConfig: initialProviderConfig,
-      // Interactive only when stdin is a TTY AND the caller hasn't suppressed it.
-      interactive: opts.skipKeyPrompt ? false : process.stdin.isTTY === true,
-    },
-  );
-  session.providers.setActive(providerName, resolvedProviderConfig);
+  const fallbacks = config.provider?.fallbacks ?? [];
+  const candidates = [primaryProvider, ...fallbacks];
+
+  let activated: { name: string; cfg: Record<string, unknown> } | null = null;
+  let lastErr: unknown = null;
+  for (let i = 0; i < candidates.length; i++) {
+    const candidate = candidates[i]!;
+    // Only the FIRST candidate gets the interactive prompt — chaining
+    // through fallbacks via prompts would be confusing.
+    const interactive = i === 0 && !opts.skipKeyPrompt && process.stdin.isTTY === true;
+    try {
+      const { providerConfig: resolved } = await resolveProviderApiKey(candidate, vault, {
+        providerConfig: i === 0 ? initialProviderConfig : {},
+        interactive,
+      });
+      activated = { name: candidate, cfg: resolved };
+      break;
+    } catch (err) {
+      lastErr = err;
+      logger.warn('provider key resolution failed; trying fallback', {
+        provider: candidate,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+  if (!activated) {
+    throw new Error(
+      `No working provider key. Tried: ${candidates.join(', ')}. ` +
+        `Run \`moxxy init\` in an interactive terminal, set env vars, or store ` +
+        `keys in the vault. Last error: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`,
+    );
+  }
+  session.providers.setActive(activated.name, activated.cfg);
+  if (activated.name !== primaryProvider) {
+    logger.warn('using fallback provider', { primary: primaryProvider, active: activated.name });
+  }
 
   if (config.loop) {
     session.loops.setActive(config.loop);

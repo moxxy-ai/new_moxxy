@@ -11,6 +11,14 @@ export {
   type PermissionPromptHandler,
 } from './resolver.js';
 export { TuiChannel, type TuiStartOpts } from './TuiChannel.js';
+export { PermissionEditor, type PermissionEditorProps } from './components/PermissionEditor.js';
+export {
+  SetupWizard,
+  type SetupWizardProps,
+  type SetupWizardController,
+  type SetupChoice,
+  renderYaml,
+} from './components/SetupWizard.js';
 
 export const tuiChannelDef = defineChannel({
   name: 'tui',

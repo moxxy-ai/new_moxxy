@@ -3,7 +3,22 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { z, defineTool, definePlugin, type Plugin } from '@moxxy/sdk';
 import { loadConfig } from './loader.js';
-import { moxxyConfigSchema } from './schema.js';
+import { moxxyConfigSchema, type MoxxyConfig } from './schema.js';
+
+/**
+ * Optional callback that the CLI (or any session host) can provide to apply
+ * config changes to a live session without a restart. The applier receives the
+ * full validated config snapshot AFTER the write; it should diff against its
+ * own cached state and update the parts it can apply safely.
+ *
+ * Return a list of changed paths that were reflected at runtime, plus any
+ * that need a session restart to take effect.
+ */
+export interface ConfigApplyResult {
+  readonly applied: ReadonlyArray<string>;
+  readonly pending: ReadonlyArray<string>;
+}
+export type ConfigApplier = (snapshot: MoxxyConfig) => Promise<ConfigApplyResult>;
 
 const scopeSchema = z.enum(['user', 'project']);
 type Scope = z.infer<typeof scopeSchema>;
@@ -67,8 +82,11 @@ function parseValue(raw: string): unknown {
   }
 }
 
-export function buildConfigPlugin(opts: { cwd: string } = { cwd: process.cwd() }): Plugin {
+export function buildConfigPlugin(
+  opts: { cwd: string; applier?: ConfigApplier } = { cwd: process.cwd() },
+): Plugin {
   const cwd = opts.cwd;
+  const applier = opts.applier;
 
   return definePlugin({
     name: '@moxxy/plugin-config',
@@ -147,7 +165,39 @@ export function buildConfigPlugin(opts: { cwd: string } = { cwd: process.cwd() }
             );
           }
           await fs.writeFile(target, candidate);
-          return { path: target, previousSize: text.length, newSize: candidate.length };
+
+          // If a runtime applier is wired, try to reflect the change live.
+          let runtime: ConfigApplyResult = { applied: [], pending: [] };
+          if (applier) {
+            try {
+              runtime = await applier(validated.data);
+            } catch (err) {
+              runtime = {
+                applied: [],
+                pending: [`reload-failed: ${err instanceof Error ? err.message : String(err)}`],
+              };
+            }
+          }
+
+          return {
+            path: target,
+            previousSize: text.length,
+            newSize: candidate.length,
+            runtime,
+          };
+        },
+      }),
+      defineTool({
+        name: 'config_reload',
+        description:
+          'Re-read the merged config from disk and apply the safe subset of changes (loop, compactor, plugin enable/disable) to the active session. Anything outside that subset is reported in `pending` and requires a restart.',
+        inputSchema: z.object({}),
+        handler: async () => {
+          if (!applier) {
+            return { applied: [], pending: ['(no runtime applier configured)'] };
+          }
+          const { config: fresh } = await loadConfig({ cwd });
+          return await applier(fresh);
         },
       }),
       defineTool({
