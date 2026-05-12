@@ -39,7 +39,7 @@ import {
   type MemoryStore,
 } from '@moxxy/plugin-memory';
 import { buildTelegramPlugin } from '@moxxy/plugin-telegram';
-import { buildMcpAdminPlugin } from '@moxxy/plugin-mcp';
+import { buildMcpAdminPluginWithApi, type McpAdminApi } from '@moxxy/plugin-mcp';
 import { cliPlugin } from '@moxxy/plugin-cli';
 import { httpChannelPlugin } from '@moxxy/plugin-channel-http';
 import { browserPlugin } from '@moxxy/plugin-browser';
@@ -152,10 +152,18 @@ export async function setupSessionWithConfig(opts: SetupOptions): Promise<SetupR
     // mcp_test_server) plus the boot-time lazy attach. Passing the
     // session's live tool registry enables both hot-attach for runtime
     // adds AND lazy stub registration in onInit for saved servers.
-    {
-      name: '@moxxy/plugin-mcp-admin',
-      plugin: buildMcpAdminPlugin({ toolRegistry: session.tools }),
-    },
+    (() => {
+      const { plugin, api } = buildMcpAdminPluginWithApi({
+        toolRegistry: session.tools,
+        skillRegistry: session.skills,
+        userSkillsDir: rawConfig.skills?.userDir,
+      });
+      // Stash the api on the session so the TUI / CLI can call
+      // enableAndAttach + detach without going through the model. Loose
+      // typing — `mcpAdmin` isn't part of Session's declared shape.
+      (session as unknown as { mcpAdmin: McpAdminApi }).mcpAdmin = api;
+      return { name: '@moxxy/plugin-mcp-admin', plugin };
+    })(),
     {
       name: '@moxxy/synthesize-skill',
       // Thread the SAME directory set the boot scan uses so reload_skills

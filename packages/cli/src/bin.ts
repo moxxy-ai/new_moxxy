@@ -9,6 +9,7 @@ import { runChannelByName } from './commands/run-channel.js';
 import { runInitCommand } from './commands/init.js';
 import { runPermsCommand } from './commands/perms.js';
 import { runMemoryCommand } from './commands/memory.js';
+import { runMcpCommand } from './commands/mcp.js';
 import { runDoctorCommand } from './commands/doctor.js';
 import { setupSessionWithConfig } from './setup.js';
 import { renderLogo } from './logo.js';
@@ -34,6 +35,7 @@ const HELP = `usage:
   moxxy plugins list|reload          manage plugin host
   moxxy perms list|allow|deny|remove|clear|path  view/edit the permission policy
   moxxy memory list|audit|show|revert|prune-stale|path  curate long-term memory
+  moxxy mcp list|enable|disable|remove|path  manage Model Context Protocol servers
   moxxy doctor [--check-keys]        diagnose config, vault, providers, channels, memory
   moxxy --help                       this help
   moxxy --version                    print version
@@ -64,6 +66,7 @@ const COMMANDS: Record<string, CommandHandler> = {
   init: runInitCommand,
   perms: runPermsCommand,
   memory: runMemoryCommand,
+  mcp: runMcpCommand,
   doctor: runDoctorCommand,
   prompt: runPromptCommand,
   tui: runTuiCommand,

@@ -476,6 +476,9 @@ importers:
       '@moxxy/core':
         specifier: workspace:*
         version: link:../core
+      '@moxxy/plugin-mcp':
+        specifier: workspace:*
+        version: link:../plugin-mcp
       '@moxxy/sdk':
         specifier: workspace:*
         version: link:../sdk

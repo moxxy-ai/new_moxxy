@@ -70,6 +70,8 @@ export const InteractiveSession: React.FC<InteractiveSessionProps> = ({
   const [picker, setPicker] = useState<
     | null
     | { kind: 'model' | 'loop'; title: string; options: ReadonlyArray<ListPickerOption> }
+    | { kind: 'mcp-server'; title: string; options: ReadonlyArray<ListPickerOption> }
+    | { kind: 'mcp-action'; title: string; serverName: string; options: ReadonlyArray<ListPickerOption> }
   >(null);
   const [pendingPermission, setPendingPermission] = useState<{
     call: PendingToolCall;
@@ -218,8 +220,85 @@ export const InteractiveSession: React.FC<InteractiveSessionProps> = ({
 
   const handlePickerSelect = (id: string): void => {
     if (!picker) return;
-    const kind = picker.kind;
+    const currentPicker = picker;
+    const kind = currentPicker.kind;
     setPicker(null);
+    if (kind === 'mcp-server') {
+      // Step 2 of the /mcp flow: opened the action picker for the
+      // selected server. We need to re-derive the disabled flag for the
+      // action label so the picker accurately reads "disable" vs "enable".
+      void (async () => {
+        try {
+          const { readMcpConfig } = await import('@moxxy/plugin-mcp');
+          const cfg = await readMcpConfig();
+          const server = cfg.servers.find((s) => s.name === id);
+          const isDisabled = server?.disabled ?? false;
+          const toggleLabel = isDisabled ? 'Enable' : 'Disable';
+          setPicker({
+            kind: 'mcp-action',
+            title: `${id} — pick an action`,
+            serverName: id,
+            options: [
+              { id: 'toggle', label: toggleLabel, description: isDisabled ? 'register lazy stubs in this session' : 'detach live tools; keep config' },
+              { id: 'remove', label: 'Remove', description: 'delete from ~/.moxxy/mcp.json' },
+              { id: 'cancel', label: 'Cancel', description: 'close without changing anything' },
+            ],
+          });
+        } catch (err) {
+          setSystemNotice(`failed to load action picker: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      })();
+      return;
+    }
+    if (kind === 'mcp-action') {
+      const serverName = currentPicker.serverName;
+      if (id === 'cancel') return;
+      void (async () => {
+        try {
+          const { readMcpConfig, setServerDisabled, removeServerFromConfig } = await import('@moxxy/plugin-mcp');
+          if (id === 'remove') {
+            const ok = await removeServerFromConfig(serverName);
+            const api = (session as unknown as { mcpAdmin?: { detach: (n: string) => Promise<boolean> } }).mcpAdmin;
+            if (api) await api.detach(serverName);
+            setSystemNotice(ok ? `✓ removed MCP server "${serverName}"` : `no MCP server named "${serverName}"`);
+            return;
+          }
+          if (id === 'toggle') {
+            const cfg = await readMcpConfig();
+            const current = cfg.servers.find((s) => s.name === serverName);
+            if (!current) {
+              setSystemNotice(`no MCP server named "${serverName}"`);
+              return;
+            }
+            const nextDisabled = !current.disabled;
+            await setServerDisabled(serverName, nextDisabled);
+            const api = (session as unknown as {
+              mcpAdmin?: {
+                enableAndAttach: (n: string) => Promise<{ toolNames: ReadonlyArray<string> } | null>;
+                detach: (n: string) => Promise<boolean>;
+              };
+            }).mcpAdmin;
+            if (api) {
+              if (nextDisabled) {
+                await api.detach(serverName);
+              } else {
+                const r = await api.enableAndAttach(serverName);
+                setSystemNotice(
+                  r
+                    ? `✓ enabled "${serverName}" — ${r.toolNames.length} tool${r.toolNames.length === 1 ? '' : 's'} attached`
+                    : `enabled "${serverName}" in config but live attach failed`,
+                );
+                return;
+              }
+            }
+            setSystemNotice(`${nextDisabled ? '✗ disabled' : '✓ enabled'} "${serverName}"`);
+          }
+        } catch (err) {
+          setSystemNotice(`MCP action failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      })();
+      return;
+    }
     if (kind === 'model') {
       const [providerId, modelId] = id.split('::');
       if (!providerId || !modelId) return;
@@ -332,6 +411,36 @@ export const InteractiveSession: React.FC<InteractiveSessionProps> = ({
         });
         return;
       }
+      case '/mcp': {
+        // Open a server picker. Selecting one opens the action picker
+        // (enable/disable/remove/cancel). MCP catalog state lives in
+        // ~/.moxxy/mcp.json; we read it lazily here so changes from the
+        // CLI (moxxy mcp ...) show up immediately on next invocation.
+        void (async () => {
+          try {
+            const { readMcpConfig } = await import('@moxxy/plugin-mcp');
+            const cfg = await readMcpConfig();
+            if (cfg.servers.length === 0) {
+              setSystemNotice('no MCP servers registered — add one in chat via mcp_add_server');
+              return;
+            }
+            const options: ListPickerOption[] = cfg.servers.map((s) => {
+              const status = s.disabled ? 'disabled' : 'enabled';
+              const toolCount = s.cachedTools?.length ?? 0;
+              return {
+                id: s.name,
+                label: s.name,
+                description: `${status} · ${toolCount} tool${toolCount === 1 ? '' : 's'}`,
+                current: false,
+              };
+            });
+            setPicker({ kind: 'mcp-server', title: 'Pick an MCP server', options });
+          } catch (err) {
+            setSystemNotice(`failed to read MCP catalog: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        })();
+        return;
+      }
       case '/loop': {
         const strategies = session.loops.list();
         const options: ListPickerOption[] = strategies.map((s) => ({
@@ -417,7 +526,7 @@ export const InteractiveSession: React.FC<InteractiveSessionProps> = ({
       </Box>
       <ChatView events={events} streamingDelta={streamingDelta} expandClosedSkills={expandSkills} />
       {overlay?.kind === 'skills' ? (
-        <SkillsPanel skills={session.skills.list()} />
+        <SkillsPanel skills={session.skills.list()} mcpServers={deriveMcpServers(session.tools.list())} />
       ) : overlay?.kind === 'tools' ? (
         <ToolsPanel tools={session.tools.list()} />
       ) : systemNotice ? (
@@ -490,4 +599,27 @@ function formatTokensShort(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(0)}k`;
   return String(n);
+}
+
+/**
+ * Group MCP tools (those prefixed `mcp__<server>__*`) by server name
+ * for the SkillsPanel summary. Reads the live tool registry — only
+ * servers whose tools are currently registered appear, so the section
+ * reflects the actual catalog the model can call right now.
+ */
+function deriveMcpServers(
+  tools: ReadonlyArray<{ readonly name: string }>,
+): ReadonlyArray<{ name: string; toolCount: number; toolNames: ReadonlyArray<string> }> {
+  const grouped = new Map<string, string[]>();
+  for (const t of tools) {
+    const m = /^mcp__([a-z0-9-]+)__/.exec(t.name);
+    if (!m) continue;
+    const server = m[1]!;
+    const list = grouped.get(server) ?? [];
+    list.push(t.name);
+    grouped.set(server, list);
+  }
+  return [...grouped.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([name, toolNames]) => ({ name, toolCount: toolNames.length, toolNames }));
 }

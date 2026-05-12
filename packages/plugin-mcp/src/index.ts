@@ -16,10 +16,15 @@ export { wrapMcpServerTools } from './wrap.js';
 export { defaultToolNamePrefix } from './types.js';
 export {
   buildMcpAdminPlugin,
+  buildMcpAdminPluginWithApi,
   mcpConfigPath,
   readMcpConfig,
+  removeServerFromConfig,
+  setServerDisabled,
   writeMcpConfig,
+  type McpAdminApi,
   type McpStoredConfig,
+  type McpStoredServer,
 } from './admin.js';
 
 export interface CreateMcpPluginOptions extends McpPluginOptions {

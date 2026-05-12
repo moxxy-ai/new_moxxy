@@ -2,8 +2,22 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import type { Skill, SkillScope } from '@moxxy/sdk';
 
+export interface McpServerSummary {
+  readonly name: string;
+  readonly toolCount: number;
+  readonly toolNames: ReadonlyArray<string>;
+}
+
 export interface SkillsPanelProps {
   readonly skills: ReadonlyArray<Skill>;
+  /**
+   * Optional summary of currently-registered MCP servers. When provided,
+   * a separate "MCP servers" section appears beneath the skill scopes
+   * with one row per server (name + tool count). Independent of whether
+   * the server has a corresponding usage skill — surfaces the catalog
+   * even when auto-skill is disabled.
+   */
+  readonly mcpServers?: ReadonlyArray<McpServerSummary>;
 }
 
 /**
@@ -15,8 +29,9 @@ export interface SkillsPanelProps {
  * invoked by name (most user-authored skills omit the frontmatter
  * `triggers:` field; that's fine, but it's worth saying so).
  */
-export const SkillsPanel: React.FC<SkillsPanelProps> = ({ skills }) => {
-  if (skills.length === 0) {
+export const SkillsPanel: React.FC<SkillsPanelProps> = ({ skills, mcpServers }) => {
+  const hasMcp = mcpServers && mcpServers.length > 0;
+  if (skills.length === 0 && !hasMcp) {
     return (
       <Box marginTop={1} marginBottom={1}>
         <Text dimColor>(no skills discovered)</Text>
@@ -34,7 +49,8 @@ export const SkillsPanel: React.FC<SkillsPanelProps> = ({ skills }) => {
           Skills
         </Text>
         <Text dimColor>
-          {`  ·  ${skills.length} total`}
+          {`  ·  ${skills.length} skill${skills.length === 1 ? '' : 's'}` +
+            (hasMcp ? `, ${mcpServers!.length} MCP server${mcpServers!.length === 1 ? '' : 's'}` : '')}
         </Text>
       </Box>
       {ORDER.map((scope) => {
@@ -51,9 +67,34 @@ export const SkillsPanel: React.FC<SkillsPanelProps> = ({ skills }) => {
           </Box>
         );
       })}
+      {hasMcp ? (
+        <Box flexDirection="column">
+          <Box>
+            <Text dimColor>{`── mcp servers ${'─'.repeat(28)}`}</Text>
+          </Box>
+          {mcpServers!.map((srv) => (
+            <McpServerCard key={srv.name} server={srv} />
+          ))}
+        </Box>
+      ) : null}
     </Box>
   );
 };
+
+const McpServerCard: React.FC<{ server: McpServerSummary }> = ({ server }) => (
+  <Box flexDirection="column" marginTop={1} marginLeft={2}>
+    <Box>
+      <Text color="magenta" bold>
+        {server.name}
+      </Text>
+      <Text dimColor>{`  ·  ${server.toolCount} tool${server.toolCount === 1 ? '' : 's'}`}</Text>
+    </Box>
+    <Box marginLeft={2}>
+      <Text dimColor>tools prefixed </Text>
+      <Text color="yellow">{`mcp__${server.name}__*`}</Text>
+    </Box>
+  </Box>
+);
 
 const ORDER: ReadonlyArray<SkillScope> = ['user', 'project', 'builtin', 'plugin'];
 

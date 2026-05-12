@@ -23,6 +23,7 @@ export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<SlashCommand> = [
   { name: 'skills', description: 'List the discovered skills' },
   { name: 'model', description: 'Switch provider + model — opens a picker' },
   { name: 'loop', description: 'Switch loop strategy (tool-use / plan-execute / …)' },
+  { name: 'mcp', description: 'Enable / disable / remove MCP servers' },
   {
     name: 'yolo',
     description: 'Toggle auto-approve mode — every tool call allowed without asking',
