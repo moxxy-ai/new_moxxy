@@ -1,12 +1,14 @@
 import { collectTurn, createAllowListResolver, denyByDefaultResolver, runTurn } from '@moxxy/core';
 import type { MoxxyEvent } from '@moxxy/sdk';
 import { setupSession } from '../setup.js';
+import { argvToSetupOptions, hasBoolFlag, stringFlag } from '../argv-helpers.js';
+import { printError } from '../errors.js';
 import type { ParsedArgv } from '../argv.js';
 
 export async function runPromptCommand(argv: ParsedArgv): Promise<number> {
-  const prompt = String(argv.flags.p ?? argv.flags.prompt ?? '');
+  const prompt = stringFlag(argv, 'p') ?? stringFlag(argv, 'prompt') ?? '';
   if (!prompt) {
-    process.stderr.write('error: -p/--prompt requires a non-empty string\n');
+    printError('-p/--prompt requires a non-empty string');
     return 2;
   }
 
@@ -14,22 +16,29 @@ export async function runPromptCommand(argv: ParsedArgv): Promise<number> {
   const fullPrompt = stdinBuf ? `${prompt}\n\n${stdinBuf}` : prompt;
 
   const allowTools = parseList(argv.flags['allow-tools']);
-  const allowAll = Boolean(argv.flags['allow-all']);
-  const outputFormat = String(argv.flags['output-format'] ?? 'text') as 'text' | 'json' | 'stream-json';
-  const model = argv.flags.model ? String(argv.flags.model) : undefined;
+  const allowAll = hasBoolFlag(argv, 'allow-all');
+  const outputFormat = (stringFlag(argv, 'output-format') ?? 'text') as 'text' | 'json' | 'stream-json';
+  const model = stringFlag(argv, 'model');
 
-  const resolver = allowAll
-    ? createAllowListResolver(['Read', 'Write', 'Edit', 'Bash', 'Grep', 'Glob', 'synthesize_skill', 'reload_skills'])
+  // For --allow-all, derive the allow-list from the active session's tools
+  // rather than hardcoding a stale snapshot. We boot the session first with
+  // deny-by-default, look at tools, then swap to the all-tools resolver.
+  // For the common case (no --allow-all) we can wire the resolver inline.
+  let resolver = allowAll
+    ? denyByDefaultResolver
     : allowTools.length > 0
       ? createAllowListResolver(allowTools)
       : denyByDefaultResolver;
 
   const session = await setupSession({
-    cwd: process.cwd(),
-    verbose: Boolean(argv.flags.verbose),
+    ...argvToSetupOptions(argv),
     resolver,
-    model,
   });
+
+  if (allowAll) {
+    const everyTool = session.tools.list().map((t) => t.name);
+    session.setPermissionResolver(createAllowListResolver(everyTool));
+  }
 
   let exitCode = 0;
   try {
@@ -37,11 +46,11 @@ export async function runPromptCommand(argv: ParsedArgv): Promise<number> {
       for await (const event of runTurn(session, fullPrompt, model ? { model } : {})) {
         if (event.type === 'assistant_chunk') process.stdout.write(event.delta);
         if (event.type === 'tool_call_denied') {
-          process.stderr.write(`\n[tool denied] ${event.reason}\n`);
+          printError(`tool denied: ${event.reason}`);
           exitCode = 1;
         }
         if (event.type === 'error') {
-          process.stderr.write(`\n[error] ${event.message}\n`);
+          printError(event.message);
           exitCode = 1;
         }
       }
@@ -57,7 +66,7 @@ export async function runPromptCommand(argv: ParsedArgv): Promise<number> {
       if (events.some((e: MoxxyEvent) => e.type === 'tool_call_denied' || e.type === 'error')) exitCode = 1;
     }
   } catch (err) {
-    process.stderr.write(`fatal: ${err instanceof Error ? err.message : String(err)}\n`);
+    printError(`fatal: ${err instanceof Error ? err.message : String(err)}`);
     return 1;
   }
   return exitCode;

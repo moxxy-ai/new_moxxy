@@ -26,6 +26,10 @@ export function isRetryableError(err: unknown): boolean {
  * Best-effort zod → JSON-schema conversion for provider tool definitions.
  * Most callers want the basic object/string/number/boolean/array coverage;
  * for richer schemas, plugins can layer `zod-to-json-schema`.
+ *
+ * The `as unknown as { ... }` casts below probe zod's `_def` internals
+ * (`shape`, `type`) which aren't part of zod's public typed surface but are
+ * stable enough across versions to rely on for this best-effort path.
  */
 export function zodToJsonSchema(schema: unknown): unknown {
   const s = schema as { _def?: { typeName?: string }; toJSON?: () => unknown };
@@ -33,6 +37,7 @@ export function zodToJsonSchema(schema: unknown): unknown {
   const def = s._def;
   const typeName = def?.typeName;
   if (typeName === 'ZodObject') {
+    // zod's ZodObject._def has a `shape()` thunk returning the field map.
     const shape = (def as unknown as { shape: () => Record<string, unknown> }).shape();
     const properties: Record<string, unknown> = {};
     const required: string[] = [];
@@ -47,6 +52,7 @@ export function zodToJsonSchema(schema: unknown): unknown {
   if (typeName === 'ZodNumber') return { type: 'number' };
   if (typeName === 'ZodBoolean') return { type: 'boolean' };
   if (typeName === 'ZodArray') {
+    // ZodArray._def.type is the element schema.
     const items = zodToJsonSchema((def as unknown as { type: unknown }).type);
     return { type: 'array', items };
   }

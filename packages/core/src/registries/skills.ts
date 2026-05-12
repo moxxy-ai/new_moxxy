@@ -26,7 +26,19 @@ export class SkillRegistryImpl implements SkillRegistry {
     return matches;
   }
 
+  /**
+   * Register a skill. Throws on duplicate id — use `replace()` for
+   * overwrite (or `replaceAll()` for atomic bulk swap).
+   */
   register(skill: Skill): void {
+    if (this.byId.has(skill.id)) {
+      throw new Error(`Skill already registered: ${skill.id}`);
+    }
+    this.byId.set(skill.id, skill);
+    this.byNameIdx.set(skill.frontmatter.name, skill);
+  }
+
+  replace(skill: Skill): void {
     this.byId.set(skill.id, skill);
     this.byNameIdx.set(skill.frontmatter.name, skill);
   }

@@ -2,6 +2,8 @@ import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { MemoryStore, defaultMemoryDir, type MemoryEntry, type MemoryType } from '@moxxy/plugin-memory';
 import type { ParsedArgv } from '../argv.js';
+import { confirmedYes } from '../argv-helpers.js';
+import { printError } from '../errors.js';
 import { colors } from '../colors.js';
 
 const HELP = `moxxy memory — view and curate long-term memory
@@ -59,12 +61,12 @@ export async function runMemoryCommand(argv: ParsedArgv): Promise<number> {
     case 'show': {
       const name = argv.positional[1];
       if (!name) {
-        process.stderr.write('usage: moxxy memory show <name>\n');
+        printError('usage: moxxy memory show <name>');
         return 2;
       }
       const entry = await store.get(name);
       if (!entry) {
-        process.stderr.write(`not found: ${name}\n`);
+        printError(`not found: ${name}`);
         return 1;
       }
       process.stdout.write(`# ${entry.frontmatter.name}\n`);
@@ -79,7 +81,7 @@ export async function runMemoryCommand(argv: ParsedArgv): Promise<number> {
     case 'revert': {
       const name = argv.positional[1];
       if (!name) {
-        process.stderr.write('usage: moxxy memory revert <name>\n');
+        printError('usage: moxxy memory revert <name>');
         return 2;
       }
       const removed = await store.forget(name);
@@ -89,7 +91,7 @@ export async function runMemoryCommand(argv: ParsedArgv): Promise<number> {
     case 'prune-stale': {
       const days = Number(argv.flags.days ?? 90);
       if (!Number.isFinite(days) || days <= 0) {
-        process.stderr.write('error: --days <n> must be a positive number\n');
+        printError('--days <n> must be a positive number');
         return 2;
       }
       const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
@@ -100,7 +102,7 @@ export async function runMemoryCommand(argv: ParsedArgv): Promise<number> {
         process.stdout.write(`(no entries older than ${days}d)\n`);
         return 0;
       }
-      if (!argv.flags.yes && !argv.flags.y) {
+      if (!confirmedYes(argv)) {
         process.stdout.write(
           `would delete ${stale.length} stale entries (use --yes to confirm):\n`,
         );
@@ -118,7 +120,7 @@ export async function runMemoryCommand(argv: ParsedArgv): Promise<number> {
       return 0;
     }
     default:
-      process.stderr.write(`unknown 'memory' subcommand: ${sub}\n${HELP}`);
+      printError(`unknown 'memory' subcommand: ${sub}\n${HELP}`);
       return 2;
   }
 }

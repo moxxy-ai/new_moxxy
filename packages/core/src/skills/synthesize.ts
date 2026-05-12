@@ -4,6 +4,7 @@ import {
   asSkillId,
   definePlugin,
   defineTool,
+  skillFrontmatterSchema,
   type LLMProvider,
   type Plugin,
   type Skill,
@@ -43,14 +44,24 @@ export async function synthesizeSkill(
       : opts.userDir ?? defaultUserSkillsDir();
   await fs.mkdir(baseDir, { recursive: true });
 
-  const finalPath = await uniqueFilename(baseDir, slugify(draft.frontmatter.name as string));
+  // Validate the LLM-drafted frontmatter against the published schema BEFORE
+  // we write it to disk or register it. A model that returns sloppy YAML
+  // (missing description, illegal slug, etc.) should fail loudly here, not
+  // produce a malformed skill the loader silently ignores later.
+  const frontmatter = skillFrontmatterSchema.parse(draft.frontmatter) as Skill['frontmatter'];
+
+  const finalPath = await uniqueFilename(baseDir, slugify(frontmatter.name));
   await fs.writeFile(finalPath, draft.raw, 'utf8');
 
+  // Derive the skill id from the on-disk filename, not from the LLM-supplied
+  // frontmatter name — otherwise synthesizing the same name twice collides
+  // even when uniqueFilename has just bumped the filename to `<slug>-2.md`.
+  const basename = path.basename(finalPath, '.md');
   const skill: Skill = {
-    id: asSkillId(`${scope}/${draft.frontmatter.name}`),
+    id: asSkillId(`${scope}/${basename}`),
     path: finalPath,
     scope,
-    frontmatter: draft.frontmatter as unknown as Skill['frontmatter'],
+    frontmatter,
     body: draft.body.trimEnd(),
   };
   session.skills.register(skill);

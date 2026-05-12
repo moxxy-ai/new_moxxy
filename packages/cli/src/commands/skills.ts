@@ -4,6 +4,8 @@ import { promises as fs } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { ParsedArgv } from '../argv.js';
+import { confirmedYes } from '../argv-helpers.js';
+import { printError } from '../errors.js';
 
 interface AuditEntry {
   slug: string;
@@ -32,7 +34,7 @@ export async function runSkillsCommand(argv: ParsedArgv): Promise<number> {
   if (sub === 'new') {
     const name = argv.positional[1];
     if (!name) {
-      process.stderr.write('usage: moxxy skills new <name>\n');
+      printError('usage: moxxy skills new <name>');
       return 2;
     }
     const file = path.join(defaultUserSkillsDir(), `${name}.md`);
@@ -47,7 +49,7 @@ export async function runSkillsCommand(argv: ParsedArgv): Promise<number> {
   if (sub === 'audit') {
     return await runAudit(argv);
   }
-  process.stderr.write(`unknown 'skills' subcommand: ${sub}\n`);
+  printError(`unknown 'skills' subcommand: ${sub}`);
   return 2;
 }
 
@@ -74,16 +76,23 @@ async function runAudit(argv: ParsedArgv): Promise<number> {
   if (action === 'revert') {
     const slug = argv.positional[2];
     if (!slug) {
-      process.stderr.write('usage: moxxy skills audit revert <slug>\n');
+      printError('usage: moxxy skills audit revert <slug> [--yes]');
       return 2;
     }
     const match = entries.find((e) => e.slug === slug);
     if (!match) {
-      process.stderr.write(`no audit entry for slug: ${slug}\n`);
+      printError(`no audit entry for slug: ${slug}`);
       return 1;
     }
     const baseDir = match.scope === 'user' ? defaultUserSkillsDir() : defaultProjectSkillsDir(process.cwd());
     const filePath = path.join(baseDir, `${match.slug}.md`);
+    if (!confirmedYes(argv)) {
+      printError(
+        `refusing to revert without --yes. This will delete ${filePath} and drop the audit entry.\n` +
+          `Re-run as: moxxy skills audit revert ${slug} --yes`,
+      );
+      return 2;
+    }
     let removed = false;
     try {
       await fs.unlink(filePath);
@@ -103,7 +112,7 @@ async function runAudit(argv: ParsedArgv): Promise<number> {
     return 0;
   }
 
-  process.stderr.write(`unknown 'skills audit' action: ${action}\n  list | revert <slug> | path\n`);
+  printError(`unknown 'skills audit' action: ${action}\n  list | revert <slug> | path`);
   return 2;
 }
 

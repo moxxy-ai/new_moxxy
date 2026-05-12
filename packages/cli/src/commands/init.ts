@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
-import { setupSessionWithConfig } from '../setup.js';
+import { bootSessionWithConfig } from '../argv-helpers.js';
 import { canonicalKey } from '../provider-keys.js';
 import { validateProviderKey } from '../validate-key.js';
 import type { ParsedArgv } from '../argv.js';
@@ -17,10 +17,10 @@ import type { ParsedArgv } from '../argv.js';
  * If stdin isn't a TTY, falls back to a minimal headless flow that just
  * forwards env vars into the vault.
  */
-export async function runInitCommand(_argv: ParsedArgv): Promise<number> {
-  const { session, vault } = await setupSessionWithConfig({
-    cwd: process.cwd(),
+export async function runInitCommand(argv: ParsedArgv): Promise<number> {
+  const { session, vault } = await bootSessionWithConfig(argv, {
     skipKeyPrompt: true,
+    tolerateNoProvider: true,
   });
 
   if (!process.stdin.isTTY) {

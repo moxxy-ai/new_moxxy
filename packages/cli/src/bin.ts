@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { parseArgv } from './argv.js';
+import { parseArgv, type ParsedArgv } from './argv.js';
 import { runPromptCommand } from './commands/prompt.js';
 import { runTuiCommand } from './commands/tui.js';
 import { runSkillsCommand } from './commands/skills.js';
@@ -14,19 +14,7 @@ import { setupSessionWithConfig } from './setup.js';
 import { renderLogo } from './logo.js';
 import { colors } from './colors.js';
 
-const KNOWN_COMMANDS = new Set([
-  'help',
-  'version',
-  'prompt',
-  'tui',
-  'skills',
-  'plugins',
-  'channels',
-  'init',
-  'perms',
-  'memory',
-  'doctor',
-]);
+type CommandHandler = (argv: ParsedArgv) => Promise<number>;
 
 const HELP = `usage:
   moxxy init                         interactive first-time setup (provider keys → vault)
@@ -61,56 +49,54 @@ env:
   MOXXY_TELEGRAM_TOKEN               override the vault-stored Telegram token
 `;
 
+// Single source of truth: a command name → handler dispatch table. Adding a
+// new built-in subcommand here is enough; there's no separate KNOWN_COMMANDS
+// set that can drift out of sync.
+const COMMANDS: Record<string, CommandHandler> = {
+  help: async () => {
+    process.stdout.write(renderLogo() + HELP);
+    return 0;
+  },
+  version: async () => {
+    process.stdout.write(renderLogo() + 'moxxy 0.0.0\n');
+    return 0;
+  },
+  init: runInitCommand,
+  perms: runPermsCommand,
+  memory: runMemoryCommand,
+  doctor: runDoctorCommand,
+  prompt: runPromptCommand,
+  tui: runTuiCommand,
+  skills: runSkillsCommand,
+  plugins: runPluginsCommand,
+  channels: runChannelsCommand,
+};
+
 async function main(): Promise<number> {
   const argv = parseArgv(process.argv.slice(2));
 
-  switch (argv.command) {
-    case 'help':
-      process.stdout.write(renderLogo() + HELP);
-      return 0;
-    case 'version':
-      process.stdout.write(renderLogo() + 'moxxy 0.0.0\n');
-      return 0;
-    case 'init':
-      return await runInitCommand(argv);
-    case 'perms':
-      return await runPermsCommand(argv);
-    case 'memory':
-      return await runMemoryCommand(argv);
-    case 'doctor':
-      return await runDoctorCommand(argv);
-    case 'prompt':
-      return await runPromptCommand(argv);
-    case 'tui':
-      return await runTuiCommand(argv);
-    case 'skills':
-      return await runSkillsCommand(argv);
-    case 'plugins':
-      return await runPluginsCommand(argv);
-    case 'channels':
-      return await runChannelsCommand(argv);
-    default:
-      // Not a built-in command? Check if it names a registered channel.
-      // Skip the API-key prompt so an unknown command doesn't accidentally
-      // boot the provider.
-      if (!KNOWN_COMMANDS.has(argv.command)) {
-        try {
-          const { session } = await setupSessionWithConfig({
-            cwd: process.cwd(),
-            skipKeyPrompt: true,
-          });
-          if (session.channels.has(argv.command)) {
-            return await runChannelByName(argv.command, argv);
-          }
-        } catch {
-          // Provider key missing etc. — fall through to "unknown command".
-        }
-      }
-      process.stderr.write(
-        colors.red(`unknown command: ${argv.command}`) + '\n' + HELP,
-      );
-      return 2;
+  const handler = COMMANDS[argv.command];
+  if (handler) return handler(argv);
+
+  // Not a built-in. See if it names a registered channel — skip the
+  // API-key prompt so a typo doesn't accidentally boot the provider.
+  try {
+    const { session } = await setupSessionWithConfig({
+      cwd: process.cwd(),
+      skipKeyPrompt: true,
+      tolerateNoProvider: true,
+    });
+    if (session.channels.has(argv.command)) {
+      return await runChannelByName(argv.command, argv);
+    }
+  } catch {
+    // setup failed for an unrelated reason — fall through to "unknown command".
   }
+
+  process.stderr.write(
+    colors.red(`unknown command: ${argv.command}`) + '\n' + HELP,
+  );
+  return 2;
 }
 
 main().then(

@@ -47,13 +47,17 @@ async function candidateRoots(cwd: string): Promise<string[]> {
 }
 
 async function listPackageDirs(root: string): Promise<string[]> {
-  const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => [] as never[]);
+  const entries: import('node:fs').Dirent[] = await fs
+    .readdir(root, { withFileTypes: true })
+    .catch((): import('node:fs').Dirent[] => []);
   const out: string[] = [];
   for (const entry of entries) {
     if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
     const full = path.join(root, entry.name);
     if (entry.name.startsWith('@')) {
-      const sub = await fs.readdir(full, { withFileTypes: true }).catch(() => [] as never[]);
+      const sub: import('node:fs').Dirent[] = await fs
+        .readdir(full, { withFileTypes: true })
+        .catch((): import('node:fs').Dirent[] => []);
       for (const s of sub) {
         if (s.isDirectory() || s.isSymbolicLink()) out.push(path.join(full, s.name));
       }

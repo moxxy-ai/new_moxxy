@@ -2,6 +2,8 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { PermissionEngine } from '@moxxy/core';
 import type { ParsedArgv } from '../argv.js';
+import { confirmedYes } from '../argv-helpers.js';
+import { printError } from '../errors.js';
 
 const HELP = `moxxy perms — view and edit ~/.moxxy/permissions.json
 
@@ -61,7 +63,7 @@ export async function runPermsCommand(argv: ParsedArgv): Promise<number> {
     case 'deny': {
       const tool = argv.positional[1];
       if (!tool) {
-        process.stderr.write(`error: tool name required\n${HELP}`);
+        printError(`tool name required\n${HELP}`);
         return 2;
       }
       const reason = argv.positional.slice(2).join(' ') || undefined;
@@ -73,7 +75,7 @@ export async function runPermsCommand(argv: ParsedArgv): Promise<number> {
     case 'remove': {
       const tool = argv.positional[1];
       if (!tool) {
-        process.stderr.write(`error: tool name required\n${HELP}`);
+        printError(`tool name required\n${HELP}`);
         return 2;
       }
       const removed = await engine.removeByName(tool);
@@ -81,10 +83,8 @@ export async function runPermsCommand(argv: ParsedArgv): Promise<number> {
       return 0;
     }
     case 'clear': {
-      if (!argv.flags.yes && !argv.flags.y) {
-        process.stderr.write(
-          'error: refusing to clear without --yes. Re-run as: moxxy perms clear --yes\n',
-        );
+      if (!confirmedYes(argv)) {
+        printError('refusing to clear without --yes. Re-run as: moxxy perms clear --yes');
         return 2;
       }
       await engine.clear();
@@ -96,7 +96,7 @@ export async function runPermsCommand(argv: ParsedArgv): Promise<number> {
       return 0;
     }
     default:
-      process.stderr.write(`unknown 'perms' subcommand: ${sub}\n${HELP}`);
+      printError(`unknown 'perms' subcommand: ${cmd}\n${HELP}`);
       return 2;
   }
 }

@@ -24,6 +24,14 @@ export function createSummarizeCompactor(opts: SummarizeOptions = {}): Compactor
       return budget.estimatedTokens > thresholdRatio * budget.contextWindow;
     },
     async compact(events: ReadonlyArray<MoxxyEvent>) {
+      // The dispatcher only invokes `compact` when `shouldCompact` returned
+      // true — and that checks `budget.estimatedTokens > 0`, which requires
+      // events. So an empty log here is genuinely unexpected; throw rather
+      // than fabricate a CompactionEvent with branded-id casts.
+      if (events.length === 0) {
+        throw new Error('summarize-old-turns: compact() called with no events');
+      }
+
       // High-water mark: skip anything already covered by a previous
       // CompactionEvent's replacedRange. Without this, every call
       // re-compacts the same prefix from index 0 on top of itself,
@@ -35,11 +43,13 @@ export function createSummarizeCompactor(opts: SummarizeOptions = {}): Compactor
 
       const tail = events.slice(startIdx);
       const turnIds = unique(tail.map((e) => e.turnId));
+      const firstEvent = events[0]!;
+      const lastEvent = events[events.length - 1]!;
       if (turnIds.length <= keepRecent) {
         return {
           type: 'compaction',
-          sessionId: events[0]?.sessionId ?? ('' as never),
-          turnId: events[events.length - 1]?.turnId ?? ('' as never),
+          sessionId: firstEvent.sessionId,
+          turnId: lastEvent.turnId,
           source: 'compactor',
           compactor: 'summarize-old-turns',
           replacedRange: [0, 0],
@@ -54,6 +64,8 @@ export function createSummarizeCompactor(opts: SummarizeOptions = {}): Compactor
         if (events[i]!.turnId === compactThrough) to = i;
       }
       const slice = events.slice(from, to + 1);
+      const sliceFirst = slice[0]!;
+      const sliceLast = slice[slice.length - 1]!;
       const text = slice
         .map((e) => describeEvent(e))
         .filter(Boolean)
@@ -61,8 +73,8 @@ export function createSummarizeCompactor(opts: SummarizeOptions = {}): Compactor
       const summary = await summarize(text);
       return {
         type: 'compaction',
-        sessionId: slice[0]?.sessionId ?? ('' as never),
-        turnId: slice[slice.length - 1]?.turnId ?? ('' as never),
+        sessionId: sliceFirst.sessionId,
+        turnId: sliceLast.turnId,
         source: 'compactor',
         compactor: 'summarize-old-turns',
         replacedRange: [from, to],

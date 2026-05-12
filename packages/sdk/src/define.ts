@@ -1,10 +1,4 @@
-import type {
-  Channel,
-  ChannelAvailability,
-  ChannelDef,
-  ChannelFactoryDeps,
-  ChannelSubcommand,
-} from './channel.js';
+import type { ChannelDef } from './channel.js';
 import type { CompactorDef } from './compactor.js';
 import type { LoopStrategyDef } from './loop.js';
 import type { PermissionRule } from './permission.js';
@@ -25,6 +19,13 @@ export function definePlugin(spec: PluginSpec): Plugin {
   });
 }
 
+/**
+ * `defineTool` carries an extra generic `<S, O>` so the `handler`'s `input`
+ * parameter is typed as `z.output<S>` rather than `unknown` — that's the
+ * authoring-ergonomics benefit. The returned `ToolDef` widens the handler
+ * to the runtime contract `(unknown, ToolContext) => unknown` because the
+ * registry parses input via `inputSchema` before calling.
+ */
 export function defineTool<S extends z.ZodTypeAny, O = unknown>(spec: {
   name: string;
   description: string;
@@ -45,6 +46,11 @@ export function defineTool<S extends z.ZodTypeAny, O = unknown>(spec: {
   });
 }
 
+// Every other `defineX` follows the same `(spec: XDef): XDef` shape: it
+// freezes the spec and hands it back. The compile-time win is a clean
+// "this is how you author one" signature; the runtime win is
+// Object.freeze so plugin authors can't mutate published defs.
+
 export function defineProvider(spec: ProviderDef): ProviderDef {
   return Object.freeze(spec);
 }
@@ -57,13 +63,9 @@ export function defineCompactor(spec: CompactorDef): CompactorDef {
   return Object.freeze(spec);
 }
 
-export function defineChannel<TStartOpts = unknown>(spec: {
-  name: string;
-  description: string;
-  create: (deps: ChannelFactoryDeps) => Channel<TStartOpts>;
-  isAvailable?: (deps: ChannelFactoryDeps) => Promise<ChannelAvailability>;
-  subcommands?: Readonly<Record<string, ChannelSubcommand>>;
-}): ChannelDef<TStartOpts> {
+export function defineChannel<TStartOpts = unknown>(
+  spec: ChannelDef<TStartOpts>,
+): ChannelDef<TStartOpts> {
   return Object.freeze(spec);
 }
 

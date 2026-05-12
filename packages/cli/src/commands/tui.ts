@@ -3,6 +3,7 @@ import { render } from 'ink';
 import React from 'react';
 import type { PendingToolCall, PermissionContext, PermissionDecision } from '@moxxy/sdk';
 import { setupSession } from '../setup.js';
+import { argvToSetupOptions, stringFlag } from '../argv-helpers.js';
 import type { ParsedArgv } from '../argv.js';
 
 export async function runTuiCommand(argv: ParsedArgv): Promise<number> {
@@ -19,19 +20,18 @@ export async function runTuiCommand(argv: ParsedArgv): Promise<number> {
   });
 
   const session = await setupSession({
-    cwd: process.cwd(),
-    verbose: Boolean(argv.flags.verbose),
+    ...argvToSetupOptions(argv),
     resolver,
-    model: argv.flags.model ? String(argv.flags.model) : undefined,
   });
 
+  const model = stringFlag(argv, 'model');
   const { waitUntilExit } = render(
     React.createElement(InteractiveSession, {
       session,
       registerInteractiveResolver: (handler) => {
         promptHandler = handler;
       },
-      model: argv.flags.model ? String(argv.flags.model) : undefined,
+      ...(model ? { model } : {}),
     }),
   );
 

@@ -5,8 +5,22 @@ export class ProviderRegistry {
   private readonly instances = new Map<string, LLMProvider>();
   private active: string | null = null;
 
+  /**
+   * Register a provider def. Throws on duplicate — use `replace()` for
+   * explicit overwrite. Matches the semantics of `tools` and `channels`.
+   */
   register(def: ProviderDef, instance?: LLMProvider): void {
+    if (this.defs.has(def.name)) {
+      throw new Error(`Provider already registered: ${def.name}`);
+    }
     this.defs.set(def.name, def);
+    if (instance) this.instances.set(def.name, instance);
+  }
+
+  /** Overwrite an existing def (also drops the cached instance so the new createClient gets called). */
+  replace(def: ProviderDef, instance?: LLMProvider): void {
+    this.defs.set(def.name, def);
+    this.instances.delete(def.name);
     if (instance) this.instances.set(def.name, instance);
   }
 

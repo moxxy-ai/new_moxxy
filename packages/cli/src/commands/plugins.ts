@@ -1,5 +1,6 @@
-import { setupSession } from '../setup.js';
 import type { ParsedArgv } from '../argv.js';
+import { bootSession, helpRequested } from '../argv-helpers.js';
+import { printError } from '../errors.js';
 import { runPluginNewCommand } from './plugin-new.js';
 import { colors } from '../colors.js';
 
@@ -15,15 +16,11 @@ export async function runPluginsCommand(argv: ParsedArgv): Promise<number> {
   if (sub === 'new') {
     return await runPluginNewCommand(argv);
   }
-  if (sub === 'help' || argv.flags.help) {
+  if (sub === 'help' || helpRequested(argv)) {
     process.stdout.write(HELP);
     return 0;
   }
-  const session = await setupSession({
-    cwd: process.cwd(),
-    skipKeyPrompt: true,
-    tolerateNoProvider: true,
-  });
+  const session = await bootSession(argv, { skipKeyPrompt: true, tolerateNoProvider: true });
   if (sub === 'list') {
     for (const p of session.pluginHost.list()) {
       process.stdout.write(`${colors.bold(p.name)}${colors.dim('@' + p.version)}\n`);
@@ -35,6 +32,6 @@ export async function runPluginsCommand(argv: ParsedArgv): Promise<number> {
     process.stdout.write(colors.green('reload complete') + '\n');
     return 0;
   }
-  process.stderr.write(`unknown 'plugins' subcommand: ${sub}\n${HELP}`);
+  printError(`unknown 'plugins' subcommand: ${sub}\n${HELP}`);
   return 2;
 }

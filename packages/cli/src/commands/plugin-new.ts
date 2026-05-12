@@ -2,6 +2,8 @@ import { promises as fs } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { ParsedArgv } from '../argv.js';
+import { hasBoolFlag } from '../argv-helpers.js';
+import { printError } from '../errors.js';
 
 const HELP = `moxxy plugins new — scaffold a new user-scope plugin
 
@@ -19,14 +21,14 @@ export async function runPluginNewCommand(argv: ParsedArgv): Promise<number> {
     return 2;
   }
   if (!/^[a-z][a-z0-9-]*$/.test(name)) {
-    process.stderr.write(
-      `invalid plugin name '${name}'. Use lowercase letters, digits, and hyphens; must start with a letter.\n`,
+    printError(
+      `invalid plugin name '${name}'. Use lowercase letters, digits, and hyphens; must start with a letter.`,
     );
     return 2;
   }
 
-  const here = Boolean(argv.flags.here);
-  const force = Boolean(argv.flags.force);
+  const here = hasBoolFlag(argv, 'here');
+  const force = hasBoolFlag(argv, 'force');
   const root = here
     ? path.join(process.cwd(), name)
     : path.join(os.homedir(), '.moxxy', 'plugins', name);
@@ -35,7 +37,7 @@ export async function runPluginNewCommand(argv: ParsedArgv): Promise<number> {
   try {
     const stat = await fs.stat(root);
     if (stat.isDirectory() && !force) {
-      process.stderr.write(`refusing to overwrite ${root} (pass --force to allow)\n`);
+      printError(`refusing to overwrite ${root} (pass --force to allow)`);
       return 1;
     }
   } catch {

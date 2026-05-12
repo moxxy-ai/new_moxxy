@@ -1,4 +1,5 @@
-import { setupSessionWithConfig } from '../setup.js';
+import { bootSessionWithConfig } from '../argv-helpers.js';
+import { printError } from '../errors.js';
 import type { ParsedArgv } from '../argv.js';
 import { runChannelByName } from './run-channel.js';
 import { colors } from '../colors.js';
@@ -21,17 +22,14 @@ export async function runChannelsCommand(argv: ParsedArgv): Promise<number> {
     return runList();
   }
 
-  const { session, vault, config } = await setupSessionWithConfig({
-    cwd: process.cwd(),
-    verbose: Boolean(argv.flags.verbose),
-    model: argv.flags.model ? String(argv.flags.model) : undefined,
-    configPath: argv.flags.config ? String(argv.flags.config) : undefined,
+  const { session, vault, config } = await bootSessionWithConfig(argv, {
     skipKeyPrompt: true,
+    tolerateNoProvider: true,
   });
 
   const def = session.channels.get(name);
   if (!def) {
-    process.stderr.write(
+    printError(
       `unknown channel: ${name}\n  Available:\n` +
         session.channels.list().map((d) => `    ${d.name} — ${d.description}\n`).join(''),
     );
@@ -50,7 +48,7 @@ export async function runChannelsCommand(argv: ParsedArgv): Promise<number> {
           .map(([n, c]) => `    ${name} ${n}  — ${c.description}\n`)
           .join('')
       : '    (none)\n';
-    process.stderr.write(
+    printError(
       `unknown '${name}' subcommand: ${sub}\n  Available subcommands:\n${available}`,
     );
     return 2;
@@ -70,20 +68,30 @@ export async function runChannelsCommand(argv: ParsedArgv): Promise<number> {
       positional: rest,
       flags: argv.flags,
     },
-    startChannel: (extra) =>
-      runChannelByName(name, {
-        ...argv,
-        flags: { ...argv.flags, ...(extra ?? {}) },
+    startChannel: (extra) => {
+      // Coerce extra opts into the ParsedArgv.flags shape (string | boolean).
+      // ChannelSubcommand.startChannel accepts arbitrary unknown values for
+      // forward compatibility; we serialize them as the CLI would.
+      const extraFlags: Record<string, string | boolean> = {};
+      for (const [k, v] of Object.entries(extra ?? {})) {
+        if (typeof v === 'string' || typeof v === 'boolean') extraFlags[k] = v;
+        else if (v !== undefined && v !== null) extraFlags[k] = String(v);
+      }
+      const merged: ParsedArgv = {
+        command: argv.command,
+        flags: { ...argv.flags, ...extraFlags },
         positional: [],
-      } as ParsedArgv),
+      };
+      return runChannelByName(name, merged);
+    },
   });
 }
 
 async function runList(): Promise<number> {
-  const { session, vault, config } = await setupSessionWithConfig({
-    cwd: process.cwd(),
-    skipKeyPrompt: true,
-  });
+  const { session, vault, config } = await bootSessionWithConfig(
+    { flags: {} },
+    { skipKeyPrompt: true, tolerateNoProvider: true },
+  );
   const deps = {
     cwd: process.cwd(),
     vault,

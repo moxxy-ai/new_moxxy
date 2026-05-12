@@ -1,4 +1,6 @@
-import { setupSessionWithConfig } from '../setup.js';
+import { bootSessionWithConfig } from '../argv-helpers.js';
+import { printError } from '../errors.js';
+import { stringFlag } from '../argv-helpers.js';
 import type { ParsedArgv } from '../argv.js';
 
 /**
@@ -12,16 +14,11 @@ import type { ParsedArgv } from '../argv.js';
  * `moxxy channels <name>` when no subcommand is given.
  */
 export async function runChannelByName(name: string, argv: ParsedArgv): Promise<number> {
-  const { session, vault, config } = await setupSessionWithConfig({
-    cwd: process.cwd(),
-    verbose: Boolean(argv.flags.verbose),
-    model: argv.flags.model ? String(argv.flags.model) : undefined,
-    configPath: argv.flags.config ? String(argv.flags.config) : undefined,
-  });
+  const { session, vault, config } = await bootSessionWithConfig(argv);
 
   const def = session.channels.get(name);
   if (!def) {
-    process.stderr.write(
+    printError(
       `unknown channel: ${name}\n  Available:\n` +
         session.channels.list().map((d) => `    ${d.name} — ${d.description}\n`).join(''),
     );
@@ -41,17 +38,21 @@ export async function runChannelByName(name: string, argv: ParsedArgv): Promise<
 
   // Build per-invocation start opts: well-known keys first, then any other
   // flags the caller forwarded (channel-specific, e.g., Telegram's `pair`).
+  // The `as never` widens against `Channel<TStartOpts>` — every channel's
+  // own start type carries its own shape, and CLI is generic across all
+  // of them.
   const reserved = new Set(['model', 'config', 'verbose']);
   const extraFlags: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(argv.flags)) {
     if (reserved.has(k)) continue;
     extraFlags[k] = v;
   }
-  const handle = await channel.start({
+  const startOpts = {
     session,
-    model: argv.flags.model ? String(argv.flags.model) : undefined,
+    model: stringFlag(argv, 'model'),
     ...extraFlags,
-  } as never);
+  };
+  const handle = await channel.start(startOpts as never);
 
   const shutdown = async (): Promise<void> => {
     await handle.stop('SIGINT');
