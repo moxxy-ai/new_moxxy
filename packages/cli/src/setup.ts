@@ -61,6 +61,15 @@ export interface SetupOptions {
    * that want to inspect everything else even when the user hasn't run init.
    */
   readonly tolerateNoProvider?: boolean;
+  /**
+   * Skip the provider-activation loop entirely. Used by `moxxy init`, which
+   * is itself the place where keys get stored — running the activation
+   * loop here would call `vault.get()` for every candidate, opening the
+   * vault and triggering a passphrase prompt that hangs an interactive
+   * wizard. The session returns with no active provider; callers wire
+   * one up themselves (or accept that the session can't run turns yet).
+   */
+  readonly skipProviderActivation?: boolean;
 }
 
 export interface SetupResult {
@@ -195,7 +204,9 @@ export async function setupSessionWithConfig(opts: SetupOptions): Promise<SetupR
 
   let activated: { name: string; cfg: Record<string, unknown> } | null = null;
   let lastErr: unknown = null;
-  for (let i = 0; i < candidates.length; i++) {
+  if (opts.skipProviderActivation) {
+    logger.info('skipping provider activation (skipProviderActivation set)');
+  } else for (let i = 0; i < candidates.length; i++) {
     const candidate = candidates[i]!;
     // Only the FIRST candidate gets the interactive prompt — chaining
     // through fallbacks via prompts would be confusing.
@@ -216,7 +227,7 @@ export async function setupSessionWithConfig(opts: SetupOptions): Promise<SetupR
     }
   }
   if (!activated) {
-    if (opts.tolerateNoProvider) {
+    if (opts.tolerateNoProvider || opts.skipProviderActivation) {
       logger.warn('no provider key resolvable; continuing without an active provider', {
         tried: candidates,
         err: lastErr instanceof Error ? lastErr.message : String(lastErr),

@@ -106,10 +106,19 @@ async function defaultPrompt(): Promise<string> {
     );
   }
   const readline = await import('node:readline/promises');
-  const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
+  // Write to stdout (not stderr) and include a leading newline + bold-ish
+  // banner so users can't miss the prompt — the bare `vault passphrase: `
+  // sent to stderr was easy to overlook (looked like a hang).
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   try {
-    process.stderr.write('vault passphrase: ');
-    return (await rl.question('')).trim();
+    process.stdout.write(
+      '\n[1m[33mmoxxy vault[39m[22m needs a passphrase.\n' +
+        'Pick one now (it\'s stored in your OS keychain if available).\n' +
+        'Set [2mMOXXY_VAULT_PASSPHRASE[22m to skip this prompt.\n\n',
+    );
+    const answer = (await rl.question('passphrase: ')).trim();
+    process.stdout.write('\n');
+    return answer;
   } finally {
     rl.close();
   }

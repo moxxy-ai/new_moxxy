@@ -18,14 +18,27 @@ import type { ParsedArgv } from '../argv.js';
  * forwards env vars into the vault.
  */
 export async function runInitCommand(argv: ParsedArgv): Promise<number> {
+  // `skipProviderActivation` is critical here: without it, the activation
+  // loop calls `vault.get()` for every candidate provider, which opens the
+  // vault, which on a first-time-no-keytar install triggers an invisible
+  // readline passphrase prompt that hangs the wizard. The init flow is
+  // *itself* what populates the vault — running activation pre-mount is
+  // both pointless and a UX trap.
   const { session, vault } = await bootSessionWithConfig(argv, {
     skipKeyPrompt: true,
-    tolerateNoProvider: true,
+    skipProviderActivation: true,
   });
 
   if (!process.stdin.isTTY) {
     return await runHeadlessInit(session, vault);
   }
+
+  // Pre-warm the vault BEFORE we mount Ink. A first-time install (no
+  // keytar entry yet) needs to prompt for a passphrase; that prompt uses
+  // stdin/readline and would deadlock against Ink if it fired while the
+  // wizard was rendering. Open it here while the terminal is still raw,
+  // then Ink takes over with an unlocked vault and vault.set() is silent.
+  await vault.open();
 
   const [React, { render }, plugin] = await Promise.all([
     import('react'),

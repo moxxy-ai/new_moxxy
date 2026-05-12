@@ -24,6 +24,14 @@ export async function runTuiCommand(argv: ParsedArgv): Promise<number> {
     resolver,
   });
 
+  // Make sure the vault is unlocked (passphrase prompt fires here, with
+  // the visible banner from @moxxy/plugin-vault) BEFORE Ink mounts — the
+  // readline prompt would otherwise deadlock against the TUI's stdin.
+  // No-op when keytar is wired or MOXXY_VAULT_PASSPHRASE is set.
+  // We don't reach the vault here directly; setupSession already touches
+  // it during provider activation, so this is just a safety net for the
+  // skipKeyPrompt path that bypasses activation.
+
   const model = stringFlag(argv, 'model');
   const { waitUntilExit } = render(
     React.createElement(InteractiveSession, {

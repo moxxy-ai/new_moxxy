@@ -5,6 +5,9 @@ import { runTurn, type Session } from '@moxxy/core';
 import { ChatView } from './components/ChatView.js';
 import { PromptInput } from './components/PromptInput.js';
 import { PermissionDialog } from './components/PermissionDialog.js';
+import { StatusBar } from './components/StatusBar.js';
+import { Spinner } from './components/Spinner.js';
+import { BUILTIN_SLASH_COMMANDS } from './components/SlashCommands.js';
 
 export interface InteractiveSessionProps {
   readonly session: Session;
@@ -23,6 +26,7 @@ export const InteractiveSession: React.FC<InteractiveSessionProps> = ({
   const [events, setEvents] = useState<ReadonlyArray<MoxxyEvent>>([]);
   const [streamingDelta, setStreamingDelta] = useState('');
   const [busy, setBusy] = useState(false);
+  const [systemNotice, setSystemNotice] = useState<string | null>(null);
   const [pendingPermission, setPendingPermission] = useState<{
     call: PendingToolCall;
     ctx: PermissionContext;
@@ -52,9 +56,68 @@ export const InteractiveSession: React.FC<InteractiveSessionProps> = ({
     return () => unsub();
   }, [session, registerInteractiveResolver]);
 
+  // Active provider + model snapshot for the status bar. Reads once per
+  // render — the registries are stable within a turn.
+  const providerName = session.providers.getActiveName() ?? '(none)';
+  const activeModel =
+    model ?? (() => {
+      try {
+        return session.providers.getActive().models[0]?.id ?? 'default';
+      } catch {
+        return 'default';
+      }
+    })();
+  const toolCount = session.tools.list().length;
+  const skillCount = session.skills.list().length;
+
+  const runSlash = (cmd: string): void => {
+    const [head] = cmd.split(/\s+/);
+    switch (head) {
+      case '/exit':
+      case '/quit':
+      case '/q':
+        exit();
+        return;
+      case '/clear':
+        setEvents([]);
+        setStreamingDelta('');
+        streamingBufferRef.current = '';
+        setSystemNotice('chat scrollback cleared (events still in the log)');
+        return;
+      case '/tools':
+        setSystemNotice(
+          session.tools
+            .list()
+            .map((t) => `${t.name}  — ${t.description}`)
+            .join('\n') || '(no tools registered)',
+        );
+        return;
+      case '/skills':
+        setSystemNotice(
+          session.skills
+            .list()
+            .map((s) => `${s.frontmatter.name}  — ${s.frontmatter.description}`)
+            .join('\n') || '(no skills discovered)',
+        );
+        return;
+      case '/model':
+        setSystemNotice(`provider: ${providerName}   model: ${activeModel}`);
+        return;
+      case '/help':
+        setSystemNotice(
+          BUILTIN_SLASH_COMMANDS.map((c) => `/${c.name}  — ${c.description}`).join('\n'),
+        );
+        return;
+      default:
+        setSystemNotice(`unknown command: ${cmd}   (try /help)`);
+        return;
+    }
+  };
+
   const handleSubmit = async (text: string): Promise<void> => {
-    if (text === '/exit' || text === '/quit') {
-      exit();
+    setSystemNotice(null);
+    if (text.startsWith('/')) {
+      runSlash(text);
       return;
     }
     setBusy(true);
@@ -76,9 +139,21 @@ export const InteractiveSession: React.FC<InteractiveSessionProps> = ({
     <Box flexDirection="column">
       <Box marginBottom={1}>
         <Text bold color="magenta">moxxy</Text>
-        <Text dimColor> — /exit to quit</Text>
+        <Text dimColor> — type / for commands · /exit to quit</Text>
       </Box>
       <ChatView events={events} streamingDelta={streamingDelta} />
+      {systemNotice ? (
+        <Box marginTop={1} marginBottom={1} flexDirection="column">
+          {systemNotice.split('\n').map((line, i) => (
+            <Text key={i} color="yellow">{line}</Text>
+          ))}
+        </Box>
+      ) : null}
+      {busy ? (
+        <Box marginTop={1}>
+          <Spinner label="thinking…" color="yellow" />
+        </Box>
+      ) : null}
       {pendingPermission ? (
         <PermissionDialog
           call={pendingPermission.call}
@@ -90,8 +165,20 @@ export const InteractiveSession: React.FC<InteractiveSessionProps> = ({
           }}
         />
       ) : (
-        <PromptInput onSubmit={handleSubmit} disabled={busy} placeholder={busy ? 'thinking…' : 'type a prompt'} />
+        <PromptInput
+          onSubmit={handleSubmit}
+          disabled={busy}
+          placeholder={busy ? '' : 'type a prompt or / for commands'}
+        />
       )}
+      <StatusBar
+        model={activeModel}
+        provider={providerName}
+        toolCount={toolCount}
+        skillCount={skillCount}
+        cwd={session.cwd}
+        busy={busy}
+      />
     </Box>
   );
 };
