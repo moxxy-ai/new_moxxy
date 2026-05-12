@@ -196,7 +196,7 @@ export const InteractiveSession: React.FC<InteractiveSessionProps> = ({
         skillCount={skillCount}
         pluginCount={pluginCount}
       />
-      <Box marginBottom={1}>
+      <Box>
         <Text dimColor>type / for commands · /exit to quit</Text>
       </Box>
       <ChatView events={events} streamingDelta={streamingDelta} />

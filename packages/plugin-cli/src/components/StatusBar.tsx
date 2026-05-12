@@ -26,7 +26,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   contextWindow,
   yolo,
 }) => (
-  <Box marginTop={1} justifyContent="space-between">
+  <Box justifyContent="space-between">
     <Box>
       <Text backgroundColor="magenta" color="white" bold>{` ${provider} `}</Text>
       <Text dimColor>{`  ${model}`}</Text>

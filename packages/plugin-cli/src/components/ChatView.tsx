@@ -38,7 +38,9 @@ export const ChatView: React.FC<ChatViewProps> = ({ events, streamingDelta }) =>
  * to its marker. Mirrors the Claude Code convention (white = assistant).
  */
 const AssistantBlock: React.FC<{ content: string }> = ({ content }) => (
-  <Box flexDirection="row" marginTop={1} marginBottom={1}>
+  // Only top margin — every block owns its own top spacing so adjacent
+  // blocks don't compound into double-blank-line gaps.
+  <Box flexDirection="row" marginTop={1}>
     <Box flexDirection="column" width={2}>
       <Text color="white">● </Text>
     </Box>
@@ -170,8 +172,11 @@ function formatValue(v: unknown): string {
 const EventLine: React.FC<{ event: MoxxyEvent }> = ({ event }) => {
   switch (event.type) {
     case 'user_prompt':
+      // Only top margin — the block below (assistant / tool) owns its
+      // own top spacing, so a marginBottom here compounds to two blank
+      // lines between the user prompt and the first response.
       return (
-        <Box marginTop={1} marginBottom={1}>
+        <Box marginTop={1}>
           <Text color="blue" bold>{'> '}</Text>
           <Text>{event.text}</Text>
         </Box>
