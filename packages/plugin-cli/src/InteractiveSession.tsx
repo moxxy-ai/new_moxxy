@@ -10,6 +10,7 @@ import { Spinner } from './components/Spinner.js';
 import { Logo } from './components/Logo.js';
 import { SessionInfo } from './components/SessionInfo.js';
 import { BUILTIN_SLASH_COMMANDS } from './components/SlashCommands.js';
+import { estimateContextTokens } from './context-estimate.js';
 
 export interface InteractiveSessionProps {
   readonly session: Session;
@@ -68,6 +69,23 @@ export const InteractiveSession: React.FC<InteractiveSessionProps> = ({
         return 'default';
       }
     })();
+  // Look up the active model's context window from its ModelDescriptor —
+  // need this for the percentage meter on the status bar. The active
+  // ModelDescriptor isn't tracked centrally, so we match by id on the
+  // active provider's `models` list.
+  const contextWindow = (() => {
+    try {
+      const provider = session.providers.getActive();
+      const match = provider.models.find((m) => m.id === activeModel);
+      return match?.contextWindow ?? provider.models[0]?.contextWindow ?? null;
+    } catch {
+      return null;
+    }
+  })();
+  // Re-estimate every render. estimateContextTokens is char-cheap so
+  // this stays well under a millisecond even on busy logs.
+  const contextUsed = estimateContextTokens(session.log);
+
   const loopName = (() => {
     try {
       return session.loops.getActive().name;
@@ -186,7 +204,12 @@ export const InteractiveSession: React.FC<InteractiveSessionProps> = ({
           placeholder={busy ? '' : 'type a prompt or / for commands'}
         />
       )}
-      <StatusBar provider={providerName} model={activeModel} busy={busy} />
+      <StatusBar
+        provider={providerName}
+        model={activeModel}
+        contextUsed={contextUsed}
+        contextWindow={contextWindow ?? undefined}
+      />
     </Box>
   );
 };

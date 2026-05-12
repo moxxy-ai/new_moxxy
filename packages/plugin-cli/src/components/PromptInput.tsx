@@ -27,14 +27,17 @@ export const PromptInput: React.FC<PromptInputProps> = ({
   const [buffer, setBuffer] = useState('');
   const [slashCursor, setSlashCursor] = useState(0);
 
-  const slashMatches: ReadonlyArray<SlashCommand> = buffer.startsWith('/')
+  // The slash dropdown only opens on a SINGLE-LINE buffer that starts
+  // with `/` — multi-line composing modes shouldn't keep popping the
+  // command picker as the user types prose.
+  const slashEligible = buffer.startsWith('/') && !buffer.includes('\n');
+  const slashMatches: ReadonlyArray<SlashCommand> = slashEligible
     ? matchSlash(buffer, slashCommands)
     : [];
 
   useInput((input, key) => {
     if (disabled) return;
 
-    // Arrow keys + tab inside the slash dropdown pre-empt buffer mutations.
     if (slashMatches.length > 0) {
       if (key.upArrow) {
         setSlashCursor((c) => Math.max(0, c - 1));
@@ -55,6 +58,14 @@ export const PromptInput: React.FC<PromptInputProps> = ({
     }
 
     if (key.return) {
+      // Backslash-Enter: line continuation. The user is composing a
+      // multi-line prompt and wants a newline, not a submit. Strip the
+      // trailing `\` and append a newline; keep the buffer open.
+      if (buffer.endsWith('\\')) {
+        setBuffer((b) => b.slice(0, -1) + '\n');
+        setSlashCursor(0);
+        return;
+      }
       const trimmed = buffer.trim();
       setBuffer('');
       setSlashCursor(0);
@@ -74,11 +85,12 @@ export const PromptInput: React.FC<PromptInputProps> = ({
     if (key.ctrl && input === 'c') {
       process.exit(0);
     }
-    // Accept paste (multi-character input). Strip control whitespace that
-    // terminals append (newlines, tabs) so the user doesn't have to clean
-    // up after pasting from their clipboard.
+    // Accept single-key + paste. Newlines from paste are PRESERVED so a
+    // multi-line clipboard payload comes in intact (the user can review
+    // and submit). Tab/vertical-tab/etc. are still stripped because
+    // terminals occasionally inject them around pasted content.
     if (!key.meta && !key.ctrl && !key.return && input) {
-      const sanitized = input.replace(/[\r\n\t\v\f]/g, '');
+      const sanitized = input.replace(/[\r\t\v\f]/g, '');
       if (sanitized) {
         setBuffer((b) => b + sanitized);
         setSlashCursor(0);
@@ -86,17 +98,42 @@ export const PromptInput: React.FC<PromptInputProps> = ({
     }
   });
 
+  const lines = buffer.length === 0 ? [''] : buffer.split('\n');
+  const lastLineIdx = lines.length - 1;
+  const showHint = buffer.length === 0 && placeholder;
+
   return (
     <Box flexDirection="column">
-      <Box>
-        <Text color={disabled ? 'gray' : 'green'}>{disabled ? '… ' : '› '}</Text>
-        <Text>{buffer || (placeholder ? <Text dimColor>{placeholder}</Text> : '')}</Text>
+      <Box flexDirection="column">
+        {lines.map((line, i) => {
+          const prefix =
+            i === 0
+              ? disabled
+                ? '… '
+                : '› '
+              : '  ';
+          const isCursorLine = i === lastLineIdx;
+          return (
+            <Box key={i}>
+              <Text color={i === 0 ? (disabled ? 'gray' : 'green') : undefined}>{prefix}</Text>
+              <Text>{line}</Text>
+              {isCursorLine && showHint ? (
+                <Text dimColor>{placeholder}</Text>
+              ) : null}
+            </Box>
+          );
+        })}
       </Box>
       {slashMatches.length > 0 ? (
         <SlashSuggestions
           matches={slashMatches}
           cursor={Math.min(slashCursor, slashMatches.length - 1)}
         />
+      ) : null}
+      {buffer.length === 0 && !disabled ? (
+        <Box marginTop={0}>
+          <Text dimColor>  (end a line with \ + enter to continue on a new line)</Text>
+        </Box>
       ) : null}
     </Box>
   );
