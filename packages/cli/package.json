@@ -21,6 +21,7 @@
     "@moxxy/core": "workspace:*",
     "@moxxy/loop-plan-execute": "workspace:*",
     "@moxxy/loop-tool-use": "workspace:*",
+    "@moxxy/plugin-browser": "workspace:*",
     "@moxxy/plugin-channel-http": "workspace:*",
     "@moxxy/plugin-cli": "workspace:*",
     "@moxxy/plugin-embeddings-openai": "workspace:*",

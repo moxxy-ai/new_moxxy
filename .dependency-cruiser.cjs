@@ -59,6 +59,9 @@ module.exports = {
           'src/index\\.ts$',
           'src/bin\\.ts$',
           'src/matchers\\.ts$',
+          // Standalone executables shipped via a package's `bin` field
+          // (consumed by spawning a child process, not by being imported).
+          'src/sidecar\\.ts$',
         ],
       },
       to: {},

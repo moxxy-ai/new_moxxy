@@ -40,6 +40,7 @@ import {
 import { buildTelegramPlugin } from '@moxxy/plugin-telegram';
 import { cliPlugin } from '@moxxy/plugin-cli';
 import { httpChannelPlugin } from '@moxxy/plugin-channel-http';
+import { browserPlugin } from '@moxxy/plugin-browser';
 import { resolveProviderApiKey } from './provider-keys.js';
 
 export interface SetupOptions {
@@ -125,6 +126,7 @@ export async function setupSessionWithConfig(opts: SetupOptions): Promise<SetupR
     { name: '@moxxy/plugin-cli', plugin: cliPlugin },
     { name: '@moxxy/plugin-channel-http', plugin: httpChannelPlugin },
     { name: '@moxxy/plugin-telegram', plugin: buildTelegramPlugin({ vault }) },
+    { name: '@moxxy/plugin-browser', plugin: browserPlugin },
     { name: '@moxxy/synthesize-skill', plugin: buildSynthesizeSkillPlugin(session) },
   ];
 

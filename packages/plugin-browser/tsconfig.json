@@ -1,0 +1,9 @@
+{
+  "extends": "@moxxy/tsconfig/lib.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["dist", "node_modules", "src/**/*.test.ts"]
+}

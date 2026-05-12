@@ -1,4 +1,5 @@
 import { defaultProjectSkillsDir, defaultUserSkillsDir, discoverSkills, silentLogger } from '@moxxy/core';
+import { BUILTIN_SKILLS_DIR } from '@moxxy/skills-builtin';
 import { promises as fs } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -20,6 +21,7 @@ export async function runSkillsCommand(argv: ParsedArgv): Promise<number> {
     const skills = await discoverSkills({
       projectDir: defaultProjectSkillsDir(process.cwd()),
       userDir: defaultUserSkillsDir(),
+      builtinDir: BUILTIN_SKILLS_DIR,
       logger: silentLogger,
     });
     for (const s of skills) {
