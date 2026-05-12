@@ -24,11 +24,27 @@ export const ChatView: React.FC<ChatViewProps> = ({ events, streamingDelta }) =>
       {blocks.map((b) => (
         <BlockLine key={b.id} block={b} />
       ))}
-      {streamingDelta ? (
-        <Box marginTop={1}>
-          <Text color="cyan">{streamingDelta}</Text>
+      {streamingDelta ? <AssistantBlock content={streamingDelta} /> : null}
+    </Box>
+  );
+};
+
+/**
+ * Renders an assistant turn: a white `● ` bullet on the first line, the
+ * response body in normal text, vertical padding above and below so it
+ * breathes against tool blocks and the next user prompt. Mirrors the
+ * Claude Code rendering convention (white = the assistant speaking).
+ */
+const AssistantBlock: React.FC<{ content: string }> = ({ content }) => {
+  const lines = content.split('\n');
+  return (
+    <Box flexDirection="column" marginTop={1} marginBottom={1}>
+      {lines.map((line, i) => (
+        <Box key={i}>
+          {i === 0 ? <Text color="white">● </Text> : <Text>  </Text>}
+          <Text>{line}</Text>
         </Box>
-      ) : null}
+      ))}
     </Box>
   );
 };
@@ -162,11 +178,7 @@ const EventLine: React.FC<{ event: MoxxyEvent }> = ({ event }) => {
         </Box>
       );
     case 'assistant_message':
-      return (
-        <Box marginBottom={1}>
-          <Text color="cyan">{event.content}</Text>
-        </Box>
-      );
+      return <AssistantBlock content={event.content} />;
     case 'skill_created':
       return (
         <Box marginTop={1}>
