@@ -11,6 +11,7 @@ import { runPermsCommand } from './commands/perms.js';
 import { runMemoryCommand } from './commands/memory.js';
 import { runMcpCommand } from './commands/mcp.js';
 import { runDoctorCommand } from './commands/doctor.js';
+import { runLoginCommand } from './commands/login.js';
 import { setupSessionWithConfig } from './setup.js';
 import { renderLogo } from './logo.js';
 import { colors } from './colors.js';
@@ -19,6 +20,8 @@ type CommandHandler = (argv: ParsedArgv) => Promise<number>;
 
 const HELP = `usage:
   moxxy init                         interactive first-time setup (provider keys → vault)
+  moxxy login openai-codex           OAuth sign-in for ChatGPT Pro/Plus (Codex backend)
+  moxxy login status|logout          inspect / remove stored OAuth credentials
   moxxy                              start interactive TUI (default channel)
   moxxy tui                          start the Ink TUI channel
   moxxy <channel-name>               start any registered channel by name
@@ -64,6 +67,7 @@ const COMMANDS: Record<string, CommandHandler> = {
     return 0;
   },
   init: runInitCommand,
+  login: runLoginCommand,
   perms: runPermsCommand,
   memory: runMemoryCommand,
   mcp: runMcpCommand,

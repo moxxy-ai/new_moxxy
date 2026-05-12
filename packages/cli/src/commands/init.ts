@@ -49,15 +49,28 @@ export async function runInitCommand(argv: ParsedArgv): Promise<number> {
   const { render, Box, Text } = ink;
   const { SetupWizard, Logo } = plugin;
 
+  // OAuth-only providers (e.g. openai-codex) don't go through the API-key
+  // wizard — they have a dedicated sign-in flow. Filter them out so the
+  // wizard doesn't try to validate a key that doesn't exist, and surface
+  // a one-line tip pointing users at the right command.
   const providerDefs = session.providers.list();
-  const providers = providerDefs.map((p) => ({
+  const oauthOnlyProviders = providerDefs.filter((p) => p.name === 'openai-codex');
+  const wizardProviderDefs = providerDefs.filter((p) => p.name !== 'openai-codex');
+  const providers = wizardProviderDefs.map((p) => ({
     id: p.name,
     label: titleCase(p.name),
     description: p.models[0]?.id ? `default model: ${p.models[0].id}` : undefined,
   }));
   const models = Object.fromEntries(
-    providerDefs.map((p) => [p.name, p.models.map((m) => ({ id: m.id, label: m.id }))]),
+    wizardProviderDefs.map((p) => [p.name, p.models.map((m) => ({ id: m.id, label: m.id }))]),
   );
+  if (oauthOnlyProviders.some((p) => p.name === 'openai-codex')) {
+    process.stdout.write(
+      `\nTip: if you have a ChatGPT Pro/Plus subscription, run ` +
+        `\`moxxy login openai-codex\` after init to use the Codex backend ` +
+        `without an API key.\n\n`,
+    );
+  }
 
   const loops = [
     { id: 'tool-use', label: 'tool-use', description: 'Default Claude Code-style loop (recommended)' },

@@ -21,6 +21,7 @@ import { buildConfigPlugin, loadConfig, type EmbeddingsConfig, type MoxxyConfig 
 import { buildSessionConfigApplier } from './config-applier.js';
 import { anthropicPlugin } from '@moxxy/plugin-provider-anthropic';
 import { openaiPlugin } from '@moxxy/plugin-provider-openai';
+import { openaiCodexPlugin } from '@moxxy/plugin-provider-openai-codex';
 import { builtinToolsPlugin } from '@moxxy/tools-builtin';
 import { toolUseLoopPlugin } from '@moxxy/loop-tool-use';
 import { planExecuteLoopPlugin } from '@moxxy/loop-plan-execute';
@@ -43,7 +44,7 @@ import { buildMcpAdminPluginWithApi, type McpAdminApi } from '@moxxy/plugin-mcp'
 import { cliPlugin } from '@moxxy/plugin-cli';
 import { httpChannelPlugin } from '@moxxy/plugin-channel-http';
 import { browserPlugin } from '@moxxy/plugin-browser';
-import { resolveProviderApiKey } from './provider-keys.js';
+import { resolveProviderCredentials } from './provider-credentials.js';
 
 export interface SetupOptions {
   readonly cwd: string;
@@ -134,6 +135,7 @@ export async function setupSessionWithConfig(opts: SetupOptions): Promise<SetupR
   const builtinsCore: Array<{ name: string; plugin: Plugin }> = [
     { name: '@moxxy/plugin-provider-anthropic', plugin: anthropicPlugin },
     { name: '@moxxy/plugin-provider-openai', plugin: openaiPlugin },
+    { name: '@moxxy/plugin-provider-openai-codex', plugin: openaiCodexPlugin },
     { name: '@moxxy/tools-builtin', plugin: builtinToolsPlugin },
     { name: '@moxxy/loop-tool-use', plugin: toolUseLoopPlugin },
     { name: '@moxxy/loop-plan-execute', plugin: planExecuteLoopPlugin },
@@ -250,7 +252,7 @@ export async function setupSessionWithConfig(opts: SetupOptions): Promise<SetupR
     // through fallbacks via prompts would be confusing.
     const interactive = i === 0 && !opts.skipKeyPrompt && process.stdin.isTTY === true;
     try {
-      const { providerConfig: resolved } = await resolveProviderApiKey(candidate, vault, {
+      const resolved = await resolveProviderCredentials(candidate, vault, {
         providerConfig: i === 0 ? initialProviderConfig : {},
         interactive,
       });

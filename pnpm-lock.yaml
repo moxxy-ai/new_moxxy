@@ -219,6 +219,9 @@ importers:
       '@moxxy/plugin-provider-openai':
         specifier: workspace:*
         version: link:../plugin-provider-openai
+      '@moxxy/plugin-provider-openai-codex':
+        specifier: workspace:*
+        version: link:../plugin-provider-openai-codex
       '@moxxy/plugin-telegram':
         specifier: workspace:*
         version: link:../plugin-telegram
@@ -656,6 +659,31 @@ importers:
       openai:
         specifier: ^4.80.0
         version: 4.104.0(ws@8.20.0)(zod@3.25.76)
+    devDependencies:
+      '@moxxy/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/tsconfig
+      '@moxxy/vitest-preset':
+        specifier: workspace:*
+        version: link:../../tooling/vitest-preset
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.19.18
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.18)
+      zod:
+        specifier: ^3.24.0
+        version: 3.25.76
+
+  packages/plugin-provider-openai-codex:
+    dependencies:
+      '@moxxy/sdk':
+        specifier: workspace:*
+        version: link:../sdk
     devDependencies:
       '@moxxy/tsconfig':
         specifier: workspace:*

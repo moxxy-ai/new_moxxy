@@ -30,6 +30,7 @@
     "@moxxy/plugin-memory": "workspace:*",
     "@moxxy/plugin-provider-anthropic": "workspace:*",
     "@moxxy/plugin-provider-openai": "workspace:*",
+    "@moxxy/plugin-provider-openai-codex": "workspace:*",
     "@moxxy/plugin-telegram": "workspace:*",
     "@moxxy/plugin-vault": "workspace:*",
     "@moxxy/sdk": "workspace:*",
