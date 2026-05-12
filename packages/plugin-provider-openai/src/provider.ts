@@ -16,7 +16,36 @@ export interface OpenAIProviderConfig {
   readonly client?: OpenAI;
 }
 
+/**
+ * Model catalog as of OpenAI's 2026 API surface. The 5.x family supersedes
+ * the 4o family but the older ones stay listed so existing configs keep
+ * working without a forced migration.
+ *
+ * Output/context numbers are the public documented limits as of April-May
+ * 2026; verify against https://developers.openai.com/api/docs/models when
+ * picking a model for a long-context workload.
+ */
 export const openAIModels: ReadonlyArray<ModelDescriptor> = [
+  // GPT-5.5 family (released April 23, 2026): newest frontier class.
+  { id: 'gpt-5.5', contextWindow: 1_050_000, maxOutputTokens: 128_000, supportsTools: true, supportsStreaming: true },
+  { id: 'gpt-5.5-pro', contextWindow: 1_050_000, maxOutputTokens: 128_000, supportsTools: true, supportsStreaming: true },
+
+  // GPT-5.4 family: cheaper general-purpose tier; -mini and -nano are the
+  // new sweet-spot defaults for high-volume agentic workloads.
+  { id: 'gpt-5.4', contextWindow: 1_000_000, maxOutputTokens: 128_000, supportsTools: true, supportsStreaming: true },
+  { id: 'gpt-5.4-pro', contextWindow: 1_000_000, maxOutputTokens: 128_000, supportsTools: true, supportsStreaming: true },
+  { id: 'gpt-5.4-mini', contextWindow: 400_000, maxOutputTokens: 128_000, supportsTools: true, supportsStreaming: true },
+  { id: 'gpt-5.4-nano', contextWindow: 400_000, maxOutputTokens: 128_000, supportsTools: true, supportsStreaming: true },
+
+  // GPT-5.3-Codex: agentic coding specialist.
+  { id: 'gpt-5.3-codex', contextWindow: 400_000, maxOutputTokens: 128_000, supportsTools: true, supportsStreaming: true },
+
+  // GPT-5.2 and GPT-5: prior reasoning models, configurable effort.
+  { id: 'gpt-5.2', contextWindow: 400_000, maxOutputTokens: 128_000, supportsTools: true, supportsStreaming: true },
+  { id: 'gpt-5', contextWindow: 400_000, maxOutputTokens: 128_000, supportsTools: true, supportsStreaming: true },
+
+  // GPT-4 family: kept for explicit-pin use cases.
+  { id: 'gpt-4.1', contextWindow: 1_000_000, maxOutputTokens: 32_768, supportsTools: true, supportsStreaming: true },
   { id: 'gpt-4o', contextWindow: 128_000, maxOutputTokens: 16_384, supportsTools: true, supportsStreaming: true },
   { id: 'gpt-4o-mini', contextWindow: 128_000, maxOutputTokens: 16_384, supportsTools: true, supportsStreaming: true },
   { id: 'gpt-4-turbo', contextWindow: 128_000, maxOutputTokens: 4_096, supportsTools: true, supportsStreaming: true },
@@ -42,7 +71,7 @@ export class OpenAIProvider implements LLMProvider {
         apiKey: config.apiKey ?? process.env.OPENAI_API_KEY,
         ...(config.baseURL ? { baseURL: config.baseURL } : {}),
       });
-    this.defaultModel = config.defaultModel ?? 'gpt-4o-mini';
+    this.defaultModel = config.defaultModel ?? 'gpt-5.4-mini';
   }
 
   async *stream(req: ProviderRequest): AsyncIterable<ProviderEvent> {
