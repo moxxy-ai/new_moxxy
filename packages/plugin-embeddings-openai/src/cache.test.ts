@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { EmbeddingProvider } from '@moxxy/sdk';
-import { CachedEmbeddingProvider } from './cache.js';
+import { CachedEmbeddingProvider, type EmbeddingProvider } from '@moxxy/sdk';
 
 const makeUpstream = (responses: ReadonlyArray<ReadonlyArray<number>>) => {
   let cursor = 0;

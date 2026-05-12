@@ -61,6 +61,13 @@ export type {
   ProviderKeyValidation,
 } from './provider.js';
 export { isRetryableError, zodToJsonSchema, type StopReason } from './provider-utils.js';
+export {
+  collectProviderStream,
+  projectMessagesFromLog,
+  type CollectedToolUse,
+  type StreamResult,
+  type ProjectMessagesOptions,
+} from './loop-helpers.js';
 
 export type { TokenBudget, CompactContext, CompactorDef } from './compactor.js';
 

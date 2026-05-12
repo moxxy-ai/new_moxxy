@@ -1,11 +1,12 @@
 import {
   asPluginId,
   asToolCallId,
+  collectProviderStream,
   defineLoopStrategy,
   definePlugin,
+  projectMessagesFromLog,
   type LoopContext,
   type MoxxyEvent,
-  type ProviderEvent,
   type ProviderMessage,
 } from '@moxxy/sdk';
 
@@ -235,7 +236,10 @@ async function executeStep(
       iteration,
     });
 
-    const messages = buildStepMessages(ctx, step);
+    const messages = projectMessagesFromLog(ctx, {
+      systemPrompt: ctx.systemPrompt,
+      trailingUserText: `Focus on this step now: ${step}`,
+    });
     await ctx.emit({
       type: 'provider_request',
       sessionId: ctx.sessionId,
@@ -245,7 +249,9 @@ async function executeStep(
       model: ctx.model,
     });
 
-    const { text, toolUses, stopReason } = await consume(ctx, messages);
+    const { text, toolUses, stopReason } = await collectProviderStream(ctx, messages, {
+      iteration,
+    });
 
     await ctx.emit({
       type: 'provider_response',
@@ -388,71 +394,11 @@ async function executeStep(
   return false;
 }
 
-interface CollectedToolUse {
-  id: string;
-  name: string;
-  input: unknown;
-}
-
-interface StreamResult {
-  text: string;
-  toolUses: CollectedToolUse[];
-  stopReason: 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence' | 'error';
-}
-
-async function consume(ctx: LoopContext, messages: ReadonlyArray<ProviderMessage>): Promise<StreamResult> {
-  let text = '';
-  const toolUses = new Map<string, { name?: string; input?: unknown }>();
-  let stopReason: StreamResult['stopReason'] = 'end_turn';
-
-  let stream: AsyncIterable<ProviderEvent>;
-  try {
-    stream = ctx.provider.stream({
-      model: ctx.model,
-      messages,
-      tools: ctx.tools.list(),
-      signal: ctx.signal,
-    });
-  } catch {
-    return { text: '', toolUses: [], stopReason: 'error' };
-  }
-
-  for await (const event of stream) {
-    switch (event.type) {
-      case 'text_delta':
-        text += event.delta;
-        await ctx.emit({
-          type: 'assistant_chunk',
-          sessionId: ctx.sessionId,
-          turnId: ctx.turnId,
-          source: 'model',
-          delta: event.delta,
-        });
-        break;
-      case 'tool_use_start':
-        toolUses.set(event.id, { name: event.name });
-        break;
-      case 'tool_use_end': {
-        const existing = toolUses.get(event.id) ?? {};
-        toolUses.set(event.id, { ...existing, input: event.input });
-        break;
-      }
-      case 'message_end':
-        stopReason = event.stopReason;
-        break;
-      default:
-        break;
-    }
-  }
-
-  const out: CollectedToolUse[] = [];
-  for (const [id, partial] of toolUses) {
-    if (!partial.name) continue;
-    out.push({ id, name: partial.name, input: partial.input ?? {} });
-  }
-  return { text, toolUses: out, stopReason };
-}
-
+/**
+ * Slim baseline used only by the planning phase (`collectPlan`): just the
+ * raw user prompts, no assistant/tool history. The execute phase uses the
+ * shared `projectMessagesFromLog` from the SDK instead.
+ */
 function buildBaseMessages(ctx: LoopContext): ProviderMessage[] {
   const out: ProviderMessage[] = [];
   for (const e of ctx.log.slice()) {
@@ -461,65 +407,6 @@ function buildBaseMessages(ctx: LoopContext): ProviderMessage[] {
     }
   }
   return out;
-}
-
-function buildStepMessages(ctx: LoopContext, step: string): ProviderMessage[] {
-  const messages: ProviderMessage[] = [];
-  if (ctx.systemPrompt) {
-    messages.push({ role: 'system', content: [{ type: 'text', text: ctx.systemPrompt }] });
-  }
-
-  let pendingAssistant: ProviderMessage | null = null;
-  const flush = (): void => {
-    if (pendingAssistant) {
-      messages.push(pendingAssistant);
-      pendingAssistant = null;
-    }
-  };
-
-  for (const e of ctx.log.slice()) {
-    switch (e.type) {
-      case 'user_prompt':
-        flush();
-        messages.push({ role: 'user', content: [{ type: 'text', text: e.text }] });
-        break;
-      case 'assistant_message':
-        flush();
-        messages.push({ role: 'assistant', content: [{ type: 'text', text: e.content }] });
-        break;
-      case 'tool_call_requested': {
-        pendingAssistant ??= { role: 'assistant', content: [] };
-        (pendingAssistant.content as Array<ProviderMessage['content'][number]>).push({
-          type: 'tool_use',
-          id: e.callId,
-          name: e.name,
-          input: e.input,
-        });
-        break;
-      }
-      case 'tool_result': {
-        flush();
-        const text = e.error
-          ? `[error:${e.error.kind}] ${e.error.message}`
-          : typeof e.output === 'string'
-            ? e.output
-            : JSON.stringify(e.output ?? '');
-        messages.push({
-          role: 'tool_result',
-          content: [{ type: 'tool_result', toolUseId: e.callId, content: text, isError: !e.ok }],
-        });
-        break;
-      }
-      default:
-        break;
-    }
-  }
-  flush();
-  messages.push({
-    role: 'user',
-    content: [{ type: 'text', text: `Focus on this step now: ${step}` }],
-  });
-  return messages;
 }
 
 export function parsePlan(text: string): string[] {
