@@ -144,11 +144,6 @@ export const PromptInput: React.FC<PromptInputProps> = ({
           cursor={Math.min(slashCursor, slashMatches.length - 1)}
         />
       ) : null}
-      {buffer.length === 0 && !disabled ? (
-        <Box marginTop={0}>
-          <Text dimColor>  (end a line with \ + enter to continue on a new line)</Text>
-        </Box>
-      ) : null}
     </Box>
   );
 };
