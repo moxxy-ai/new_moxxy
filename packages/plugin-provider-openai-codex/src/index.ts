@@ -38,6 +38,9 @@ export {
   extractAccountId,
   exchangeCodeForTokens,
   refreshTokens,
+  startDeviceAuth,
+  pollDeviceAuth,
+  type DeviceAuthInit,
 } from './oauth.js';
 export { toResponsesBody, toResponsesInput, toResponsesTools } from './translate.js';
 export type { CodexProviderConfig } from './provider.js';

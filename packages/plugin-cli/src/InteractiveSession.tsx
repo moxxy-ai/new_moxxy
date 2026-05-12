@@ -318,18 +318,36 @@ export const InteractiveSession: React.FC<InteractiveSessionProps> = ({
         );
         return;
       }
-      try {
-        if (providerId !== providerName) {
-          session.providers.setActive(providerId);
+      // Provider switches must resolve credentials (vault tokens for
+      // OAuth providers, API keys for the rest) before setActive — the
+      // registry caches the instance on first activation, so passing
+      // empty config strands the new provider without auth. The CLI
+      // stashes a credentialResolver on the session at boot.
+      void (async () => {
+        try {
+          if (providerId !== providerName) {
+            const resolver = (
+              session as unknown as {
+                credentialResolver?: (name: string) => Promise<Record<string, unknown>>;
+              }
+            ).credentialResolver;
+            const cfg = resolver ? await resolver(providerId) : {};
+            // Drop any previously-cached instance for this provider so the
+            // freshly-resolved credentials actually take effect — setActive
+            // alone keeps the first-cached instance.
+            const def = session.providers.list().find((p) => p.name === providerId);
+            if (def) session.providers.replace(def);
+            session.providers.setActive(providerId, cfg);
+          }
+          setActiveModelOverride(modelId);
+          setSystemNotice(`switched to ${providerId}:${modelId}`);
+          void savePreferences({ providerName: providerId, model: modelId });
+        } catch (err) {
+          setSystemNotice(
+            `failed to switch: ${err instanceof Error ? err.message : String(err)}`,
+          );
         }
-        setActiveModelOverride(modelId);
-        setSystemNotice(`switched to ${providerId}:${modelId}`);
-        void savePreferences({ providerName: providerId, model: modelId });
-      } catch (err) {
-        setSystemNotice(
-          `failed to switch: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
+      })();
       return;
     }
     if (kind === 'loop') {

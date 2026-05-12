@@ -154,6 +154,95 @@ export async function exchangeCodeForTokens(
 }
 
 /**
+ * Device-authorization start: returns a short user code the user enters at
+ * https://auth.openai.com/codex/device on any browser-capable device.
+ * Used by the headless login path (no-TTY or `--no-browser`) so SSH
+ * sessions / CI / docker containers can sign in without a local browser.
+ *
+ * Mirrors opencode's "ChatGPT Pro/Plus (headless)" auth method.
+ */
+export interface DeviceAuthInit {
+  readonly deviceAuthId: string;
+  readonly userCode: string;
+  readonly verificationUri: string;
+  readonly intervalMs: number;
+}
+
+export async function startDeviceAuth(fetchImpl: typeof fetch = fetch): Promise<DeviceAuthInit> {
+  const response = await fetchImpl(`${ISSUER}/api/accounts/deviceauth/usercode`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ client_id: CLIENT_ID }),
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`Device auth init failed: ${response.status} ${text || response.statusText}`);
+  }
+  const data = (await response.json()) as {
+    device_auth_id: string;
+    user_code: string;
+    interval?: string | number;
+  };
+  const intervalSec = Math.max(typeof data.interval === 'string' ? parseInt(data.interval, 10) : data.interval ?? 5, 1);
+  return {
+    deviceAuthId: data.device_auth_id,
+    userCode: data.user_code,
+    verificationUri: `${ISSUER}/codex/device`,
+    intervalMs: intervalSec * 1000,
+  };
+}
+
+/**
+ * Polls the device-auth token endpoint until the user finishes the browser
+ * step. 403/404 → "still waiting, try again after `interval`". Any other
+ * non-2xx → fatal. On success, exchanges the returned authorization_code
+ * for real tokens via the standard /oauth/token endpoint.
+ *
+ * Polls are throttled by `intervalMs + safetyMarginMs` to stay clear of
+ * the server's rate limit. Times out after `timeoutMs`.
+ */
+export async function pollDeviceAuth(
+  init: DeviceAuthInit,
+  opts: { timeoutMs: number; safetyMarginMs?: number; signal?: AbortSignal } = { timeoutMs: 10 * 60 * 1000 },
+  fetchImpl: typeof fetch = fetch,
+): Promise<CodexTokens> {
+  const safety = opts.safetyMarginMs ?? 3000;
+  const deadline = Date.now() + opts.timeoutMs;
+  while (Date.now() < deadline) {
+    if (opts.signal?.aborted) throw new Error('Device auth polling aborted');
+    const response = await fetchImpl(`${ISSUER}/api/accounts/deviceauth/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ device_auth_id: init.deviceAuthId, user_code: init.userCode }),
+    });
+    if (response.ok) {
+      const data = (await response.json()) as {
+        authorization_code: string;
+        code_verifier: string;
+      };
+      // Exchange the server-side authorization_code + verifier for the
+      // real OAuth bundle. The redirect_uri here is the device-auth
+      // callback the issuer expects — it's not actually a redirect target
+      // we listen on, just a value that must match what the server bound.
+      const tokenBody = new URLSearchParams({
+        grant_type: 'authorization_code',
+        code: data.authorization_code,
+        redirect_uri: `${ISSUER}/deviceauth/callback`,
+        client_id: CLIENT_ID,
+        code_verifier: data.code_verifier,
+      });
+      return normalizeTokens(await postToken(tokenBody, fetchImpl));
+    }
+    if (response.status !== 403 && response.status !== 404) {
+      const text = await response.text().catch(() => '');
+      throw new Error(`Device auth poll failed: ${response.status} ${text || response.statusText}`);
+    }
+    await new Promise((r) => setTimeout(r, init.intervalMs + safety));
+  }
+  throw new Error('Device auth timed out — re-run `moxxy login openai-codex`');
+}
+
+/**
  * Refresh both the access AND refresh tokens. The OAuth server issues a
  * fresh refresh_token on every refresh and INVALIDATES the previous one —
  * callers must persist the returned tokens BEFORE issuing any API call

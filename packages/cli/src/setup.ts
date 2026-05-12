@@ -303,6 +303,17 @@ export async function setupSessionWithConfig(opts: SetupOptions): Promise<SetupR
   }
   (session as unknown as { readyProviders: Set<string> }).readyProviders = readyProviders;
 
+  // Expose a credential resolver so runtime provider switches (TUI
+  // /model picker, preference re-apply below) can re-resolve credentials
+  // before calling setActive — otherwise the new provider gets
+  // createClient({}) and OAuth-backed providers (openai-codex) throw
+  // "no credentials" on the next turn.
+  const credentialResolver = async (providerName: string): Promise<Record<string, unknown>> => {
+    return resolveProviderCredentials(providerName, vault, { interactive: false });
+  };
+  (session as unknown as { credentialResolver: typeof credentialResolver }).credentialResolver =
+    credentialResolver;
+
   if (config.loop) {
     session.loops.setActive(config.loop);
   }
@@ -321,7 +332,11 @@ export async function setupSessionWithConfig(opts: SetupOptions): Promise<SetupR
     if (prefs.providerName && session.providers.list().some((p) => p.name === prefs.providerName)) {
       try {
         if (session.providers.getActiveName() !== prefs.providerName) {
-          session.providers.setActive(prefs.providerName);
+          // Resolve credentials before switching — otherwise OAuth-backed
+          // providers (openai-codex) get createClient({}) and throw on
+          // the next turn.
+          const cfg = await credentialResolver(prefs.providerName);
+          session.providers.setActive(prefs.providerName, cfg);
         }
       } catch (err) {
         logger.warn('failed to apply preferred provider', {

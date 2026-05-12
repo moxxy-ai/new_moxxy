@@ -1,5 +1,5 @@
 import type { ParsedArgv } from '../argv.js';
-import { bootSessionWithConfig } from '../argv-helpers.js';
+import { bootSessionWithConfig, hasBoolFlag } from '../argv-helpers.js';
 import { colors } from '../colors.js';
 import { startCallbackServer } from '../oauth-server.js';
 import {
@@ -12,6 +12,9 @@ import {
 const HELP = `moxxy login — OAuth sign-in for providers that don't use API keys
 
   moxxy login openai-codex          Sign in with ChatGPT Pro/Plus (Codex backend)
+                                    Flags:
+                                      --no-browser   force the headless device-code flow
+                                                     (auto-selected when stdin is not a TTY)
   moxxy login status                Show currently-stored OAuth credentials (no secrets printed)
   moxxy login logout <provider>     Remove stored OAuth credentials for a provider
 
@@ -40,11 +43,24 @@ async function loginOpenAICodex(argv: ParsedArgv): Promise<number> {
     skipKeyPrompt: true,
     skipProviderActivation: true,
   });
-  // Pre-warm the vault before we open a TCP port + spawn the browser. If the
+  // Pre-warm the vault before we open a TCP port / start polling. If the
   // vault prompts for a passphrase, we want that to happen synchronously
   // here — not racing the browser callback.
   await vault.open();
 
+  // Headless mode triggers when:
+  //   - stdin isn't a TTY (CI, ssh -T, docker exec without -t), OR
+  //   - the user passes `--no-browser` (e.g. running on a remote box and
+  //     wanting to complete the flow from their laptop's browser).
+  const noBrowser = hasBoolFlag(argv, 'no-browser');
+  const headless = noBrowser || process.stdin.isTTY !== true;
+
+  return headless ? loginCodexDeviceFlow(vault) : loginCodexBrowserFlow(vault);
+}
+
+async function loginCodexBrowserFlow(
+  vault: import('@moxxy/plugin-vault').VaultStore,
+): Promise<number> {
   const {
     generatePKCE,
     generateState,
@@ -84,6 +100,48 @@ async function loginOpenAICodex(argv: ParsedArgv): Promise<number> {
     return 1;
   } finally {
     server.stop();
+  }
+}
+
+async function loginCodexDeviceFlow(
+  vault: import('@moxxy/plugin-vault').VaultStore,
+): Promise<number> {
+  const { startDeviceAuth, pollDeviceAuth } = await import('@moxxy/plugin-provider-openai-codex');
+
+  let init;
+  try {
+    init = await startDeviceAuth();
+  } catch (err) {
+    process.stderr.write(
+      `${colors.red('✗ Could not start device authorization:')} ` +
+        `${err instanceof Error ? err.message : String(err)}\n`,
+    );
+    return 1;
+  }
+
+  process.stdout.write(
+    `\n${colors.bold('Sign in to ChatGPT (headless / device code flow)')}\n\n` +
+      `  1. On any browser-capable device, open:\n` +
+      `       ${colors.cyan(init.verificationUri)}\n\n` +
+      `  2. Enter this code:\n` +
+      `       ${colors.bold(colors.green(init.userCode))}\n\n` +
+      `Polling every ${Math.round(init.intervalMs / 1000)}s (10 min timeout)…\n\n`,
+  );
+
+  try {
+    const tokens = await pollDeviceAuth(init, { timeoutMs: 10 * 60 * 1000 });
+    await writeCodexTokens(vault, tokens);
+    process.stdout.write(
+      `${colors.green('✓ Login successful.')} ` +
+        `Account: ${colors.bold(tokens.accountId ?? '(none)')}  ` +
+        colors.dim(`token expires ${new Date(tokens.expires).toLocaleString()}`) +
+        `\n\n` +
+        `Set ${colors.cyan('provider.name: openai-codex')} in moxxy.config.yaml to use it.\n`,
+    );
+    return 0;
+  } catch (err) {
+    process.stderr.write(`${colors.red('✗ Login failed:')} ${err instanceof Error ? err.message : String(err)}\n`);
+    return 1;
   }
 }
 
