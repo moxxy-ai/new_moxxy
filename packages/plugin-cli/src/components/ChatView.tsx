@@ -90,12 +90,51 @@ export const ChatView: React.FC<ChatViewProps> = ({
           <BlockLine key={b.id} block={b} expandClosedSkills={!!expandClosedSkills} />
         ))}
         {streamingDelta && streamingDelta.trim() ? (
-          <AssistantBlock content={tailForViewport(streamingDelta)} />
+          <StreamingPreview content={tailForViewport(streamingDelta)} />
         ) : null}
       </Box>
     </>
   );
 };
+
+/**
+ * Plain-text rendering of the in-flight streaming buffer.
+ *
+ * Why not the full `<AssistantBlock>` / Markdown pipeline: the buffer
+ * is INCOMPLETE markdown by definition — chunks arrive a few chars at
+ * a time, so partial inline markers (`**Importan` waiting on the
+ * closing `**`, half-typed `[link]` before the URL arrives, code-fence
+ * openings before their close) trip the tokenizer. Depending on where
+ * the chunk-cut falls, the parser either drops characters, leaves
+ * literal `**` in place, or merges adjacent words across what would
+ * become a list-item boundary. End result: garbled preview that
+ * "fixes itself" only when the message completes.
+ *
+ * So: stream as plain text, keeping newlines / leading whitespace
+ * intact so list structure is at least visible. The moment the
+ * `assistant_message` event lands, the buffer flushes to '', the
+ * message becomes a settled block, and the full Markdown render
+ * kicks in inside `<Static>`. The user only sees plain text during
+ * the ~ms-to-seconds typing animation, then the formatted version
+ * for the rest of the session.
+ */
+const StreamingPreview: React.FC<{ content: string }> = memo(function StreamingPreview({
+  content,
+}) {
+  const lines = content.split('\n');
+  return (
+    <Box flexDirection="row" marginTop={1}>
+      <Box flexDirection="column" marginRight={1}>
+        <Text dimColor>{Glyphs.filled}</Text>
+      </Box>
+      <Box flexDirection="column" flexGrow={1}>
+        {lines.map((line, i) => (
+          <Text key={i}>{line || ' '}</Text>
+        ))}
+      </Box>
+    </Box>
+  );
+});
 
 /**
  * During streaming the AssistantBlock lives in the live render zone
