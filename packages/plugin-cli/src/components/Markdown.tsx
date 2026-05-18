@@ -33,15 +33,23 @@ export const Markdown: React.FC<MarkdownProps> = ({ content, firstBlockTight }) 
   );
 };
 
+type Align = 'left' | 'center' | 'right';
+
 type Block =
   | { kind: 'heading'; level: 1 | 2 | 3 | 4 | 5 | 6; text: string }
   | { kind: 'paragraph'; text: string }
   | { kind: 'list'; ordered: boolean; items: ReadonlyArray<string> }
   | { kind: 'code'; lang: string | null; body: string }
+  | {
+      kind: 'table';
+      header: ReadonlyArray<string>;
+      aligns: ReadonlyArray<Align>;
+      rows: ReadonlyArray<ReadonlyArray<string>>;
+    }
   | { kind: 'blank' };
 
 function parseBlocks(src: string): Block[] {
-  const lines = src.split('\n');
+  const lines = normalizeInlineTables(src).split('\n');
   const blocks: Block[] = [];
   let i = 0;
   while (i < lines.length) {
@@ -60,6 +68,30 @@ function parseBlocks(src: string): Block[] {
       i++; // skip closing fence
       blocks.push({ kind: 'code', lang, body: body.join('\n') });
       continue;
+    }
+
+    // GFM table: a row starting with `|` and at least one more `|`,
+    // followed by a separator row like `|---|---:|:---:|`. We require
+    // the separator to distinguish real tables from prose that
+    // happens to contain pipe characters.
+    if (line.trim().startsWith('|') && i + 1 < lines.length) {
+      const sep = lines[i + 1]!;
+      if (isTableSeparator(sep)) {
+        const header = parseTableCells(line);
+        const aligns = parseTableAligns(sep);
+        const rows: string[][] = [];
+        i += 2;
+        while (i < lines.length && lines[i]!.trim().startsWith('|')) {
+          const cells = parseTableCells(lines[i]!);
+          if (cells.length === 0) break;
+          // Pad / clamp to header length so the grid stays rectangular.
+          while (cells.length < header.length) cells.push('');
+          rows.push(cells.slice(0, header.length));
+          i++;
+        }
+        blocks.push({ kind: 'table', header, aligns, rows });
+        continue;
+      }
     }
 
     // ATX heading
@@ -103,6 +135,16 @@ function parseBlocks(src: string): Block[] {
         /^#{1,6}\s+/.test(next) ||
         /^\s*[-*+]\s+/.test(next) ||
         /^\s*\d+\.\s+/.test(next)
+      ) {
+        break;
+      }
+      // Mid-paragraph table: pipe row followed by a separator row.
+      // Stop the paragraph here so the table check at the top of the
+      // outer loop picks it up.
+      if (
+        next.trim().startsWith('|') &&
+        i + 1 < lines.length &&
+        isTableSeparator(lines[i + 1]!)
       ) {
         break;
       }
@@ -157,10 +199,165 @@ const BlockNode: React.FC<{ block: Block; suppressTopMargin?: boolean }> = ({
           ))}
         </Box>
       );
+    case 'table':
+      return <TableBlock block={block} suppressTopMargin={!!suppressTopMargin} />;
     case 'blank':
       return <Text> </Text>;
   }
 };
+
+/**
+ * Render a GFM table. Computes per-column widths from the content,
+ * scales them down proportionally if the row would overflow the
+ * terminal (each cell still respects its declared alignment), and
+ * draws a dim `─/┼` rule between header and body so the grid reads as
+ * a unit. Cell contents go through `InlineText` so **bold** / `code`
+ * / [links] inside cells render correctly.
+ */
+const TableBlock: React.FC<{
+  block: { header: ReadonlyArray<string>; aligns: ReadonlyArray<Align>; rows: ReadonlyArray<ReadonlyArray<string>> };
+  suppressTopMargin: boolean;
+}> = ({ block, suppressTopMargin }) => {
+  const term = process.stdout.columns ?? 80;
+  const numCols = block.header.length;
+  if (numCols === 0) return null;
+  // Sep is " │ " between cells — 3 cols per gap.
+  const gap = 3;
+  const totalGap = gap * Math.max(0, numCols - 1);
+
+  // Natural widths from content (stripped of inline-md syntax so the
+  // grid math doesn't get fooled by markers that won't render).
+  const widths = block.header.map((h, ci) => {
+    let max = visualLen(h);
+    for (const row of block.rows) max = Math.max(max, visualLen(row[ci] ?? ''));
+    return Math.max(3, max);
+  });
+
+  // Scale down proportionally if the natural row exceeds terminal.
+  const naturalTotal = widths.reduce((a, b) => a + b, 0) + totalGap;
+  const avail = Math.max(numCols * 4 + totalGap, term - 2);
+  if (naturalTotal > avail) {
+    const scale = (avail - totalGap) / (naturalTotal - totalGap);
+    for (let i = 0; i < widths.length; i++) {
+      widths[i] = Math.max(3, Math.floor((widths[i] ?? 3) * scale));
+    }
+  }
+
+  const aligns = block.header.map((_, ci) => block.aligns[ci] ?? 'left');
+  return (
+    <Box flexDirection="column" marginTop={suppressTopMargin ? 0 : 1}>
+      <TableRow cells={block.header} widths={widths} aligns={aligns} bold />
+      <TableRule widths={widths} />
+      {block.rows.map((row, i) => (
+        <TableRow key={i} cells={row} widths={widths} aligns={aligns} />
+      ))}
+    </Box>
+  );
+};
+
+const TableRow: React.FC<{
+  cells: ReadonlyArray<string>;
+  widths: ReadonlyArray<number>;
+  aligns: ReadonlyArray<Align>;
+  bold?: boolean;
+}> = ({ cells, widths, aligns, bold }) => (
+  <Box>
+    {widths.map((w, ci) => {
+      const text = padCell(cells[ci] ?? '', w, aligns[ci] ?? 'left');
+      return (
+        <React.Fragment key={ci}>
+          {ci > 0 ? <Text dimColor>{' │ '}</Text> : null}
+          <Box width={w} flexShrink={0}>
+            <Text bold={bold} wrap="truncate">
+              {text}
+            </Text>
+          </Box>
+        </React.Fragment>
+      );
+    })}
+  </Box>
+);
+
+const TableRule: React.FC<{ widths: ReadonlyArray<number> }> = ({ widths }) => (
+  <Text dimColor>{widths.map((w) => '─'.repeat(w)).join('─┼─')}</Text>
+);
+
+function padCell(value: string, width: number, align: Align): string {
+  // Strip inline-markdown markers for layout sizing/padding; the actual
+  // glyphs render through Text wrap="truncate" so visual width matches
+  // padded width even when bold/italic markers got removed.
+  const stripped = stripInline(value);
+  const truncated = stripped.length > width ? stripped.slice(0, Math.max(0, width - 1)) + '…' : stripped;
+  const slack = width - truncated.length;
+  if (slack <= 0) return truncated;
+  if (align === 'right') return ' '.repeat(slack) + truncated;
+  if (align === 'center') {
+    const left = Math.floor(slack / 2);
+    return ' '.repeat(left) + truncated + ' '.repeat(slack - left);
+  }
+  return truncated + ' '.repeat(slack);
+}
+
+function visualLen(s: string): number {
+  return stripInline(s).length;
+}
+
+function stripInline(s: string): string {
+  return s
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+}
+
+/**
+ * Some models emit GFM tables on a single line — header, separator,
+ * and every row glued together with `" | | "` (closing-pipe space
+ * opening-pipe of the next row) instead of newlines. The block parser
+ * can't pick that up because it scans line-by-line, so explode the
+ * compressed form into proper rows before parsing.
+ *
+ * Detection requires BOTH a separator pattern (`|---|`) AND at least
+ * one `" | | "` row boundary on the same line, so legitimate prose
+ * with stray pipe characters never triggers the split.
+ */
+function normalizeInlineTables(src: string): string {
+  return src
+    .split('\n')
+    .map((line) => {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('|')) return line;
+      const hasSeparator = /\|\s*:?-+:?(\s*\|\s*:?-+:?)+\s*\|/.test(trimmed);
+      const hasRowBoundary = / \| \|/.test(trimmed);
+      if (!hasSeparator || !hasRowBoundary) return line;
+      return trimmed.replace(/ \| \|/g, ' |\n|');
+    })
+    .join('\n');
+}
+
+function isTableSeparator(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed.includes('|') || !trimmed.includes('-')) return false;
+  // Reject lines that contain non-pipe/dash/colon/space content.
+  return /^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?$/.test(trimmed);
+}
+
+function parseTableCells(line: string): string[] {
+  const trimmed = line.trim().replace(/^\|/, '').replace(/\|$/, '');
+  return trimmed.split('|').map((s) => s.trim());
+}
+
+function parseTableAligns(sep: string): Align[] {
+  const cells = sep.trim().replace(/^\|/, '').replace(/\|$/, '').split('|');
+  return cells.map((c) => {
+    const t = c.trim();
+    const left = t.startsWith(':');
+    const right = t.endsWith(':');
+    if (left && right) return 'center';
+    if (right) return 'right';
+    return 'left';
+  });
+}
 
 /**
  * Inline-span renderer: handles `code`, **bold**, *italic*, and [text](url)

@@ -292,11 +292,20 @@ const SessionView: React.FC<SessionViewProps> = ({
     | { kind: 'mcp-server'; title: string; options: ReadonlyArray<ListPickerOption> }
     | { kind: 'mcp-action'; title: string; serverName: string; options: ReadonlyArray<ListPickerOption> }
   >(null);
-  const [pendingPermission, setPendingPermission] = useState<{
-    call: PendingToolCall;
-    ctx: PermissionContext;
-    resolve: (d: PermissionDecision) => void;
-  } | null>(null);
+  // Queue of in-flight permission requests. Parallel subagents can
+  // each request permission at the same time; without a queue, the
+  // single-slot state would overwrite earlier entries and silently
+  // strand their resolve() callbacks — agents hang forever. We show
+  // the head of the queue in the dialog, pop on decision, and keep
+  // showing the next entry until empty.
+  const [pendingPermissions, setPendingPermissions] = useState<
+    ReadonlyArray<{
+      call: PendingToolCall;
+      ctx: PermissionContext;
+      resolve: (d: PermissionDecision) => void;
+    }>
+  >([]);
+  const pendingPermission = pendingPermissions[0] ?? null;
   // Generic approval queue. Loop strategies push checkpoint questions
   // here via the resolver we install on the Session; the dialog drains
   // it one at a time. Same shape as pendingPermission — single
@@ -345,7 +354,7 @@ const SessionView: React.FC<SessionViewProps> = ({
         return { mode: 'allow', reason: 'yolo mode' };
       }
       return new Promise<PermissionDecision>((resolve) => {
-        setPendingPermission({ call, ctx, resolve });
+        setPendingPermissions((prev) => [...prev, { call, ctx, resolve }]);
       });
     });
 
@@ -629,7 +638,12 @@ const SessionView: React.FC<SessionViewProps> = ({
         setStreamingDelta('');
         streamingBufferRef.current = '';
         setOverlay(null);
-        setPendingPermission(null);
+        // Drain queued permission requests with deny so /new doesn't
+        // leave subagents hanging on prompts that no longer apply.
+        for (const p of pendingPermissions) {
+          p.resolve({ mode: 'deny', reason: '/new — session reset' });
+        }
+        setPendingPermissions([]);
         setPendingApproval(null);
         setBusy(false);
         setYolo(false);
@@ -988,9 +1002,10 @@ const SessionView: React.FC<SessionViewProps> = ({
         <PermissionDialog
           call={pendingPermission.call}
           toolDescription={session.tools.get(pendingPermission.call.name)?.description}
+          queueDepth={Math.max(0, pendingPermissions.length - 1)}
           onDecide={(decision) => {
             const { call, resolve } = pendingPermission;
-            setPendingPermission(null);
+            setPendingPermissions((prev) => prev.slice(1));
             if (decision.mode === 'allow_always') {
               void session.permissions
                 .addAllow({ name: call.name, reason: 'allow_always via TUI dialog' })

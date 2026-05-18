@@ -7,10 +7,21 @@ import { Modal } from './Modal.js';
 export interface PermissionDialogProps {
   readonly call: PendingToolCall;
   readonly toolDescription?: string;
+  /**
+   * How many additional requests are queued behind this one. Parallel
+   * subagents can each request permission concurrently — surfacing the
+   * depth tells the user they're about to make N decisions back-to-back.
+   */
+  readonly queueDepth?: number;
   readonly onDecide: (decision: PermissionDecision) => void;
 }
 
-export const PermissionDialog: React.FC<PermissionDialogProps> = ({ call, toolDescription, onDecide }) => {
+export const PermissionDialog: React.FC<PermissionDialogProps> = ({
+  call,
+  toolDescription,
+  queueDepth = 0,
+  onDecide,
+}) => {
   useInput((input, key) => {
     const ch = input.toLowerCase();
     if (ch === 'y' || key.return) onDecide({ mode: 'allow' });
@@ -23,11 +34,12 @@ export const PermissionDialog: React.FC<PermissionDialogProps> = ({ call, toolDe
     // Auto-focus the dialog by capturing input on mount; useInput handles it.
   }, []);
 
+  const title =
+    queueDepth > 0
+      ? `Tool permission requested (${queueDepth} more queued)`
+      : 'Tool permission requested';
   return (
-    <Modal
-      title="Tool permission requested"
-      hints="y allow · a session · p always · n deny"
-    >
+    <Modal title={title} hints="y allow · a session · p always · n deny">
       <Text>
         Tool: <Text bold>{call.name}</Text>
         {toolDescription ? <Text dimColor> — {toolDescription}</Text> : null}
