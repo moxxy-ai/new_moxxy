@@ -15,6 +15,7 @@
  * `{method:'close'}`.
  */
 
+import { spawn } from 'node:child_process';
 import * as readline from 'node:readline';
 
 interface Req {
@@ -27,6 +28,8 @@ interface Ok {
   readonly id: string;
   readonly ok: true;
   readonly result?: unknown;
+  /** One-shot human-readable note (e.g. "Auto-installed Chromium"). */
+  readonly notice?: string;
 }
 
 interface Err {
@@ -61,6 +64,13 @@ interface PageHandle {
 }
 
 let handle: PlaywrightHandle | null = null;
+/**
+ * Set after a successful auto-install of browser binaries so the next
+ * tool result can carry a `notice` letting the user/model know the
+ * one-time download happened. Cleared once the notice has been
+ * delivered (handed to the reply once, then forgotten).
+ */
+let pendingInstallNotice: string | null = null;
 
 async function ensurePlaywright(opts: { browser?: 'chromium' | 'firefox' | 'webkit'; headless?: boolean }): Promise<PlaywrightHandle> {
   if (handle) return handle;
@@ -77,11 +87,86 @@ async function ensurePlaywright(opts: { browser?: 'chromium' | 'firefox' | 'webk
   }
   const which = opts.browser ?? 'chromium';
   const browserType: BrowserType = pw[which];
-  const browser = await browserType.launch({ headless: opts.headless ?? true });
+  handle = await launchWithAutoInstall(browserType, which, opts.headless ?? true);
+  return handle;
+}
+
+/**
+ * Try to launch the browser. If the binary isn't downloaded yet
+ * (Playwright distinguishes the npm install from the per-browser
+ * binary download), run `npx playwright install <which>` once and
+ * retry. The install can take 30s–2min on the first run depending on
+ * connection; we surface progress on stderr (parent forwards to the
+ * logger) and stash a one-shot notice for the first tool response.
+ */
+async function launchWithAutoInstall(
+  browserType: BrowserType,
+  which: 'chromium' | 'firefox' | 'webkit',
+  headless: boolean,
+): Promise<PlaywrightHandle> {
+  try {
+    return await launchOnce(browserType, headless);
+  } catch (err) {
+    if (!isMissingBrowserError(err)) throw err;
+    process.stderr.write(
+      `moxxy-browser: ${which} binary missing, running \`npx playwright install ${which}\` ` +
+        `(one-time, ~150MB). This may take a minute…\n`,
+    );
+    try {
+      await runPlaywrightInstall(which);
+    } catch (installErr) {
+      const msg = installErr instanceof Error ? installErr.message : String(installErr);
+      const e = new Error(
+        `Playwright browser auto-install failed: ${msg}. ` +
+          `Run \`npx playwright install ${which}\` manually in the moxxy dir.`,
+      );
+      (e as Error & { kind?: string }).kind = 'init';
+      throw e;
+    }
+    pendingInstallNotice = `Auto-installed Playwright ${which} browser (~150MB, one-time).`;
+    process.stderr.write(`moxxy-browser: install complete, retrying launch\n`);
+    return await launchOnce(browserType, headless);
+  }
+}
+
+async function launchOnce(browserType: BrowserType, headless: boolean): Promise<PlaywrightHandle> {
+  const browser = await browserType.launch({ headless });
   const context = (await browser.newContext()) as PlaywrightHandle['context'];
   const page = (await context.newPage()) as unknown as PageHandle;
-  handle = { browser, context, page };
-  return handle;
+  return { browser, context, page };
+}
+
+function isMissingBrowserError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  // Playwright's "Executable doesn't exist at …" launch error fires
+  // when the npm package is installed but the per-browser binary
+  // hasn't been downloaded. The message stays stable across versions.
+  return /Executable doesn'?t exist at/i.test(err.message);
+}
+
+/**
+ * Run `npx playwright install <which>` and stream its output to the
+ * sidecar's stderr so the operator can watch progress. Resolves on
+ * exit-0; rejects with the tail of stderr otherwise.
+ */
+function runPlaywrightInstall(which: 'chromium' | 'firefox' | 'webkit'): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('npx', ['playwright', 'install', which], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stderrTail = '';
+    child.stdout.on('data', (chunk: Buffer) => process.stderr.write(chunk));
+    child.stderr.on('data', (chunk: Buffer) => {
+      process.stderr.write(chunk);
+      stderrTail += chunk.toString('utf8');
+      if (stderrTail.length > 4000) stderrTail = stderrTail.slice(-4000);
+    });
+    child.once('error', (err) => reject(err));
+    child.once('close', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`exit ${code}: ${stderrTail.trim() || '(no stderr)'}`));
+    });
+  });
 }
 
 interface BrowserType {
@@ -202,6 +287,24 @@ function badParams(msg: string): Error {
 }
 
 function write(reply: Reply): void {
+  // Drain the install-notice flag into the first reply that goes out
+  // after the install completed, then clear it. Errors get the notice
+  // too — sometimes the launch retry surfaces a different problem and
+  // the user still wants to know we tried to install.
+  if (pendingInstallNotice) {
+    if (reply.ok) {
+      reply = { ...reply, notice: pendingInstallNotice };
+    } else {
+      reply = {
+        ...reply,
+        error: {
+          ...reply.error,
+          message: `${pendingInstallNotice} Then: ${reply.error.message}`,
+        },
+      };
+    }
+    pendingInstallNotice = null;
+  }
   process.stdout.write(JSON.stringify(reply) + '\n');
 }
 

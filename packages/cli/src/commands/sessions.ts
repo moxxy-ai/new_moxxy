@@ -1,4 +1,4 @@
-import * as readline from 'node:readline';
+import { isCancel, select } from '@clack/prompts';
 import { deleteSession, readSessionIndex, type SessionMeta } from '@moxxy/core';
 import type { ParsedArgv } from '../argv.js';
 import { helpRequested, stringFlag } from '../argv-helpers.js';
@@ -87,11 +87,21 @@ export async function pickSessionToResume(argv: ParsedArgv): Promise<string | nu
     process.stderr.write(colors.dim('(no persisted sessions to resume)\n'));
     return null;
   }
-  process.stdout.write(formatSessions(all));
-  process.stdout.write('\n' + colors.dim('Pick a session by number (Enter to cancel): '));
-  const pick = await readNumber(all.length);
-  if (pick == null) return null;
-  return all[pick - 1]!.id;
+  // @clack/prompts handles arrow-key navigation + Enter + Esc/Ctrl-C
+  // cancel natively. The previous readline approach silently dropped
+  // typed-number input inside terminal wrappers (Warp, Claude Code).
+  const chosen = await select({
+    message: `Pick a session to resume (${all.length} saved)`,
+    options: all.map((m) => ({
+      value: m.id,
+      label: m.firstPrompt
+        ? `${m.firstPrompt.slice(0, 60)}${m.firstPrompt.length > 60 ? '…' : ''}`
+        : '(empty)',
+      hint: `${formatAgo(m.lastActivity)} · ${m.eventCount} ev · ${m.cwd}`,
+    })),
+  });
+  if (isCancel(chosen) || typeof chosen !== 'string') return null;
+  return chosen;
 }
 
 function formatSessions(all: ReadonlyArray<SessionMeta>): string {
@@ -131,24 +141,6 @@ function resolveId(input: string, all: ReadonlyArray<SessionMeta>): string {
   // Ambiguous or no match — return the raw input so the resume path
   // surfaces a clear "Session not found" with the user's typed string.
   return trimmed;
-}
-
-/**
- * Read a number 1..max from stdin (canonical mode). Returns null on
- * EOF, empty input, or anything unparseable — those all mean "cancel"
- * for our purposes.
- */
-function readNumber(max: number): Promise<number | null> {
-  return new Promise((resolve) => {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    rl.once('line', (line) => {
-      rl.close();
-      const n = Number.parseInt(line.trim(), 10);
-      if (!Number.isFinite(n) || n < 1 || n > max) resolve(null);
-      else resolve(n);
-    });
-    rl.once('close', () => resolve(null));
-  });
 }
 
 function formatAgo(iso: string): string {

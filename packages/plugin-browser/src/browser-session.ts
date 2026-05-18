@@ -77,16 +77,34 @@ interface PendingCall {
   readonly reject: (err: Error) => void;
 }
 
+/**
+ * Coerce a sidecar reply into an object so we can attach `notice`.
+ * Wraps primitives + strings; pass-through for objects.
+ */
+function wrapResult(value: unknown): Record<string, unknown> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return { result: value };
+}
+
 class Sidecar {
   private child: SidecarStream | null = null;
   private buffer = '';
   private readonly pending = new Map<string, PendingCall>();
   private startError: Error | null = null;
+  /** Optional listener for sidecar stderr lines — used by callers
+   *  that want install-progress feedback in their own logger/UI. */
+  private stderrListener: ((line: string) => void) | null = null;
 
   constructor(
     private readonly sidecarPath: string,
     private readonly spawnFn: (path: string) => SidecarStream,
   ) {}
+
+  onStderr(fn: (line: string) => void): void {
+    this.stderrListener = fn;
+  }
 
   async ensure(): Promise<void> {
     if (this.child) return;
@@ -107,6 +125,19 @@ class Sidecar {
         if (line.trim()) this.handleLine(line);
       }
     });
+    // Forward sidecar stderr line-by-line. The sidecar uses stderr
+    // for install progress ("downloading chromium…") and other
+    // human-readable status; callers wire `onStderr` to surface it.
+    let stderrBuf = '';
+    this.child.stderr?.on?.('data', (chunk: string | Buffer) => {
+      stderrBuf += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+      let nl: number;
+      while ((nl = stderrBuf.indexOf('\n')) !== -1) {
+        const line = stderrBuf.slice(0, nl);
+        stderrBuf = stderrBuf.slice(nl + 1);
+        if (line.trim() && this.stderrListener) this.stderrListener(line);
+      }
+    });
     this.child.once('exit', (code) => {
       const err = new Error(`browser sidecar exited unexpectedly (code=${code ?? 'null'})`);
       for (const [, p] of this.pending) p.reject(err);
@@ -116,7 +147,13 @@ class Sidecar {
   }
 
   private handleLine(line: string): void {
-    let reply: { id: string; ok: boolean; result?: unknown; error?: { message: string } };
+    let reply: {
+      id: string;
+      ok: boolean;
+      result?: unknown;
+      error?: { message: string };
+      notice?: string;
+    };
     try {
       reply = JSON.parse(line);
     } catch {
@@ -125,8 +162,19 @@ class Sidecar {
     const p = this.pending.get(reply.id);
     if (!p) return;
     this.pending.delete(reply.id);
-    if (reply.ok) p.resolve(reply.result);
-    else p.reject(new Error(reply.error?.message ?? 'sidecar error'));
+    if (reply.ok) {
+      // Attach the optional sidecar-supplied notice (e.g. "Auto-installed
+      // Chromium") so the tool's caller can surface it to the user. Wrap
+      // primitive results in `{ result, notice }` so the shape stays
+      // useful regardless of what the original call returned.
+      if (reply.notice) {
+        p.resolve({ ...wrapResult(reply.result), notice: reply.notice });
+      } else {
+        p.resolve(reply.result);
+      }
+    } else {
+      p.reject(new Error(reply.error?.message ?? 'sidecar error'));
+    }
   }
 
   async call(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
@@ -196,6 +244,11 @@ export function buildBrowserSessionTool(deps?: BrowserSessionDeps) {
     permission: { action: 'prompt' },
     async handler({ action }, ctx) {
       const sidecar = getSidecar(deps);
+      // Surface install-progress lines (and any other sidecar status
+      // writes) through the tool ctx logger — visible in verbose mode
+      // and in the event log so the operator can see "downloading
+      // chromium…" instead of staring at an apparently-hung turn.
+      sidecar.onStderr((line) => ctx.logger.info('browser_session', { line }));
       const onAbort = (): void => {
         void sidecar.close();
       };
