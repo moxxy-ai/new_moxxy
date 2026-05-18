@@ -454,8 +454,12 @@ async function executeStep(
       });
     }
 
-    // Step done if the model didn't ask to use tools.
-    if (stopReason !== 'tool_use' || toolUses.length === 0) return true;
+    // Step done if the model didn't ask to use tools. We deliberately do
+    // NOT gate on stopReason — some providers (notably codex's Responses
+    // API) don't report stop_reason='tool_use' reliably, and a single
+    // mis-mapping would silently skip every tool call in the step.
+    // toolUses.length is the source of truth.
+    if (toolUses.length === 0) return true;
 
     // Detect repeat calls BEFORE dispatching. If every tool use in this
     // iteration was already seen in a prior iteration of the SAME step,

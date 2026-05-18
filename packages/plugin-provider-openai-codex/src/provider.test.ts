@@ -193,5 +193,11 @@ describe('CodexProvider.stream', () => {
     const end = events.find((e) => e.type === 'tool_use_end');
     expect(start).toMatchObject({ type: 'tool_use_start', id: 'call_abc', name: 'Read' });
     expect(end).toMatchObject({ type: 'tool_use_end', id: 'call_abc', input: { path: '/tmp/x' } });
+    // Crucial regression guard: the Responses API's `response.completed`
+    // doesn't carry a stop_reason, so the provider must infer 'tool_use'
+    // from the emitted tool_use_end events. Without this, the upstream
+    // tool-use loop drops the call without executing it.
+    const messageEnd = events.find((e): e is Extract<ProviderEvent, { type: 'message_end' }> => e.type === 'message_end');
+    expect(messageEnd?.stopReason).toBe('tool_use');
   });
 });

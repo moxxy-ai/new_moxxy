@@ -146,6 +146,44 @@ describe('toolUseLoop end-to-end', () => {
     expect(errors[0].message).toMatch(/maxIterations/);
   });
 
+  it('executes tools even when provider reports stopReason: end_turn', async () => {
+    // Regression for the codex provider bug where Responses-API turns with
+    // tool calls were reported as `stop_reason: end_turn`. The loop must
+    // execute tools whenever they're requested, regardless of stopReason —
+    // otherwise a single provider mis-mapping leaves orphan
+    // tool_call_requested events and a stuck-looking pending dot.
+    const provider = new FakeProvider({
+      script: [
+        [
+          { type: 'message_start', model: 'fake' },
+          { type: 'tool_use_start', id: 'c1', name: 'echo' },
+          { type: 'tool_use_end', id: 'c1', input: { msg: 'hi' } },
+          // Note: end_turn, NOT tool_use — the bug scenario.
+          { type: 'message_end', stopReason: 'end_turn' },
+        ],
+        textReply('done'),
+      ],
+    });
+    const session = sessionWith(provider);
+    session.tools.register(
+      defineTool({
+        name: 'echo',
+        description: 'returns msg',
+        inputSchema: z.object({ msg: z.string() }),
+        handler: (i) => i.msg,
+      }),
+    );
+
+    const events = await collectTurn(session, 'go');
+    const requested = events.find((e) => e.type === 'tool_call_requested');
+    const result = events.find((e) => e.type === 'tool_result');
+    expect(requested).toBeDefined();
+    expect(result).toBeDefined();
+    if (result?.type !== 'tool_result') throw new Error('expected tool_result');
+    expect(result.ok).toBe(true);
+    expect(result.output).toBe('hi');
+  });
+
   it('emits abort event when session is aborted mid-stream', async () => {
     const provider = new FakeProvider({
       script: [toolUseReply('slow', {}, 'c1'), textReply('after')],

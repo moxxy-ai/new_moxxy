@@ -21,7 +21,6 @@ import { PromptInput } from './components/PromptInput.js';
 import { PermissionDialog } from './components/PermissionDialog.js';
 import { ApprovalDialog } from './components/ApprovalDialog.js';
 import { StatusBar } from './components/StatusBar.js';
-import { Spinner } from './components/Spinner.js';
 import { Logo } from './components/Logo.js';
 import { SessionInfo } from './components/SessionInfo.js';
 import { SkillsPanel } from './components/SkillsPanel.js';
@@ -55,6 +54,24 @@ export const InteractiveSession: React.FC<InteractiveSessionProps> = ({
   const [events, setEvents] = useState<ReadonlyArray<MoxxyEvent>>([]);
   const [streamingDelta, setStreamingDelta] = useState('');
   const [busy, setBusy] = useState(false);
+  // Wall-clock start of the active turn (epoch ms). Powers the spinner +
+  // elapsed-time readout in the status bar. `null` between turns.
+  const [busyStartedAt, setBusyStartedAt] = useState<number | null>(null);
+  // Queued user messages typed while a turn is in flight. The queue is
+  // drained when the current turn finishes: every queued entry is
+  // concatenated into a single follow-up turn so the model sees the
+  // user's accumulated input as one coherent prompt rather than N
+  // micro-turns. `queueRef` is the source of truth (so async drain
+  // closures see the latest list); `queueCount` is purely for re-render.
+  const queueRef = useRef<Array<{ text: string; attachments: UserPromptAttachment[] }>>([]);
+  const [queueCount, setQueueCount] = useState(0);
+  // Mirror of `busy` for closures that need the latest value without
+  // waiting for the next render (the submit handler is recreated each
+  // render, but the user could submit between two state batches).
+  const busyRef = useRef(false);
+  useEffect(() => {
+    busyRef.current = busy;
+  }, [busy]);
   const [systemNotice, setSystemNotice] = useState<string | null>(null);
   // Structured ephemeral overlay (mutually exclusive with systemNotice).
   // /skills and /tools render through here so they get full-color
@@ -441,7 +458,29 @@ export const InteractiveSession: React.FC<InteractiveSessionProps> = ({
         setPendingApproval(null);
         setBusy(false);
         setYolo(false);
+        queueRef.current = [];
+        setQueueCount(0);
         setSystemNotice('new session — conversation history cleared');
+        return;
+      }
+      case '/queue': {
+        if (queueRef.current.length === 0) {
+          setSystemNotice('no messages queued');
+          return;
+        }
+        const previews = queueRef.current
+          .map((q, i) => `${i + 1}. ${q.text.length > 80 ? q.text.slice(0, 77) + '…' : q.text}`)
+          .join('\n');
+        setSystemNotice(
+          `${queueRef.current.length} queued message${queueRef.current.length === 1 ? '' : 's'}:\n${previews}`,
+        );
+        return;
+      }
+      case '/clear-queue': {
+        const n = queueRef.current.length;
+        queueRef.current = [];
+        setQueueCount(0);
+        setSystemNotice(n === 0 ? 'queue was already empty' : `dropped ${n} queued message${n === 1 ? '' : 's'}`);
         return;
       }
       case '/tools':
@@ -596,46 +635,49 @@ export const InteractiveSession: React.FC<InteractiveSessionProps> = ({
     return pasted;
   };
 
-  const handleSubmit = async (text: string): Promise<void> => {
-    setSystemNotice(null);
-    setOverlay(null);
-    if (text.startsWith('/')) {
-      runSlash(text);
-      return;
-    }
-
-    // Resolve any pending image attachments referenced by `[Image #N]`
-    // placeholders in the prompt. We only attach images that actually
-    // appear in the submitted text — pasting an image and then erasing
-    // the placeholder discards the bytes too.
+  /**
+   * Resolve `[Image #N]` placeholders in `text` to attachment payloads
+   * and clear the per-prompt image map (so future submissions get fresh
+   * placeholder numbering). Returns `null` if the active model can't
+   * accept images — caller surfaces the user-facing notice.
+   */
+  const resolveAttachments = async (
+    text: string,
+  ): Promise<UserPromptAttachment[] | { error: string }> => {
     const referencedIds = extractImagePlaceholders(text);
-    const attachments: UserPromptAttachment[] = [];
-    if (referencedIds.length > 0) {
-      const activeDescriptor = (() => {
-        try {
-          const provider = session.providers.getActive();
-          return provider.models.find((m) => m.id === activeModel) ?? null;
-        } catch {
-          return null;
-        }
-      })();
-      if (activeDescriptor && activeDescriptor.supportsImages !== true) {
-        setSystemNotice(
-          `${providerName}:${activeModel} doesn't accept images — switch to a vision-capable model via /model`,
-        );
-        return;
+    if (referencedIds.length === 0) return [];
+    const activeDescriptor = (() => {
+      try {
+        const provider = session.providers.getActive();
+        return provider.models.find((m) => m.id === activeModel) ?? null;
+      } catch {
+        return null;
       }
-      for (const id of referencedIds) {
-        const pending = imageAttachmentsRef.current.get(id);
-        if (!pending) continue;
-        const att = await pending;
-        if (att) attachments.push(att);
-      }
-      imageAttachmentsRef.current.clear();
-      nextImageIdRef.current = 1;
+    })();
+    if (activeDescriptor && activeDescriptor.supportsImages !== true) {
+      return {
+        error: `${providerName}:${activeModel} doesn't accept images — switch to a vision-capable model via /model`,
+      };
     }
+    const attachments: UserPromptAttachment[] = [];
+    for (const id of referencedIds) {
+      const pending = imageAttachmentsRef.current.get(id);
+      if (!pending) continue;
+      const att = await pending;
+      if (att) attachments.push(att);
+    }
+    imageAttachmentsRef.current.clear();
+    nextImageIdRef.current = 1;
+    return attachments;
+  };
 
+  const runTurnWith = async (
+    text: string,
+    attachments: UserPromptAttachment[],
+  ): Promise<void> => {
     setBusy(true);
+    busyRef.current = true;
+    setBusyStartedAt(Date.now());
     streamingBufferRef.current = '';
     setStreamingDelta('');
     const effectiveModel = activeModelOverride ?? model;
@@ -657,7 +699,55 @@ export const InteractiveSession: React.FC<InteractiveSessionProps> = ({
     } finally {
       turnControllerRef.current = null;
       setBusy(false);
+      busyRef.current = false;
+      setBusyStartedAt(null);
+      // Drain any messages the user queued while this turn was running.
+      // `drainQueue` calls back into `runTurnWith`, so messages queued
+      // *during* the drain itself get picked up by the next finally too.
+      await drainQueue();
     }
+  };
+
+  /**
+   * Concatenate every queued message into one follow-up turn and run
+   * it. We join with a blank line so the model can still see the
+   * boundaries between the user's separate thoughts, but the whole
+   * batch counts as a single conversational turn rather than N
+   * micro-turns. Idempotent when the queue is empty.
+   */
+  const drainQueue = async (): Promise<void> => {
+    if (queueRef.current.length === 0) return;
+    const batch = queueRef.current.splice(0);
+    setQueueCount(0);
+    const joinedText = batch.map((b) => b.text).join('\n\n');
+    const joinedAtts = batch.flatMap((b) => b.attachments);
+    await runTurnWith(joinedText, joinedAtts);
+  };
+
+  const handleSubmit = async (text: string): Promise<void> => {
+    setSystemNotice(null);
+    setOverlay(null);
+    if (text.startsWith('/')) {
+      runSlash(text);
+      return;
+    }
+
+    // Resolve image attachments at submit time so each queued message
+    // carries its own snapshot of bytes; the placeholder counter resets
+    // here so the next message starts numbering from #1 again.
+    const resolved = await resolveAttachments(text);
+    if (!Array.isArray(resolved)) {
+      setSystemNotice(resolved.error);
+      return;
+    }
+
+    if (busyRef.current) {
+      queueRef.current.push({ text, attachments: resolved });
+      setQueueCount(queueRef.current.length);
+      return;
+    }
+
+    await runTurnWith(text, resolved);
   };
 
   return (
@@ -685,16 +775,6 @@ export const InteractiveSession: React.FC<InteractiveSessionProps> = ({
           {systemNotice.split('\n').map((line, i) => (
             <Text key={i} color="yellow">{line}</Text>
           ))}
-        </Box>
-      ) : null}
-      {/* Spinner sits flush against the chat scrollback (no extra
-          marginTop) so the thinking indicator visually attaches to the
-          last tool/assistant block rather than floating in its own
-          padded region. Hidden while the dialog is up — the dialog
-          itself signals "waiting on you." */}
-      {busy && !pendingPermission && !pendingApproval ? (
-        <Box>
-          <Spinner label="thinking…  (esc to cancel)" color="yellow" />
         </Box>
       ) : null}
       {pendingPermission ? (
@@ -731,8 +811,12 @@ export const InteractiveSession: React.FC<InteractiveSessionProps> = ({
       ) : (
         <PromptInput
           onSubmit={handleSubmit}
-          disabled={busy}
-          placeholder={busy ? '' : 'type a prompt or / for commands'}
+          disabled={false}
+          placeholder={
+            busy
+              ? 'type to queue a message — sent after the current turn'
+              : 'type a prompt or / for commands'
+          }
           onPasteText={handlePasteText}
         />
       )}
@@ -743,6 +827,8 @@ export const InteractiveSession: React.FC<InteractiveSessionProps> = ({
         contextWindow={contextWindow ?? undefined}
         yolo={yolo}
         mcp={mcpStatus}
+        busyStartedAt={busy && !pendingPermission && !pendingApproval ? busyStartedAt : null}
+        queueCount={queueCount}
       />
     </Box>
   );

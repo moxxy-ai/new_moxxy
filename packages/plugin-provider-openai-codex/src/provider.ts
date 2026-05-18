@@ -193,7 +193,12 @@ export class CodexProvider implements LLMProvider {
     let stopReason: StopReason = 'end_turn';
     let usageIn = 0;
     let usageOut = 0;
-    let sawTerminalEvent = false;
+    // Tracks whether ANY tool_use_end was yielded during the stream.
+    // The Responses API's `response.completed` event doesn't differentiate
+    // text-only vs tool-use turns, so without this we'd report end_turn
+    // even when tools were requested — the upstream tool-use loop would
+    // then drop the calls without executing them.
+    let sawToolCall = false;
 
     try {
       while (true) {
@@ -225,13 +230,17 @@ export class CodexProvider implements LLMProvider {
               continue;
             }
             const result = handleSseEvent(json, pending);
-            if (result.events) for (const ev of result.events) yield ev;
+            if (result.events) {
+              for (const ev of result.events) {
+                if (ev.type === 'tool_use_end') sawToolCall = true;
+                yield ev;
+              }
+            }
             if (result.stopReason) stopReason = result.stopReason;
             if (result.usage) {
               usageIn = result.usage.input ?? usageIn;
               usageOut = result.usage.output ?? usageOut;
             }
-            if (result.terminal) sawTerminalEvent = true;
           }
         }
       }
@@ -253,11 +262,17 @@ export class CodexProvider implements LLMProvider {
             input = { _rawPartial: entry.args };
           }
         }
+        sawToolCall = true;
         yield { type: 'tool_use_end', id: entry.callId || entry.id, input };
       }
     }
 
-    if (!sawTerminalEvent && stopReason === 'end_turn' && pending.size > 0) {
+    // If we yielded any tool_use_end this stream, the turn IS a tool-use
+    // turn regardless of what `response.completed` said. The Responses API
+    // sends `completed` with no stop_reason field, so we infer from the
+    // events we actually emitted. Without this upgrade, codex turns with
+    // tool calls were reported as end_turn and the loop dropped them.
+    if (stopReason === 'end_turn' && sawToolCall) {
       stopReason = 'tool_use';
     }
 

@@ -8,6 +8,52 @@ import {
   type McpToolDescriptor,
 } from './types.js';
 
+/**
+ * Hard cap on a single MCP tool call. The MCP SDK's `callTool` doesn't
+ * accept an AbortSignal, so without a timeout a hung server (crashed
+ * stdio child, dead websocket, blocked DB query) would hang the agent's
+ * tool-use loop indefinitely — leaving a permanent pending dot in the UI
+ * with no way to recover without killing moxxy. 5 minutes is enough room
+ * for slow operations (image generation, large queries) but bounded.
+ */
+const MCP_CALL_TIMEOUT_MS = 5 * 60 * 1000;
+
+/**
+ * Race the MCP call against (1) abort and (2) a hard timeout. Whichever
+ * settles first wins. If the underlying callTool ever does resolve after
+ * we've rejected, its result is silently discarded — the MCP SDK's
+ * cleanup is the SDK's problem.
+ */
+async function runMcpCallWithFallback<T>(
+  callPromise: Promise<T>,
+  signal: AbortSignal,
+  toolName: string,
+): Promise<T> {
+  return await new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const settle = (fn: () => void): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal.removeEventListener('abort', onAbort);
+      fn();
+    };
+    const onAbort = (): void => {
+      settle(() => reject(new Error(`aborted MCP tool "${toolName}"`)));
+    };
+    const timer = setTimeout(() => {
+      settle(() =>
+        reject(new Error(`MCP tool "${toolName}" timed out after ${MCP_CALL_TIMEOUT_MS}ms`)),
+      );
+    }, MCP_CALL_TIMEOUT_MS);
+    signal.addEventListener('abort', onAbort, { once: true });
+    callPromise.then(
+      (v) => settle(() => resolve(v)),
+      (err: unknown) => settle(() => reject(err instanceof Error ? err : new Error(String(err)))),
+    );
+  });
+}
+
 export interface WrapOptions {
   readonly server: McpServerConfig;
   readonly client: McpClientLike;
@@ -60,7 +106,11 @@ function wrapOneLazyTool(
       // call. Subsequent calls reuse the cached client.
       const client = await getClient();
       if (ctx.signal.aborted) throw new Error('aborted');
-      const result = await client.callTool({ name: descriptor.name, arguments: input });
+      const result = await runMcpCallWithFallback(
+        client.callTool({ name: descriptor.name, arguments: input }),
+        ctx.signal,
+        wrappedName,
+      );
       return renderResult(result.content, result.isError);
     },
   });
@@ -81,7 +131,11 @@ function wrapOneTool(
     permission: { action: 'prompt' },
     handler: async (input, ctx) => {
       if (ctx.signal.aborted) throw new Error('aborted');
-      const result = await client.callTool({ name: descriptor.name, arguments: input });
+      const result = await runMcpCallWithFallback(
+        client.callTool({ name: descriptor.name, arguments: input }),
+        ctx.signal,
+        wrappedName,
+      );
       return renderResult(result.content, result.isError);
     },
   });

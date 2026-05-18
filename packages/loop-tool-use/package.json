@@ -34,7 +34,6 @@
   "devDependencies": {
     "@moxxy/core": "workspace:*",
     "@moxxy/testing": "workspace:*",
-    "@moxxy/tools-builtin": "workspace:*",
     "@moxxy/tsconfig": "workspace:*",
     "@moxxy/vitest-preset": "workspace:*",
     "@types/node": "^22.10.0",

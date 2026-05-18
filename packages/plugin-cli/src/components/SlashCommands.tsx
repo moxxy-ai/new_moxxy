@@ -31,6 +31,8 @@ export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<SlashCommand> = [
   },
   { name: 'expand', description: 'Expand closed skill scopes so children show in the chat' },
   { name: 'collapse', description: 'Collapse closed skill scopes back to a one-line summary' },
+  { name: 'queue', description: 'Show messages queued while the current turn is running' },
+  { name: 'clear-queue', description: 'Drop all queued messages' },
   { name: 'help', description: 'Show this command list' },
 ];
 

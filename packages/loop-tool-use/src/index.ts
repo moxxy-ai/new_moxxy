@@ -113,10 +113,37 @@ async function* runToolUseLoop(ctx: LoopContext): AsyncIterable<MoxxyEvent> {
       });
     }
 
-    if (stopReason !== 'tool_use' || toolUses.length === 0) return;
+    // Execute whenever the model requested tools, regardless of stopReason.
+    // Providers vary in how reliably they report `stopReason: 'tool_use'`
+    // (Codex's Responses API doesn't carry one on `response.completed`, so
+    // the provider has to infer it from emitted events). Trusting only
+    // stopReason here meant a single provider mis-mapping silently dropped
+    // tool calls — `tool_call_requested` would be emitted with no matching
+    // `tool_result`, leaving an orphan pending dot and a stuck-looking UI.
+    // If there genuinely are no tools to run, end the turn.
+    if (toolUses.length === 0) return;
+
+    // Tracks tool_call_requested events that haven't yet emitted a paired
+    // tool_result. On any early-exit (abort, unexpected throw), we synthesize
+    // results for the leftovers so the event log can't end with orphan
+    // tool_call_requested events — those would leave the UI stuck on a
+    // pending dot and the next provider call would see a missing tool_result.
+    const unresolved = new Set<string>(toolUses.map((t) => t.id));
 
     for (const t of toolUses) {
       if (ctx.signal.aborted) {
+        for (const orphanId of unresolved) {
+          yield await ctx.emit({
+            type: 'tool_result',
+            sessionId: ctx.sessionId,
+            turnId: ctx.turnId,
+            source: 'tool',
+            callId: asToolCallId(orphanId),
+            ok: false,
+            error: { kind: 'aborted', message: 'turn aborted before tool ran' },
+          });
+        }
+        unresolved.clear();
         yield await ctx.emit({
           type: 'abort',
           sessionId: ctx.sessionId,
@@ -127,62 +154,82 @@ async function* runToolUseLoop(ctx: LoopContext): AsyncIterable<MoxxyEvent> {
         return;
       }
 
-      const verdict = await ctx.hooks.dispatchToolCall({
-        sessionId: ctx.sessionId,
-        cwd: '',
-        log: ctx.log,
-        env: {},
-        turnId: ctx.turnId,
-        iteration,
-        call: { callId: asToolCallId(t.id), name: t.name, input: t.input },
-      });
-      let actualInput = t.input;
-      if (verdict.action === 'rewrite') actualInput = verdict.input;
-
-      const denyReason = hookDeny(verdict);
-      if (denyReason) {
-        yield await emitDenied(ctx, t, denyReason, 'hook');
-        continue;
-      }
-
-      const decision = await ctx.permissions.check(
-        { callId: asToolCallId(t.id), name: t.name, input: actualInput },
-        { sessionId: String(ctx.sessionId), toolDescription: ctx.tools.get(t.name)?.description },
-      );
-      if (decision.mode === 'deny') {
-        yield await emitDenied(ctx, t, decision.reason ?? 'denied by resolver', 'resolver');
-        continue;
-      }
-      yield await ctx.emit({
-        type: 'tool_call_approved',
-        sessionId: ctx.sessionId,
-        turnId: ctx.turnId,
-        source: 'system',
-        callId: asToolCallId(t.id),
-        decidedBy: 'resolver',
-        mode: decision.mode,
-      });
-
       try {
-        const output = await ctx.tools.execute(t.name, actualInput, ctx.signal, {
-          callId: t.id,
-          sessionId: String(ctx.sessionId),
-          turnId: String(ctx.turnId),
+        const verdict = await ctx.hooks.dispatchToolCall({
+          sessionId: ctx.sessionId,
+          cwd: '',
           log: ctx.log,
-          ...(ctx.subagents ? { subagents: ctx.subagents } : {}),
+          env: {},
+          turnId: ctx.turnId,
+          iteration,
+          call: { callId: asToolCallId(t.id), name: t.name, input: t.input },
         });
+        let actualInput = t.input;
+        if (verdict.action === 'rewrite') actualInput = verdict.input;
+
+        const denyReason = hookDeny(verdict);
+        if (denyReason) {
+          yield await emitDenied(ctx, t, denyReason, 'hook');
+          continue;
+        }
+
+        const decision = await ctx.permissions.check(
+          { callId: asToolCallId(t.id), name: t.name, input: actualInput },
+          { sessionId: String(ctx.sessionId), toolDescription: ctx.tools.get(t.name)?.description },
+        );
+        if (decision.mode === 'deny') {
+          yield await emitDenied(ctx, t, decision.reason ?? 'denied by resolver', 'resolver');
+          continue;
+        }
         yield await ctx.emit({
-          type: 'tool_result',
+          type: 'tool_call_approved',
           sessionId: ctx.sessionId,
           turnId: ctx.turnId,
-          source: 'tool',
+          source: 'system',
           callId: asToolCallId(t.id),
-          ok: true,
-          output,
+          decidedBy: 'resolver',
+          mode: decision.mode,
         });
+
+        try {
+          const output = await ctx.tools.execute(t.name, actualInput, ctx.signal, {
+            callId: t.id,
+            sessionId: String(ctx.sessionId),
+            turnId: String(ctx.turnId),
+            log: ctx.log,
+            ...(ctx.subagents ? { subagents: ctx.subagents } : {}),
+          });
+          yield await ctx.emit({
+            type: 'tool_result',
+            sessionId: ctx.sessionId,
+            turnId: ctx.turnId,
+            source: 'tool',
+            callId: asToolCallId(t.id),
+            ok: true,
+            output,
+          });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          const kind: 'aborted' | 'threw' = ctx.signal.aborted ? 'aborted' : 'threw';
+          yield await ctx.emit({
+            type: 'tool_result',
+            sessionId: ctx.sessionId,
+            turnId: ctx.turnId,
+            source: 'tool',
+            callId: asToolCallId(t.id),
+            ok: false,
+            error: { kind, message },
+          });
+        }
       } catch (err) {
+        // Defensive: a hook handler, permission resolver, or the emit
+        // itself threw before we could produce a tool_result. Without this
+        // catch the throw would propagate out of the generator, exiting
+        // the loop and leaving this and any subsequent calls as orphan
+        // tool_call_requested events — the very class of bug that prompted
+        // this rework. Synthesize a failed result so the event log stays
+        // well-formed.
         const message = err instanceof Error ? err.message : String(err);
-        const kind: 'aborted' | 'threw' = ctx.signal.aborted ? 'aborted' : 'threw';
         yield await ctx.emit({
           type: 'tool_result',
           sessionId: ctx.sessionId,
@@ -190,8 +237,10 @@ async function* runToolUseLoop(ctx: LoopContext): AsyncIterable<MoxxyEvent> {
           source: 'tool',
           callId: asToolCallId(t.id),
           ok: false,
-          error: { kind, message },
+          error: { kind: 'threw', message: `pre-execute failure: ${message}` },
         });
+      } finally {
+        unresolved.delete(t.id);
       }
     }
   }

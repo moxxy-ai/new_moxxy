@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
 import type {
   MoxxyEvent,
@@ -42,32 +42,33 @@ export const ChatView: React.FC<ChatViewProps> = ({
       {blocks.map((b) => (
         <BlockLine key={b.id} block={b} expandClosedSkills={!!expandClosedSkills} />
       ))}
-      {streamingDelta ? <AssistantBlock content={streamingDelta} /> : null}
+      {streamingDelta && streamingDelta.trim() ? (
+        <AssistantBlock content={streamingDelta} />
+      ) : null}
     </Box>
   );
 };
 
 /**
- * Renders an assistant turn: a white `● ` bullet on the first line and
+ * Renders an assistant turn: a white `●` bullet on the first line and
  * the body rendered through the lightweight Markdown component
  * (headings, lists, code blocks, inline emphasis + links). Indented one
  * column past the bullet so the body reads as one visual unit attached
  * to its marker. Mirrors the Claude Code convention (white = assistant).
  */
-const AssistantBlock: React.FC<{ content: string }> = ({ content }) => (
-  // Bullet column + markdown column. The bullet glyph `▌` is a half-block
-  // that sits on the text baseline in every monospace font I've tested,
-  // unlike `●` (BLACK CIRCLE) which renders above the baseline on most
-  // terminal fonts and looked vertically off next to body text.
-  <Box flexDirection="row" marginTop={1}>
-    <Box flexDirection="column" marginRight={1}>
-      <Text color="white">▌</Text>
+const AssistantBlock: React.FC<{ content: string }> = ({ content }) => {
+  if (!content.trim()) return null;
+  return (
+    <Box flexDirection="row" marginTop={1}>
+      <Box flexDirection="column" marginRight={1}>
+        <Text color="white">●</Text>
+      </Box>
+      <Box flexDirection="column" flexGrow={1}>
+        <Markdown content={content} firstBlockTight />
+      </Box>
     </Box>
-    <Box flexDirection="column" flexGrow={1}>
-      <Markdown content={content} firstBlockTight />
-    </Box>
-  </Box>
-);
+  );
+};
 
 type Block = EventBlock | ToolCallBlockData | SkillScopeBlock;
 
@@ -139,9 +140,28 @@ function pairToolEvents(events: ReadonlyArray<MoxxyEvent>): Block[] {
     removeFrom(root);
   };
 
+  // UI safety net: when a new user_prompt arrives, any tool-call block
+  // still showing `outcome: null` is an orphan — its result event never
+  // landed. Mark it as a synthetic error so the dot stops pulsing forever
+  // and the user can see *something* went wrong. The upstream loops should
+  // synthesize tool_result events for these cases (and now do), but this
+  // guard means a future regression can't leave a permanent stuck dot.
+  const markOrphansAtTurnBoundary = (): void => {
+    for (const block of callBlocks.values()) {
+      if (block.outcome === null) {
+        block.outcome = {
+          type: 'denied',
+          reason: 'no result recorded before next turn — likely interrupted or lost',
+        };
+      }
+    }
+    callBlocks.clear();
+  };
+
   for (const e of events) {
     if (e.type === 'user_prompt') {
       closeOpenScope();
+      markOrphansAtTurnBoundary();
       pendingLoadSkillCallId = null;
       root.push({ kind: 'event', id: e.id, event: e });
       continue;
@@ -257,6 +277,29 @@ function countToolCalls(blocks: ReadonlyArray<Block>): number {
   return n;
 }
 
+/**
+ * Pulsing `●` for in-flight tool calls. Toggles between full color and
+ * dim every ~500ms so the user can tell at a glance that work is still
+ * happening — a static yellow dot was reading as "stuck" when a long
+ * shell command was running. The trailing space lives outside the
+ * dimmed Text so the dim ANSI attribute can't bleed onto the tool name
+ * that follows (some terminals interpret the boundary loosely and the
+ * whole row appeared to pulse).
+ */
+const PendingBullet: React.FC<{ color: string }> = ({ color }) => {
+  const [on, setOn] = useState(true);
+  useEffect(() => {
+    const t = setInterval(() => setOn((v) => !v), 500);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <>
+      <Text color={color} dimColor={!on}>●</Text>
+      <Text> </Text>
+    </>
+  );
+};
+
 const ToolCallBlock: React.FC<{
   request: ToolCallRequestedEvent;
   outcome: ToolResultEvent | { type: 'denied'; reason: string } | null;
@@ -274,7 +317,11 @@ const ToolCallBlock: React.FC<{
   return (
     <Box flexDirection="column" marginTop={1}>
       <Box>
-        <Text color={bulletColor}>● </Text>
+        {status === 'pending' ? (
+          <PendingBullet color={bulletColor} />
+        ) : (
+          <Text color={bulletColor}>● </Text>
+        )}
         <Text bold>{request.name}</Text>
         <Text>(</Text>
         <Text dimColor>{argSummary}</Text>
@@ -349,8 +396,7 @@ const EventLine: React.FC<{ event: MoxxyEvent }> = ({ event }) => {
       // lines between the user prompt and the first response.
       return (
         <Box marginTop={1}>
-          <Text color="blue" bold>{'> '}</Text>
-          <Text>{event.text}</Text>
+          <Text backgroundColor="#262626">{` ${event.text} `}</Text>
         </Box>
       );
     case 'assistant_message':

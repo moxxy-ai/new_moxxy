@@ -618,7 +618,11 @@ async function* runImplementationLoop(
       producedAnyOutput = true;
     }
 
-    if (stopReason !== 'tool_use' || toolUses.length === 0) {
+    // Gate on toolUses, NOT stopReason. Some providers (codex) under-report
+    // stop_reason='tool_use', so keying on stopReason would silently skip
+    // tool execution. If there are tools to run, run them; otherwise wrap
+    // up the phase.
+    if (toolUses.length === 0) {
       // First-iteration silent end_turn is the bug signature that used to
       // make the implementation phase look like it never ran. Surface it
       // as a hint instead of pretending the work is done.
