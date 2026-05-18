@@ -129,6 +129,10 @@ export class TelegramChannel implements Channel<TelegramStartOpts> {
     this.bot.command('start', (ctx) => this.handleStartCommand(ctx));
     this.bot.on('callback_query:data', (ctx) => this.handleCallback(ctx));
     this.bot.on('message:text', (ctx) => this.handleText(ctx));
+    // Surface the shared registry commands in Telegram's bot-command
+    // menu so users see /info, /clear, /new, /exit, /help next to the
+    // Telegram-local /model, /loop, /yolo, /tools, /skills, /cancel.
+    void this.publishBotCommands();
     this.bot.catch((err) => {
       const e = err.error;
       if (e instanceof GrammyError) this.opts.logger?.warn('grammy error', { description: e.description });
@@ -255,42 +259,50 @@ export class TelegramChannel implements Channel<TelegramStartOpts> {
   }
 
   /**
-   * Slash-command dispatcher for the Telegram channel. Mirrors the TUI's
-   * /model, /loop, /yolo, /tools, /skills, /help — adapted to chat:
-   * model/loop pickers are inline-keyboard messages, listing commands
-   * just reply with text.
+   * Slash-command dispatcher for the Telegram channel.
+   *
+   * First tries the shared `session.commands` registry — this is where
+   * the universal commands (/info, /clear, /new, /exit, /help) live, so
+   * Telegram gets them for free alongside any plugin-contributed
+   * commands without needing a switch case here.
+   *
+   * Falls through to channel-local cases for Telegram-specific UI
+   * (model/loop pickers as inline keyboards, /yolo toggle, /tools and
+   * /skills as text dumps, /cancel for in-flight aborts).
    */
   private async runSlash(ctx: Context, text: string): Promise<void> {
     if (!this.session) return;
-    const [head] = text.split(/\s+/);
-    switch (head) {
-      case '/help': {
-        await ctx.reply(
-          'Commands:\n' +
-            '/model — switch model\n' +
-            '/loop — switch loop strategy\n' +
-            '/yolo — toggle auto-approve\n' +
-            '/tools — list tools\n' +
-            '/skills — list skills\n' +
-            '/new — start a fresh session (wipes history)\n' +
-            '/cancel — abort current turn\n' +
-            '/help — this message',
-        );
-        return;
-      }
-      case '/new': {
-        if (this.turnController && !this.turnController.signal.aborted) {
-          this.turnController.abort('user reset');
+    const [head, ...rest] = text.split(/\s+/);
+    const name = head!.slice(1);
+    const args = rest.join(' ');
+
+    // 1) Shared registry dispatch.
+    const registered = this.session.commands.get(name);
+    if (registered) {
+      try {
+        const result = await registered.handler({
+          channel: 'telegram',
+          sessionId: this.session.id,
+          args,
+          session: this.session,
+        });
+        if (result.kind === 'text') {
+          await ctx.reply(result.text);
+        } else if (result.kind === 'session-action') {
+          await this.performSessionAction(ctx, result.action, result.notice);
+        } else if (result.kind === 'error') {
+          await ctx.reply(`error: ${result.message}`);
         }
-        this.session.log.clear();
-        this.renderer.reset();
-        this.yolo = false;
-        this.awaitingApprovalText = null;
-        this.approvalResolver.abortAll('session reset');
-        this.permissionResolver.abortAll('session reset');
-        await ctx.reply('✓ new session — conversation history cleared');
-        return;
+      } catch (err) {
+        await ctx.reply(
+          `command /${name} failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
+      return;
+    }
+
+    // 2) Channel-local cases.
+    switch (head) {
       case '/model': {
         const providers = this.session.providers.list();
         if (providers.length === 0) {
@@ -379,6 +391,78 @@ export class TelegramChannel implements Channel<TelegramStartOpts> {
       }
       default:
         await ctx.reply(`unknown command: ${head} (try /help)`);
+    }
+  }
+
+  /**
+   * Push the union of registry commands + Telegram-local commands to
+   * Telegram so they appear in the chat's command menu (the "/" picker
+   * the official client shows). Best-effort: a network failure here
+   * doesn't block channel startup, the commands still work via text.
+   */
+  private async publishBotCommands(): Promise<void> {
+    if (!this.session || !this.bot) return;
+    const LOCAL: Array<{ command: string; description: string }> = [
+      { command: 'model', description: 'Switch provider + model (inline keyboard)' },
+      { command: 'loop', description: 'Switch loop strategy' },
+      { command: 'yolo', description: 'Toggle auto-approve mode' },
+      { command: 'tools', description: 'List the tools the active session can call' },
+      { command: 'skills', description: 'List the discovered skills' },
+      { command: 'cancel', description: 'Abort the current turn' },
+    ];
+    const shared = this.session.commands
+      .listForChannel('telegram')
+      .map((c) => ({ command: c.name, description: c.description }));
+    const seen = new Set(shared.map((c) => c.command));
+    const merged = [...shared, ...LOCAL.filter((c) => !seen.has(c.command))]
+      .sort((a, b) => a.command.localeCompare(b.command))
+      // Telegram caps descriptions at 256 chars and rejects empties.
+      .map((c) => ({
+        command: c.command,
+        description: (c.description || c.command).slice(0, 256),
+      }));
+    try {
+      await this.bot.api.setMyCommands(merged);
+    } catch (err) {
+      this.opts.logger?.warn?.('telegram setMyCommands failed', {
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  /**
+   * Channel-side handler for `session-action` outputs from registered
+   * commands. The TUI does the same thing; both channels translate the
+   * action into their own UI semantics (Telegram = reply text, Ink =
+   * setState + exit).
+   */
+  private async performSessionAction(
+    ctx: Context,
+    action: 'new' | 'clear' | 'exit',
+    notice: string | undefined,
+  ): Promise<void> {
+    if (!this.session) return;
+    if (action === 'exit') {
+      await ctx.reply(notice ?? 'closing Telegram channel');
+      if (this.handle) await this.handle.stop('user /exit');
+      return;
+    }
+    if (action === 'clear') {
+      this.renderer.reset();
+      if (notice) await ctx.reply(`✓ ${notice}`);
+      return;
+    }
+    if (action === 'new') {
+      if (this.turnController && !this.turnController.signal.aborted) {
+        this.turnController.abort('user reset');
+      }
+      this.session.log.clear();
+      this.renderer.reset();
+      this.yolo = false;
+      this.awaitingApprovalText = null;
+      this.approvalResolver.abortAll('session reset');
+      this.permissionResolver.abortAll('session reset');
+      await ctx.reply(`✓ ${notice ?? 'new session — conversation history cleared'}`);
     }
   }
 

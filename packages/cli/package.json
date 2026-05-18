@@ -29,6 +29,8 @@
     "@moxxy/plugin-browser": "workspace:*",
     "@moxxy/plugin-channel-http": "workspace:*",
     "@moxxy/plugin-cli": "workspace:*",
+    "@moxxy/plugin-commands": "workspace:*",
+    "@moxxy/plugin-computer-control": "workspace:*",
     "@moxxy/plugin-embeddings-openai": "workspace:*",
     "@moxxy/plugin-embeddings-transformers": "workspace:*",
     "@moxxy/plugin-mcp": "workspace:*",

@@ -26,7 +26,8 @@ import { BootScreen, type BootEvent, type BootEventId } from './components/BootS
 import { SkillsPanel } from './components/SkillsPanel.js';
 import { ToolsPanel } from './components/ToolsPanel.js';
 import { AgentsPanel } from './components/AgentsPanel.js';
-import { BUILTIN_SLASH_COMMANDS } from './components/SlashCommands.js';
+import { BUILTIN_SLASH_COMMANDS, type SlashCommand } from './components/SlashCommands.js';
+import type { CommandDef } from '@moxxy/sdk';
 import { ListPicker, type ListPickerOption } from './components/ListPicker.js';
 import { estimateContextTokens } from './context-estimate.js';
 import { savePreferences } from '@moxxy/core';
@@ -462,6 +463,23 @@ const SessionView: React.FC<SessionViewProps> = ({
   const skillCount = session.skills.list().length;
   const pluginCount = session.pluginHost.list().length;
 
+  // Merge the TUI's channel-local slash commands (overlay pickers,
+  // raw-state toggles) with the shared registry. Registry commands
+  // (`/info`, `/clear`, `/new`, `/exit`, `/help`, anything a plugin
+  // contributes) get the same autocomplete + dispatch treatment.
+  const slashSuggestions: ReadonlyArray<SlashCommand> = React.useMemo(() => {
+    const fromRegistry: SlashCommand[] = session.commands
+      .listForChannel('tui')
+      .map((c: CommandDef) => ({
+        name: c.name,
+        description: c.description,
+        ...(c.aliases ? { aliases: c.aliases } : {}),
+      }));
+    const seen = new Set(fromRegistry.map((c) => c.name));
+    const tuiLocal = BUILTIN_SLASH_COMMANDS.filter((c) => !seen.has(c.name));
+    return [...fromRegistry, ...tuiLocal].sort((a, b) => a.name.localeCompare(b.name));
+  }, [session]);
+
   const handlePickerSelect = (id: string): void => {
     if (!picker) return;
     const currentPicker = picker;
@@ -609,49 +627,80 @@ const SessionView: React.FC<SessionViewProps> = ({
     }
   };
 
-  const runSlash = (cmd: string): void => {
-    const [head] = cmd.split(/\s+/);
-    switch (head) {
-      case '/exit':
-      case '/quit':
-      case '/q':
-        exit();
-        return;
-      case '/clear':
-        setEvents([]);
-        setStreamingDelta('');
-        streamingBufferRef.current = '';
-        setSystemNotice('chat scrollback cleared (events still in the log)');
-        return;
-      case '/new': {
-        // Hard reset: abort any in-flight turn, wipe the underlying
-        // event log so the next prompt starts with empty conversation
-        // context, and drop every UI overlay. Active provider/model/
-        // loop are preserved — those are user choices, not session
-        // state. YOLO is reset to its safe default (off) because it's
-        // a per-session safety toggle; conversation memory ending
-        // shouldn't carry an auto-approve flag forward implicitly.
-        const ctrl = turnControllerRef.current;
-        if (ctrl && !ctrl.signal.aborted) ctrl.abort('user reset');
-        session.log.clear();
-        setEvents([]);
-        setStreamingDelta('');
-        streamingBufferRef.current = '';
-        setOverlay(null);
-        // Drain queued permission requests with deny so /new doesn't
-        // leave subagents hanging on prompts that no longer apply.
-        for (const p of pendingPermissions) {
-          p.resolve({ mode: 'deny', reason: '/new — session reset' });
-        }
-        setPendingPermissions([]);
-        setPendingApproval(null);
-        setBusy(false);
-        setYolo(false);
-        queueRef.current = [];
-        setQueueCount(0);
-        setSystemNotice('new session — conversation history cleared');
-        return;
+  // Channel-side handler for `session-action` outputs returned by
+  // commands registered in `session.commands`. The actual TUI state
+  // mutations (clearing scrollback, aborting turns, exiting Ink) live
+  // here because the registry handlers are channel-agnostic.
+  const performSessionAction = (action: 'new' | 'clear' | 'exit', notice?: string): void => {
+    if (action === 'exit') {
+      exit();
+      return;
+    }
+    if (action === 'clear') {
+      setEvents([]);
+      setStreamingDelta('');
+      streamingBufferRef.current = '';
+      if (notice) setSystemNotice(notice);
+      return;
+    }
+    if (action === 'new') {
+      const ctrl = turnControllerRef.current;
+      if (ctrl && !ctrl.signal.aborted) ctrl.abort('user reset');
+      session.log.clear();
+      setEvents([]);
+      setStreamingDelta('');
+      streamingBufferRef.current = '';
+      setOverlay(null);
+      for (const p of pendingPermissions) {
+        p.resolve({ mode: 'deny', reason: '/new — session reset' });
       }
+      setPendingPermissions([]);
+      setPendingApproval(null);
+      setBusy(false);
+      setYolo(false);
+      queueRef.current = [];
+      setQueueCount(0);
+      if (notice) setSystemNotice(notice);
+    }
+  };
+
+  const runSlash = (cmd: string): void => {
+    const [head, ...rest] = cmd.split(/\s+/);
+    const name = head!.slice(1); // drop leading "/"
+    const args = rest.join(' ');
+
+    // First: route through the channel-agnostic command registry.
+    // Plugins (/info, /clear, /new, /exit, /help, ...) and any
+    // user-defined commands live here.
+    const registered = session.commands.get(name);
+    if (registered) {
+      void (async () => {
+        try {
+          const result = await registered.handler({
+            channel: 'tui',
+            sessionId: session.id,
+            args,
+            session,
+          });
+          if (result.kind === 'text') {
+            setSystemNotice(result.text);
+          } else if (result.kind === 'session-action') {
+            performSessionAction(result.action, result.notice);
+          } else if (result.kind === 'error') {
+            setSystemNotice(`error: ${result.message}`);
+          }
+        } catch (err) {
+          setSystemNotice(
+            `command /${name} failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      })();
+      return;
+    }
+
+    // Channel-local commands the registry can't host because their
+    // handlers mutate React state or open Ink overlays.
+    switch (head) {
       case '/queue': {
         if (queueRef.current.length === 0) {
           setSystemNotice('no messages queued');
@@ -781,29 +830,6 @@ const SessionView: React.FC<SessionViewProps> = ({
           );
           return next;
         });
-        return;
-      case '/info': {
-        const mcpLine =
-          mcpStatus.enabled > 0
-            ? `mcp:       ${mcpStatus.connected}/${mcpStatus.enabled} connected`
-            : 'mcp:       none configured';
-        const lines = [
-          `provider:  ${providerName}`,
-          `model:     ${activeModel}`,
-          `loop:      ${loopName}`,
-          `plugins:   ${pluginCount}`,
-          `skills:    ${skillCount}`,
-          `tools:     ${toolCount}`,
-          mcpLine,
-          version ? `version:   v${version}` : '',
-        ].filter(Boolean);
-        setSystemNotice(lines.join('\n'));
-        return;
-      }
-      case '/help':
-        setSystemNotice(
-          BUILTIN_SLASH_COMMANDS.map((c) => `/${c.name}  — ${c.description}`).join('\n'),
-        );
         return;
       default:
         setSystemNotice(`unknown command: ${cmd}   (try /help)`);
@@ -1035,6 +1061,7 @@ const SessionView: React.FC<SessionViewProps> = ({
           onSubmit={handleSubmit}
           disabled={false}
           yolo={yolo}
+          slashCommands={slashSuggestions}
           placeholder={
             busy
               ? 'type to queue a message — sent after the current turn'

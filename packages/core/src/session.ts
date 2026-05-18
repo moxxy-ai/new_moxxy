@@ -10,6 +10,7 @@ import { ChannelRegistryImpl } from './registries/channels.js';
 import { SkillRegistryImpl } from './registries/skills.js';
 import { ToolRegistryImpl, type ToolRegistry } from './registries/tools.js';
 import { AgentRegistry } from './registries/agents.js';
+import { CommandRegistry } from './registries/commands.js';
 import { PermissionEngine } from './permissions/engine.js';
 import { autoAllowResolver } from './permissions/resolvers.js';
 import type {
@@ -55,6 +56,7 @@ export class Session {
   readonly channels: ChannelRegistryImpl;
   readonly skills: SkillRegistryImpl;
   readonly agents: AgentRegistry;
+  readonly commands: CommandRegistry;
   readonly permissions: PermissionEngine;
   /** Current PermissionResolver. Update via `setPermissionResolver(r)`. */
   resolver: PermissionResolver;
@@ -82,6 +84,7 @@ export class Session {
     this.channels = new ChannelRegistryImpl();
     this.skills = new SkillRegistryImpl();
     this.agents = new AgentRegistry();
+    this.commands = new CommandRegistry();
     this.permissions = opts.permissionEngine ?? new PermissionEngine();
     // Always wrap the user-supplied resolver with the persistent
     // policy engine, so saved `allow_always` / `deny` rules from
@@ -106,6 +109,7 @@ export class Session {
       compactors: this.compactors,
       channels: this.channels,
       agents: this.agents,
+      commands: this.commands,
       dispatcher: this.dispatcher,
       loader: opts.pluginLoader,
     });

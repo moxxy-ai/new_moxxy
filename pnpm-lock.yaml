@@ -207,6 +207,12 @@ importers:
       '@moxxy/plugin-cli':
         specifier: workspace:*
         version: link:../plugin-cli
+      '@moxxy/plugin-commands':
+        specifier: workspace:*
+        version: link:../plugin-commands
+      '@moxxy/plugin-computer-control':
+        specifier: workspace:*
+        version: link:../plugin-computer-control
       '@moxxy/plugin-embeddings-openai':
         specifier: workspace:*
         version: link:../plugin-embeddings-openai
@@ -556,6 +562,53 @@ importers:
       yaml:
         specifier: ^2.6.0
         version: 2.9.0
+
+  packages/plugin-commands:
+    dependencies:
+      '@moxxy/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+    devDependencies:
+      '@moxxy/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/tsconfig
+      '@moxxy/vitest-preset':
+        specifier: workspace:*
+        version: link:../../tooling/vitest-preset
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.19.18
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.18)
+
+  packages/plugin-computer-control:
+    dependencies:
+      '@moxxy/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+      zod:
+        specifier: ^3.24.0
+        version: 3.25.76
+    devDependencies:
+      '@moxxy/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/tsconfig
+      '@moxxy/vitest-preset':
+        specifier: workspace:*
+        version: link:../../tooling/vitest-preset
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.19.18
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.18)
 
   packages/plugin-embeddings-openai:
     dependencies:

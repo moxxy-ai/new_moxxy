@@ -1,12 +1,13 @@
 import type { AgentDef } from './agent.js';
 import type { ChannelDef } from './channel.js';
+import type { CommandDef } from './command.js';
 import type { CompactorDef } from './compactor.js';
 import type { LifecycleHooks } from './hooks.js';
 import type { LoopStrategyDef } from './loop.js';
 import type { ProviderDef } from './provider.js';
 import type { ToolDef } from './tool.js';
 
-export type PluginKind = 'tools' | 'provider' | 'loop' | 'compactor' | 'mcp' | 'cli' | 'channel' | 'hooks' | 'agent';
+export type PluginKind = 'tools' | 'provider' | 'loop' | 'compactor' | 'mcp' | 'cli' | 'channel' | 'hooks' | 'agent' | 'command';
 
 export interface PluginSpec {
   readonly name: string;
@@ -25,6 +26,15 @@ export interface PluginSpec {
    * the system degrades to the normal single-loop flow.
    */
   readonly agents?: ReadonlyArray<AgentDef>;
+  /**
+   * Slash commands contributed to every channel — the TUI's slash
+   * menu, the Telegram bot's command list, and any future channel
+   * that consumes `session.commands`. Use this for actions that make
+   * sense regardless of UI (`/info`, `/clear`, custom domain commands
+   * like `/deploy`); leave channel-specific UI commands (overlay
+   * pickers, raw-mode toggles) inside the channel itself.
+   */
+  readonly commands?: ReadonlyArray<CommandDef>;
   readonly hooks?: LifecycleHooks;
   readonly skillsDir?: string;
 }

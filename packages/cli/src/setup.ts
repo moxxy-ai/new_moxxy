@@ -57,6 +57,8 @@ import { httpChannelPlugin } from '@moxxy/plugin-channel-http';
 import { browserPlugin } from '@moxxy/plugin-browser';
 import { buildSubagentsPlugin } from '@moxxy/plugin-subagents';
 import { buildPluginsAdminPlugin } from '@moxxy/plugin-plugins-admin';
+import { commandsPlugin } from '@moxxy/plugin-commands';
+import { computerControlPlugin } from '@moxxy/plugin-computer-control';
 import { resolveProviderCredentials } from './provider-credentials.js';
 
 export interface SetupOptions {
@@ -230,6 +232,15 @@ export async function setupSessionWithConfig(opts: SetupOptions): Promise<SetupR
     { name: '@moxxy/plugin-channel-http', plugin: httpChannelPlugin },
     { name: '@moxxy/plugin-telegram', plugin: buildTelegramPlugin({ vault }) },
     { name: '@moxxy/plugin-browser', plugin: browserPlugin },
+    // macOS-only computer control: screenshot, click, type, key,
+    // open, clipboard, applescript. Plugin always registers (so the
+    // model's tool list is stable across hosts); handlers throw a
+    // clear "macOS only" error on Linux/Windows.
+    { name: '@moxxy/plugin-computer-control', plugin: computerControlPlugin },
+    // Universal slash commands (/info, /clear, /new, /exit, /help)
+    // shared across every channel via session.commands. Disable to
+    // hide them everywhere — channel-local commands keep working.
+    { name: '@moxxy/plugin-commands', plugin: commandsPlugin },
     // Subagents are a swappable block: this plugin owns the
     // dispatch_agent tool and the auto-detection skill. Drop it
     // (`config.plugins['@moxxy/plugin-subagents'].enabled = false`) and

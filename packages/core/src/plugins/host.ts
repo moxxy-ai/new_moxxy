@@ -1,6 +1,7 @@
 import type {
   AgentDef,
   ChannelDef,
+  CommandDef,
   CompactorDef,
   LoopStrategyDef,
   Plugin,
@@ -11,6 +12,7 @@ import type {
 } from '@moxxy/sdk';
 import type { Logger } from '../logger.js';
 import type { AgentRegistry } from '../registries/agents.js';
+import type { CommandRegistry } from '../registries/commands.js';
 import type { ChannelRegistryImpl } from '../registries/channels.js';
 import type { CompactorRegistry } from '../registries/compactors.js';
 import type { LoopRegistry } from '../registries/loops.js';
@@ -28,6 +30,7 @@ export interface PluginHostOptions {
   readonly compactors: CompactorRegistry;
   readonly channels: ChannelRegistryImpl;
   readonly agents: AgentRegistry;
+  readonly commands: CommandRegistry;
   readonly dispatcher: HookDispatcherImpl;
   readonly loader?: PluginLoader;
 }
@@ -45,6 +48,7 @@ interface LoadedRecord {
   readonly compactorNames: ReadonlyArray<string>;
   readonly channelNames: ReadonlyArray<string>;
   readonly agentNames: ReadonlyArray<string>;
+  readonly commandNames: ReadonlyArray<string>;
 }
 
 export class PluginHost implements PluginHostHandle {
@@ -110,6 +114,7 @@ export class PluginHost implements PluginHostHandle {
     for (const compName of record.compactorNames) this.opts.compactors.unregister(compName);
     for (const channelName of record.channelNames) this.opts.channels.unregister(channelName);
     for (const agentName of record.agentNames) this.opts.agents.unregister(agentName);
+    for (const cmdName of record.commandNames) this.opts.commands.unregister(cmdName);
     this.loaded.delete(name);
     this.refreshDispatcher();
   }
@@ -134,6 +139,7 @@ export class PluginHost implements PluginHostHandle {
     const compactorNames = (plugin.compactors ?? []).map((c: CompactorDef) => c.name);
     const channelNames = (plugin.channels ?? []).map((c: ChannelDef) => c.name);
     const agentNames = (plugin.agents ?? []).map((a: AgentDef) => a.name);
+    const commandNames = (plugin.commands ?? []).map((c: CommandDef) => c.name);
 
     for (const tool of plugin.tools ?? []) this.opts.tools.register(tool);
     for (const provider of plugin.providers ?? []) this.opts.providers.register(provider);
@@ -141,6 +147,7 @@ export class PluginHost implements PluginHostHandle {
     for (const compactor of plugin.compactors ?? []) this.opts.compactors.register(compactor);
     for (const channel of plugin.channels ?? []) this.opts.channels.register(channel);
     for (const agent of plugin.agents ?? []) this.opts.agents.register(agent);
+    for (const cmd of plugin.commands ?? []) this.opts.commands.register(cmd);
 
     return {
       plugin,
@@ -151,6 +158,7 @@ export class PluginHost implements PluginHostHandle {
       compactorNames,
       channelNames,
       agentNames,
+      commandNames,
     };
   }
 

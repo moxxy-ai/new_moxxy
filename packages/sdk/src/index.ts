@@ -89,6 +89,13 @@ export type { Skill, SkillDef, SkillFrontmatter, SkillScope, SkillSchedule } fro
 export type { AgentDef } from './agent.js';
 
 export type {
+  CommandDef,
+  CommandContext,
+  CommandOutput,
+  CommandHandlerResult,
+} from './command.js';
+
+export type {
   ToolRegistry,
   SkillRegistry,
   PluginHostHandle,

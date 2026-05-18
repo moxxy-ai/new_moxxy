@@ -40,6 +40,7 @@ export { LoopRegistry } from './registries/loops.js';
 export { CompactorRegistry } from './registries/compactors.js';
 export { ChannelRegistryImpl } from './registries/channels.js';
 export { AgentRegistry } from './registries/agents.js';
+export { CommandRegistry } from './registries/commands.js';
 export {
   SessionPersistence,
   defaultSessionsDir,
