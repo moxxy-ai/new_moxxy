@@ -219,6 +219,16 @@ function pairToolEvents(events: ReadonlyArray<MoxxyEvent>): Block[] {
     if (e.type === 'tool_call_approved') {
       continue; // outcome already conveys this
     }
+    if (e.type === 'assistant_message') {
+      // Assistant messages always render at the chat's left margin,
+      // even when a skill scope is open above them. The scope groups
+      // skill tool work; the assistant's commentary surrounding that
+      // work belongs at root so its bullet aligns with the rest of the
+      // conversation — and so post-stream rendering matches the
+      // streaming preview, which already lives at root.
+      root.push({ kind: 'event', id: e.id, event: e });
+      continue;
+    }
     pushBlock({ kind: 'event', id: e.id, event: e });
   }
   return root;
@@ -241,20 +251,17 @@ const SkillScopeView: React.FC<{ scope: SkillScopeBlock; expandClosedSkills: boo
 }) => {
   const childToolCount = countToolCalls(scope.children);
   const isExpanded = !scope.closed || expandClosedSkills;
+  const callLabel = `skill · ${childToolCount} tool call${childToolCount === 1 ? '' : 's'}`;
   return (
     <Box flexDirection="column" marginTop={1}>
       <Box>
-        <Text color="magenta" bold>
-          {isExpanded ? '▾ ' : '▸ '}
-        </Text>
-        <Text color="magenta" bold>
-          skill
-        </Text>
-        <Text dimColor>:</Text>
-        <Text bold>{` ${scope.skillEvent.name}`}</Text>
-        <Text dimColor>{`  ·  ${childToolCount} tool call${childToolCount === 1 ? '' : 's'}`}</Text>
+        <Text color="magenta">● </Text>
+        <Text bold>{scope.skillEvent.name}</Text>
+        <Text>(</Text>
+        <Text dimColor>{callLabel}</Text>
+        <Text>)</Text>
         {scope.closed && !expandClosedSkills ? (
-          <Text dimColor italic>{'  (collapsed)'}</Text>
+          <Text dimColor italic>{'  collapsed'}</Text>
         ) : null}
       </Box>
       {isExpanded ? (
