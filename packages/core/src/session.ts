@@ -9,9 +9,15 @@ import { CompactorRegistry } from './registries/compactors.js';
 import { ChannelRegistryImpl } from './registries/channels.js';
 import { SkillRegistryImpl } from './registries/skills.js';
 import { ToolRegistryImpl, type ToolRegistry } from './registries/tools.js';
+import { AgentRegistry } from './registries/agents.js';
 import { PermissionEngine } from './permissions/engine.js';
 import { autoAllowResolver } from './permissions/resolvers.js';
-import type { ApprovalResolver, PermissionResolver } from '@moxxy/sdk';
+import type {
+  ApprovalResolver,
+  PendingToolCall,
+  PermissionContext,
+  PermissionResolver,
+} from '@moxxy/sdk';
 import { createLogger, silentLogger, type Logger } from './logger.js';
 
 export interface SessionOptions {
@@ -28,6 +34,13 @@ export interface SessionOptions {
    * registered via `registerStatic()` are wired up.
    */
   readonly pluginLoader?: PluginLoader;
+  /**
+   * Pre-seeded event log. Used by `moxxy resume` to restore the
+   * conversation from a persisted JSONL. Subscribers don't re-fire for
+   * seeded events (the constructor pushes them directly), so plugin
+   * hooks won't run for historical entries.
+   */
+  readonly log?: EventLog;
 }
 
 export class Session {
@@ -41,6 +54,7 @@ export class Session {
   readonly compactors: CompactorRegistry;
   readonly channels: ChannelRegistryImpl;
   readonly skills: SkillRegistryImpl;
+  readonly agents: AgentRegistry;
   readonly permissions: PermissionEngine;
   /** Current PermissionResolver. Update via `setPermissionResolver(r)`. */
   resolver: PermissionResolver;
@@ -60,15 +74,25 @@ export class Session {
     this.id = opts.sessionId ?? newSessionId();
     this.cwd = opts.cwd;
     this.logger = opts.logger ?? (opts.silent ? silentLogger : createLogger());
-    this.log = new EventLog();
+    this.log = opts.log ?? new EventLog();
     this.tools = new ToolRegistryImpl({ logger: this.logger, cwd: this.cwd });
     this.providers = new ProviderRegistry();
     this.loops = new LoopRegistry();
     this.compactors = new CompactorRegistry();
     this.channels = new ChannelRegistryImpl();
     this.skills = new SkillRegistryImpl();
+    this.agents = new AgentRegistry();
     this.permissions = opts.permissionEngine ?? new PermissionEngine();
-    this.resolver = opts.permissionResolver ?? autoAllowResolver;
+    // Always wrap the user-supplied resolver with the persistent
+    // policy engine, so saved `allow_always` / `deny` rules from
+    // ~/.moxxy/permissions.json short-circuit the resolver's prompt
+    // path. Without this wrap the engine is dead weight — the
+    // permissions JSON updates on every "allow always" click but no
+    // future turn ever consults it.
+    this.resolver = wrapWithPolicy(
+      opts.permissionResolver ?? autoAllowResolver,
+      this.permissions,
+    );
     this.dispatcher = new HookDispatcherImpl({
       logger: this.logger,
       hookTimeoutMs: opts.hookTimeoutMs,
@@ -81,6 +105,7 @@ export class Session {
       loops: this.loops,
       compactors: this.compactors,
       channels: this.channels,
+      agents: this.agents,
       dispatcher: this.dispatcher,
       loader: opts.pluginLoader,
     });
@@ -107,7 +132,9 @@ export class Session {
    * from CLI command code.
    */
   setPermissionResolver(resolver: PermissionResolver): void {
-    this.resolver = resolver;
+    // Re-wrap so policy rules continue to short-circuit prompts when a
+    // channel installs its own resolver mid-session.
+    this.resolver = wrapWithPolicy(resolver, this.permissions);
   }
 
   /** Install/replace the generic approval resolver. Pass null to clear. */
@@ -156,4 +183,37 @@ export class Session {
     // For tests: allows attaching a one-off hook bundle through a synthetic plugin if needed.
     // Implementation-detail helper, intentionally minimal.
   }
+}
+
+/**
+ * Wrap a `PermissionResolver` so the persistent `PermissionEngine` runs
+ * first. If the engine has a matching allow/deny rule from
+ * `~/.moxxy/permissions.json`, that decision short-circuits the
+ * resolver's prompt path. Otherwise the resolver runs as usual.
+ *
+ * The wrapper preserves the original resolver's identity for
+ * `instanceof`-style checks (e.g. `abortAll` on the deferred resolver)
+ * by re-exposing every property via Proxy — wait, simpler: we proxy
+ * just `check`. Callers that need the underlying resolver's methods
+ * still reach them via the prototype chain we copy in.
+ */
+function wrapWithPolicy(
+  inner: PermissionResolver,
+  engine: PermissionEngine,
+): PermissionResolver {
+  // Use a Proxy so any extra methods on the underlying resolver
+  // (`abortAll`, channel-specific helpers) remain accessible — only
+  // `check` is intercepted.
+  return new Proxy(inner, {
+    get(target, prop, receiver) {
+      if (prop === 'check') {
+        return async (call: PendingToolCall, ctx: PermissionContext) => {
+          const policy = engine.check(call);
+          if (policy) return policy;
+          return target.check(call, ctx);
+        };
+      }
+      return Reflect.get(target, prop, receiver);
+    },
+  });
 }

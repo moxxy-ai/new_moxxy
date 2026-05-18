@@ -86,6 +86,8 @@ export type { TokenBudget, CompactContext, CompactorDef } from './compactor.js';
 
 export type { Skill, SkillDef, SkillFrontmatter, SkillScope, SkillSchedule } from './skill.js';
 
+export type { AgentDef } from './agent.js';
+
 export type {
   ToolRegistry,
   SkillRegistry,

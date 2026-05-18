@@ -219,6 +219,9 @@ importers:
       '@moxxy/plugin-memory':
         specifier: workspace:*
         version: link:../plugin-memory
+      '@moxxy/plugin-plugins-admin':
+        specifier: workspace:*
+        version: link:../plugin-plugins-admin
       '@moxxy/plugin-provider-anthropic':
         specifier: workspace:*
         version: link:../plugin-provider-anthropic
@@ -231,6 +234,9 @@ importers:
       '@moxxy/plugin-scheduler':
         specifier: workspace:*
         version: link:../plugin-scheduler
+      '@moxxy/plugin-subagents':
+        specifier: workspace:*
+        version: link:../plugin-subagents
       '@moxxy/plugin-telegram':
         specifier: workspace:*
         version: link:../plugin-telegram
@@ -654,6 +660,31 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.19.18)
 
+  packages/plugin-plugins-admin:
+    dependencies:
+      '@moxxy/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+      zod:
+        specifier: ^3.24.0
+        version: 3.25.76
+    devDependencies:
+      '@moxxy/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/tsconfig
+      '@moxxy/vitest-preset':
+        specifier: workspace:*
+        version: link:../../tooling/vitest-preset
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.19.18
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.18)
+
   packages/plugin-provider-anthropic:
     dependencies:
       '@anthropic-ai/sdk':
@@ -756,6 +787,40 @@ importers:
         specifier: ^3.24.0
         version: 3.25.76
     devDependencies:
+      '@moxxy/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/tsconfig
+      '@moxxy/vitest-preset':
+        specifier: workspace:*
+        version: link:../../tooling/vitest-preset
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.19.18
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.18)
+
+  packages/plugin-subagents:
+    dependencies:
+      '@moxxy/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+      zod:
+        specifier: ^3.24.0
+        version: 3.25.76
+    devDependencies:
+      '@moxxy/core':
+        specifier: workspace:*
+        version: link:../core
+      '@moxxy/loop-tool-use':
+        specifier: workspace:*
+        version: link:../loop-tool-use
+      '@moxxy/testing':
+        specifier: workspace:*
+        version: link:../testing
       '@moxxy/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig

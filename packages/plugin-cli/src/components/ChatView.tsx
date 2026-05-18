@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Box, Text } from 'ink';
+import React, { useEffect, useRef, useState } from 'react';
+import { Box, Static, Text } from 'ink';
 import type {
   MoxxyEvent,
   SkillInvokedEvent,
@@ -38,17 +38,76 @@ export const ChatView: React.FC<ChatViewProps> = ({
   expandClosedSkills,
 }) => {
   const blocks = pairToolEvents(events);
+  // The longest leading prefix of blocks whose contents will never
+  // change again gets handed to <Static>. Ink renders each Static item
+  // ONCE, appends it to the terminal scrollback, then skips it on every
+  // subsequent frame — so the "live" area below stays small. That
+  // matters because Ink's renderer takes a `clearTerminal` shortcut
+  // whenever `outputHeight >= terminal rows`, and clearing+repainting
+  // the whole screen at spinner/streaming-chunk rate is exactly the
+  // multi-times-per-second "flashing" the user sees during tool calls.
+  //
+  // settledRef is append-only on purpose: Static caches by index, so
+  // any previously-handed item is frozen. We only push blocks once
+  // they're truly settled (tool call has an outcome, skill scope is
+  // closed with all children settled, subagent has completed, etc.).
+  const settledRef = useRef<Block[]>([]);
+  const clearGenerationRef = useRef(0);
+  // /clear and /new drop events back to []. settledRef still holds old
+  // captures — detect the shrink, drop them, and bump a key so the
+  // Static node fully remounts (its internal `index` resets).
+  if (blocks.length < settledRef.current.length) {
+    settledRef.current = [];
+    clearGenerationRef.current += 1;
+  }
+  let settledCount = 0;
+  for (const b of blocks) {
+    if (isSettled(b)) settledCount += 1;
+    else break;
+  }
+  if (settledCount > settledRef.current.length) {
+    const next = settledRef.current.slice();
+    for (let i = settledRef.current.length; i < settledCount; i += 1) {
+      next.push(blocks[i]!);
+    }
+    settledRef.current = next;
+  }
+  const liveBlocks = blocks.slice(settledRef.current.length);
   return (
-    <Box flexDirection="column">
-      {blocks.map((b) => (
-        <BlockLine key={b.id} block={b} expandClosedSkills={!!expandClosedSkills} />
-      ))}
-      {streamingDelta && streamingDelta.trim() ? (
-        <AssistantBlock content={streamingDelta} />
-      ) : null}
-    </Box>
+    <>
+      <Static key={clearGenerationRef.current} items={settledRef.current}>
+        {(block) => (
+          <BlockLine key={block.id} block={block} expandClosedSkills={!!expandClosedSkills} />
+        )}
+      </Static>
+      <Box flexDirection="column">
+        {liveBlocks.map((b) => (
+          <BlockLine key={b.id} block={b} expandClosedSkills={!!expandClosedSkills} />
+        ))}
+        {streamingDelta && streamingDelta.trim() ? (
+          <AssistantBlock content={streamingDelta} />
+        ) : null}
+      </Box>
+    </>
   );
 };
+
+/**
+ * A block is "settled" once nothing in its render will change anymore.
+ * Static-rendered items are frozen, so this gate must be conservative:
+ * pending tool calls (animated dot), open skill scopes (children still
+ * arriving), and running subagents (live elapsed counter) all stay in
+ * the dynamic area until they finish.
+ */
+function isSettled(block: Block): boolean {
+  if (block.kind === 'event') return true;
+  if (block.kind === 'tool-call') return block.outcome !== null;
+  if (block.kind === 'subagent') return block.completedAtMs !== null || block.error !== null;
+  if (block.kind === 'skill-scope') {
+    return block.closed && block.children.every(isSettled);
+  }
+  return true;
+}
 
 /**
  * Renders an assistant turn: a white `●` bullet on the first line and
@@ -71,7 +130,32 @@ const AssistantBlock: React.FC<{ content: string }> = ({ content }) => {
   );
 };
 
-type Block = EventBlock | ToolCallBlockData | SkillScopeBlock;
+type Block = EventBlock | ToolCallBlockData | SkillScopeBlock | SubagentBlock;
+
+/**
+ * Aggregated view of one spawned subagent. Built from the plugin_event
+ * stream the SubagentSpawner emits: `subagent_started` opens it,
+ * `subagent_tool_call` increments the tool counter, `subagent_completed`
+ * stamps the final state. Rendered as a single dim row by default
+ * (`◆ agent <label> · <state> Ns · N tool calls`) so a fleet of 5
+ * agents takes 5 rows, not 50.
+ */
+interface SubagentBlock {
+  kind: 'subagent';
+  readonly id: string;
+  readonly childSessionId: string;
+  readonly label: string;
+  readonly startedAtMs: number;
+  /** ms timestamp of completion, or null while running. */
+  completedAtMs: number | null;
+  toolCallCount: number;
+  /** stop reason for completed agents; populated on subagent_completed. */
+  stopReason: string | null;
+  /** First line of the agent's final assistant message — used as a one-line preview. */
+  finalPreview: string | null;
+  /** Error message if the agent failed (subagent_error/abort or non-OK stopReason). */
+  error: string | null;
+}
 
 interface EventBlock {
   readonly kind: 'event';
@@ -99,6 +183,8 @@ interface SkillScopeBlock {
   closed: boolean;
 }
 
+const SUBAGENT_PLUGIN_ID = '@moxxy/subagents';
+
 function pairToolEvents(events: ReadonlyArray<MoxxyEvent>): Block[] {
   const root: Block[] = [];
   // Reverse lookup: callId → the tool-call block currently waiting on a
@@ -109,6 +195,10 @@ function pairToolEvents(events: ReadonlyArray<MoxxyEvent>): Block[] {
   let pendingLoadSkillCallId: string | null = null;
   // Active skill scope (children get pushed here instead of root).
   let openScope: SkillScopeBlock | null = null;
+  // Live subagent blocks keyed by their childSessionId so subsequent
+  // tool-call / completed events from the spawner can attach to the
+  // right block.
+  const subagents = new Map<string, SubagentBlock>();
 
   const pushBlock = (block: Block): void => {
     if (openScope) {
@@ -230,6 +320,57 @@ function pairToolEvents(events: ReadonlyArray<MoxxyEvent>): Block[] {
       root.push({ kind: 'event', id: e.id, event: e });
       continue;
     }
+    // Subagent events fold into one-line scope blocks so a fleet of
+    // children doesn't drown the main chat. The SubagentSpawner emits
+    // them as plugin_event with pluginId='@moxxy/subagents'.
+    if (e.type === 'plugin_event' && e.pluginId === SUBAGENT_PLUGIN_ID) {
+      const payload = (e.payload ?? {}) as Record<string, unknown>;
+      const childSessionId = String(payload.childSessionId ?? '');
+      if (!childSessionId) continue;
+      if (e.subtype === 'subagent_started') {
+        const block: SubagentBlock = {
+          kind: 'subagent',
+          id: e.id,
+          childSessionId,
+          label: String(payload.label ?? 'agent'),
+          startedAtMs: new Date(e.ts).getTime(),
+          completedAtMs: null,
+          toolCallCount: 0,
+          stopReason: null,
+          finalPreview: null,
+          error: null,
+        };
+        subagents.set(childSessionId, block);
+        pushBlock(block);
+        continue;
+      }
+      const block = subagents.get(childSessionId);
+      if (!block) continue;
+      if (e.subtype === 'subagent_tool_call') {
+        block.toolCallCount += 1;
+        continue;
+      }
+      if (e.subtype === 'subagent_completed') {
+        block.completedAtMs = new Date(e.ts).getTime();
+        block.stopReason = String(payload.stopReason ?? '');
+        const text = typeof payload.text === 'string' ? payload.text : '';
+        if (text) block.finalPreview = oneLine(text);
+        if (typeof payload.error === 'string') block.error = payload.error;
+        continue;
+      }
+      if (e.subtype === 'subagent_error' || e.subtype === 'subagent_abort') {
+        block.completedAtMs = new Date(e.ts).getTime();
+        const reason =
+          (typeof payload.message === 'string' && payload.message) ||
+          (typeof payload.reason === 'string' && payload.reason) ||
+          'aborted';
+        block.error = reason;
+        continue;
+      }
+      // chunk / tool_result / nested-grand-child: ignore at top level;
+      // the /agents modal exposes the raw stream when needed.
+      continue;
+    }
     pushBlock({ kind: 'event', id: e.id, event: e });
   }
   return root;
@@ -243,8 +384,56 @@ const BlockLine: React.FC<{ block: Block; expandClosedSkills: boolean }> = ({
   if (block.kind === 'tool-call') {
     return <ToolCallBlock request={block.request} outcome={block.outcome} />;
   }
+  if (block.kind === 'subagent') {
+    return <SubagentScopeView scope={block} />;
+  }
   return <SkillScopeView scope={block} expandClosedSkills={expandClosedSkills} />;
 };
+
+const SubagentScopeView: React.FC<{ scope: SubagentBlock }> = ({ scope }) => {
+  const [now, setNow] = useState(() => Date.now());
+  const running = scope.completedAtMs == null && scope.error == null;
+  useEffect(() => {
+    if (!running) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [running]);
+  const endMs = scope.completedAtMs ?? now;
+  const elapsed = formatElapsed(endMs - scope.startedAtMs);
+  const toolPart = `${scope.toolCallCount} tool call${scope.toolCallCount === 1 ? '' : 's'}`;
+  const dotColor = scope.error
+    ? Colors.danger
+    : running
+      ? Colors.busy
+      : DotColors.subagent;
+  const state = scope.error ? 'failed' : running ? 'running' : 'done';
+  return (
+    <Box flexDirection="column" marginTop={1}>
+      <Box>
+        <Text color={dotColor}>{Glyphs.filled} </Text>
+        <Text bold>{`agent `}</Text>
+        <Text>{scope.label}</Text>
+        <Text dimColor>{`  ${state} ${elapsed} · ${toolPart}`}</Text>
+      </Box>
+      {scope.error ? (
+        <Box marginLeft={2}>
+          <Text dimColor>└ </Text>
+          <Text color={Colors.danger}>{truncate(scope.error, 100)}</Text>
+        </Box>
+      ) : scope.finalPreview && !running ? (
+        <Box marginLeft={2}>
+          <Text dimColor>{`└ ${truncate(scope.finalPreview, 100)}`}</Text>
+        </Box>
+      ) : null}
+    </Box>
+  );
+};
+
+function formatElapsed(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  if (s < 60) return `${s}s`;
+  return `${Math.floor(s / 60)}m ${(s % 60).toString().padStart(2, '0')}s`;
+}
 
 const SkillScopeView: React.FC<{ scope: SkillScopeBlock; expandClosedSkills: boolean }> = ({
   scope,
@@ -285,6 +474,7 @@ const DotColors = {
   mcp: 'cyan' as const,
   skill: 'magenta' as const,
   tool: 'green' as const,
+  subagent: 'blue' as const,
   other: 'gray' as const,
 };
 

@@ -640,11 +640,14 @@ const BufferLines: React.FC<{
   const empty = buffer.length === 0;
   const lines = empty ? [''] : buffer.split('\n');
   const { lineIdx, colIdx } = locateCursor(buffer, cursor);
-  // Flat siblings — no Text-in-Text nesting. The cursor is a real glyph
-  // (▌) inserted between the before/after slices, not an inverse-styled
-  // cell. The previous inverse-Text approach caused Ink to wrap the
-  // cursor cell to the next row on some renders, producing the
-  // "second character drops to line 2" layout shift.
+  // Each logical line is rendered as ONE <Text>. The cursor glyph (▌) is
+  // a nested colored child of that same Text — Ink squashes everything
+  // into a single string before measuring/wrapping, so wrap-ansi keeps
+  // the cursor in its true position when a long line spills to the next
+  // terminal row. Sibling Text nodes get their own yoga rects: a long
+  // first sibling that wrapped to two rows would still place the next
+  // sibling at (x=width, y=0) — i.e. the right edge of the FIRST row —
+  // which produced the "cursor stuck on line 1" symptom.
   return (
     <>
       {lines.map((line, i) => {
@@ -653,16 +656,15 @@ const BufferLines: React.FC<{
         const isCursorLine = i === lineIdx && !disabled;
         const before = isCursorLine ? line.slice(0, colIdx) : line;
         const after = isCursorLine ? line.slice(colIdx) : '';
+        const showPlaceholder = i === lines.length - 1 && empty && !!placeholder;
         return (
-          <Box key={i}>
+          <Text key={i}>
             <Text color={prefixColor}>{prefix}</Text>
-            {before ? <Text>{before}</Text> : null}
+            {before}
             {isCursorLine ? <Text color="green">▌</Text> : null}
-            {after ? <Text>{after}</Text> : null}
-            {i === lines.length - 1 && empty && placeholder ? (
-              <Text dimColor>{placeholder}</Text>
-            ) : null}
-          </Box>
+            {after}
+            {showPlaceholder ? <Text dimColor>{placeholder}</Text> : null}
+          </Text>
         );
       })}
     </>

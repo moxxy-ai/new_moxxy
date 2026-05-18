@@ -4,7 +4,9 @@ import { defineTool } from '@moxxy/sdk';
 import { FakeProvider, createFakeSession, textReply, toolUseReply } from '@moxxy/testing';
 import { toolUseLoopPlugin } from '@moxxy/loop-tool-use';
 import { collectTurn } from '@moxxy/core';
-import { dispatchAgentTool } from './dispatch-agent.js';
+import { buildDispatchAgentTool } from './dispatch-agent.js';
+
+const dispatchAgentTool = buildDispatchAgentTool({ getAgent: () => undefined });
 
 describe('subagents — basic spawning', () => {
   it('spawns a child that runs a tool and returns its text', async () => {

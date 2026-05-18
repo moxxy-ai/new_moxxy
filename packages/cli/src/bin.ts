@@ -13,6 +13,8 @@ import { runMcpCommand } from './commands/mcp.js';
 import { runScheduleCommand } from './commands/schedule.js';
 import { runDoctorCommand } from './commands/doctor.js';
 import { runLoginCommand } from './commands/login.js';
+import { runResumeCommand } from './commands/resume.js';
+import { runSessionsCommand } from './commands/sessions.js';
 import { setupSessionWithConfig } from './setup.js';
 import { renderLogo } from './logo.js';
 import { colors } from './colors.js';
@@ -50,6 +52,7 @@ const SECTIONS: ReadonlyArray<{ readonly title: string; readonly rows: ReadonlyA
     title: 'RUN',
     rows: [
       ['tui', 'start the Ink TUI channel'],
+      ['resume [-s <id>|<id>]', 'resume a persisted session (interactive picker if no id)'],
       ['channels', 'list registered channels + their subcommands'],
       ['channels <name>', 'start a channel by name (same as `moxxy <name>`)'],
       ['channels <name> <sub>', 'invoke a channel-defined subcommand (e.g. telegram pair)'],
@@ -58,6 +61,7 @@ const SECTIONS: ReadonlyArray<{ readonly title: string; readonly rows: ReadonlyA
   {
     title: 'MANAGE',
     rows: [
+      ['sessions list', 'list persisted sessions, most-recent first'],
       ['skills list|new <name>', 'manage skill files'],
       ['plugins list|reload', 'manage plugin host'],
       ['perms list|allow|deny|remove|clear|path', 'view/edit the permission policy'],
@@ -159,6 +163,8 @@ const COMMANDS: Record<string, CommandHandler> = {
   doctor: runDoctorCommand,
   prompt: runPromptCommand,
   tui: runTuiCommand,
+  resume: runResumeCommand,
+  sessions: runSessionsCommand,
   skills: runSkillsCommand,
   plugins: runPluginsCommand,
   channels: runChannelsCommand,

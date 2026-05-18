@@ -5,7 +5,7 @@ description: Scaffold a new @moxxy/plugin-* package and wire it for auto-discove
 
 # Plugin author — ship a new `@moxxy/plugin-*`
 
-Plugins are TypeScript packages distributed under the `@moxxy/*` scope (or your own scope — discovery only requires the `moxxy.plugin.entry` field in `package.json`). They contribute `tools`, `providers`, `loopStrategies`, `compactors`, `channels`, and `hooks` via `definePlugin` from `@moxxy/sdk`.
+Plugins are TypeScript packages distributed under the `@moxxy/*` scope (or your own scope — discovery only requires the `moxxy.plugin.entry` field in `package.json`). They contribute `tools`, `providers`, `loopStrategies`, `compactors`, `channels`, `hooks`, and `agents` (subagent kinds) via `definePlugin` from `@moxxy/sdk`.
 
 ## Scaffolding
 
@@ -103,6 +103,40 @@ export default definePlugin({
 - `onEvent` is fan-out and read-only. Throwing here is logged + swallowed.
 - Hook timeout defaults to 5s (`hookTimeoutMs` on `Session`).
 - `onShutdown` only fires when something calls `Session.close()` — channels' SIGINT handlers do this.
+
+## Agents — typed subagent kinds
+
+A plugin can contribute one or more `AgentDef` entries. Each becomes dispatchable via `dispatch_agent({ agentType: <name>, prompt, ... })` from `@moxxy/plugin-subagents`. The `dispatch_agent` tool resolves the kind at call time and uses its `systemPrompt` / `allowedTools` / `loopStrategy` / `model` as defaults; caller-supplied spec fields win.
+
+```ts
+import { definePlugin, type AgentDef } from '@moxxy/sdk';
+
+const researcher: AgentDef = {
+  name: 'researcher',
+  description: 'Web research subagent: fetches sources, returns a cited markdown summary.',
+  systemPrompt:
+    'You are a focused web researcher. Use web_fetch / browser_session to gather facts. ' +
+    'Return a 200-word markdown summary with inline source URLs. Never fabricate citations.',
+  allowedTools: ['web_fetch', 'browser_session'],
+  // loopStrategy: 'tool-use',  // default; only set if you ship a custom loop
+  // maxIterations: 30,
+};
+
+export default definePlugin({
+  name: '@moxxy/agent-researcher',
+  version: '0.0.0',
+  agents: [researcher],
+});
+```
+
+When this plugin is installed, the model can call `dispatch_agent({ agents: [{ agentType: 'researcher', prompt: '…' }] })` and the child runs with the researcher's system prompt + restricted tool set. Without `@moxxy/plugin-subagents` installed, the tool isn't registered and the kinds simply sit unused in the registry — graceful degradation by design.
+
+Rules:
+- **Name must be stable** — it's the key models pass. Use lowercase-with-dashes.
+- **Description shows up in `/agents`** — write it for the operator, one sentence.
+- **`allowedTools` is a hard restriction.** Children can't escape it even when the model asks. Use this to keep agents focused.
+- **`systemPrompt` shapes the persona.** Pair concrete output format requirements with the tool list — the child has no parent context except this prompt.
+- **Unknown agentType from the model falls back to the built-in `default`** — never breaks a turn. So shipping a new kind is purely additive.
 
 ## Plugins that need runtime services
 

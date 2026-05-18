@@ -25,6 +25,7 @@ import { FooterHints } from './components/FooterHints.js';
 import { BootScreen, type BootEvent, type BootEventId } from './components/BootScreen.js';
 import { SkillsPanel } from './components/SkillsPanel.js';
 import { ToolsPanel } from './components/ToolsPanel.js';
+import { AgentsPanel } from './components/AgentsPanel.js';
 import { BUILTIN_SLASH_COMMANDS } from './components/SlashCommands.js';
 import { ListPicker, type ListPickerOption } from './components/ListPicker.js';
 import { estimateContextTokens } from './context-estimate.js';
@@ -72,6 +73,12 @@ export interface InteractiveSessionProps {
    * at boot and passes it down (avoids putting fs reads in the TUI).
    */
   readonly version?: string;
+  /**
+   * Skip the splash screen and land directly in the chat view. Used by
+   * `moxxy resume` so the seeded event log is visible immediately
+   * without the user having to type a first prompt.
+   */
+  readonly resumed?: boolean;
 }
 
 /**
@@ -86,6 +93,7 @@ export const InteractiveSession: React.FC<InteractiveSessionProps> = ({
   registerInteractiveResolver,
   model,
   version,
+  resumed,
 }) => {
   const [session, setSession] = useState<Session | null>(eagerSession ?? null);
   const [bootEvents, setBootEvents] = useState<ReadonlyArray<BootEvent>>([]);
@@ -141,7 +149,9 @@ export const InteractiveSession: React.FC<InteractiveSessionProps> = ({
   // Splash phase: render the BootScreen until the user submits the
   // first prompt. The input unlocks the moment a session resolves; the
   // submission flips us into the chat view AND becomes the first turn.
-  if (!session || initialPrompt == null) {
+  // Resumed sessions skip the splash entirely — the user wants to land
+  // back in their conversation without re-typing anything.
+  if (!session || (initialPrompt == null && !resumed)) {
     const ready = session != null && bootError == null;
     return (
       <Box flexDirection="column">
@@ -179,7 +189,7 @@ export const InteractiveSession: React.FC<InteractiveSessionProps> = ({
     <SessionView
       session={session}
       registerInteractiveResolver={registerInteractiveResolver}
-      initialPrompt={initialPrompt}
+      {...(initialPrompt ? { initialPrompt } : {})}
       {...(model ? { model } : {})}
       {...(version ? { version } : {})}
     />
@@ -235,6 +245,7 @@ const SessionView: React.FC<SessionViewProps> = ({
   const [overlay, setOverlay] = useState<
     | { kind: 'skills' }
     | { kind: 'tools' }
+    | { kind: 'agents' }
     | null
   >(null);
   // When true, closed skill scopes render expanded (children visible).
@@ -360,9 +371,17 @@ const SessionView: React.FC<SessionViewProps> = ({
   // per-turn AbortController fires; loop strategies + provider streams
   // observe ctx.signal.aborted and bail out. PromptInput is disabled
   // during busy, so its own useInput doesn't fight us for these keys.
+  //
+  // BUT: when a modal / picker / dialog is open, Esc belongs to the
+  // modal's close handler — firing the cancel here too would close the
+  // overlay AND abort the user's in-flight turn in one keystroke. Gate
+  // the cancel on "no overlay is intercepting Esc".
+  const overlayOpen =
+    overlay != null || picker != null || pendingPermission != null || pendingApproval != null;
   useInput(
     (input, key) => {
       if (!busy) return;
+      if (overlayOpen) return; // let the modal's own Esc handler run alone
       const isCancel =
         key.escape || (key.ctrl && input === 'c');
       if (isCancel) {
@@ -373,7 +392,7 @@ const SessionView: React.FC<SessionViewProps> = ({
         }
       }
     },
-    { isActive: busy },
+    { isActive: busy && !overlayOpen },
   );
 
   // Always-on Ctrl+B handler: toggle global skill-scope expand/collapse.
@@ -646,6 +665,10 @@ const SessionView: React.FC<SessionViewProps> = ({
       case '/skills':
         setSystemNotice(null);
         setOverlay({ kind: 'skills' });
+        return;
+      case '/agents':
+        setSystemNotice(null);
+        setOverlay({ kind: 'agents' });
         return;
       case '/expand':
         setExpandSkills(true);
@@ -948,6 +971,12 @@ const SessionView: React.FC<SessionViewProps> = ({
         />
       ) : overlay?.kind === 'tools' ? (
         <ToolsPanel tools={session.tools.list()} onClose={() => setOverlay(null)} />
+      ) : overlay?.kind === 'agents' ? (
+        <AgentsPanel
+          events={events}
+          availableKinds={session.agents.list()}
+          onClose={() => setOverlay(null)}
+        />
       ) : systemNotice ? (
         <Box marginTop={1} marginBottom={1} flexDirection="column">
           {systemNotice.split('\n').map((line, i) => (

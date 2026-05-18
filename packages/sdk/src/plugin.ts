@@ -1,3 +1,4 @@
+import type { AgentDef } from './agent.js';
 import type { ChannelDef } from './channel.js';
 import type { CompactorDef } from './compactor.js';
 import type { LifecycleHooks } from './hooks.js';
@@ -5,7 +6,7 @@ import type { LoopStrategyDef } from './loop.js';
 import type { ProviderDef } from './provider.js';
 import type { ToolDef } from './tool.js';
 
-export type PluginKind = 'tools' | 'provider' | 'loop' | 'compactor' | 'mcp' | 'cli' | 'channel' | 'hooks';
+export type PluginKind = 'tools' | 'provider' | 'loop' | 'compactor' | 'mcp' | 'cli' | 'channel' | 'hooks' | 'agent';
 
 export interface PluginSpec {
   readonly name: string;
@@ -16,6 +17,14 @@ export interface PluginSpec {
   readonly loopStrategies?: ReadonlyArray<LoopStrategyDef>;
   readonly compactors?: ReadonlyArray<CompactorDef>;
   readonly channels?: ReadonlyArray<ChannelDef>;
+  /**
+   * Typed subagent kinds the plugin contributes. Each becomes
+   * dispatchable as `dispatch_agent({ agentType: <name>, ... })`.
+   * When NO plugin registers any agents (and no plugin registers the
+   * dispatch tool itself), the model has no subagent capability and
+   * the system degrades to the normal single-loop flow.
+   */
+  readonly agents?: ReadonlyArray<AgentDef>;
   readonly hooks?: LifecycleHooks;
   readonly skillsDir?: string;
 }

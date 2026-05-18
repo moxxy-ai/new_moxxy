@@ -1,0 +1,48 @@
+{
+  "name": "@moxxy/plugin-subagents",
+  "version": "0.0.0",
+  "description": "Spawn typed subagents in parallel. Plugins contribute agent kinds via the AgentDef registry; this plugin exposes the dispatch_agent tool and an auto-detection skill.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./skills/*": "./skills/*"
+  },
+  "files": [
+    "dist",
+    "src",
+    "skills"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist .turbo"
+  },
+  "moxxy": {
+    "plugin": {
+      "entry": "./dist/index.js",
+      "kind": ["tools", "agent"],
+      "skills": "./skills"
+    }
+  },
+  "dependencies": {
+    "@moxxy/sdk": "workspace:*",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@moxxy/core": "workspace:*",
+    "@moxxy/loop-tool-use": "workspace:*",
+    "@moxxy/testing": "workspace:*",
+    "@moxxy/tsconfig": "workspace:*",
+    "@moxxy/vitest-preset": "workspace:*",
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}

@@ -1,13 +1,16 @@
 import { definePlugin, type ToolDef } from '@moxxy/sdk';
 import { bashTool } from './bash.js';
-import { dispatchAgentTool } from './dispatch-agent.js';
 import { editTool } from './edit.js';
 import { globTool } from './glob.js';
 import { grepTool } from './grep.js';
 import { readTool } from './read.js';
 import { writeTool } from './write.js';
 
-export { bashTool, dispatchAgentTool, editTool, globTool, grepTool, readTool, writeTool };
+export { bashTool, editTool, globTool, grepTool, readTool, writeTool };
+
+// dispatch_agent moved to @moxxy/plugin-subagents so subagent support
+// is itself a swappable block. Without that plugin installed, the model
+// can't spawn children and the normal single-loop flow runs as usual.
 
 export const builtinTools: ReadonlyArray<ToolDef> = [
   readTool,
@@ -16,7 +19,6 @@ export const builtinTools: ReadonlyArray<ToolDef> = [
   bashTool,
   grepTool,
   globTool,
-  dispatchAgentTool,
 ];
 
 export const builtinToolsPlugin = definePlugin({

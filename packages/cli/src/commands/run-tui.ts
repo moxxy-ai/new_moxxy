@@ -17,6 +17,7 @@ import { argvToSetupOptions, stringFlag } from '../argv-helpers.js';
 import type { ParsedArgv } from '../argv.js';
 import { cliVersion } from '../version.js';
 import { runInitCommand } from './init.js';
+import type { Session } from '@moxxy/core';
 
 /**
  * Bootstrap-inverted TUI entry point. Renders Ink immediately so the
@@ -30,7 +31,15 @@ import { runInitCommand } from './init.js';
  * canonical mode, and competing with Ink's raw-mode reader would
  * deadlock.
  */
-export async function runTuiWithBootstrap(argv: ParsedArgv): Promise<number> {
+export interface RunTuiOpts {
+  /** Resume a persisted session by id. Seeds the EventLog from disk. */
+  readonly resumeSessionId?: string;
+}
+
+export async function runTuiWithBootstrap(
+  argv: ParsedArgv,
+  tuiOpts: RunTuiOpts = {},
+): Promise<number> {
   if (process.stdin.isTTY) {
     const { sources } = await loadConfig({
       cwd: process.cwd(),
@@ -43,6 +52,11 @@ export async function runTuiWithBootstrap(argv: ParsedArgv): Promise<number> {
           ...argvToSetupOptions(argv),
           tolerateNoProvider: true,
           skipKeyPrompt: true,
+          // Probe sessions exist only to test whether a provider
+          // resolves — they never run a turn. Persisting them would
+          // pollute ~/.moxxy/sessions/index.json with one empty
+          // "(empty) · 0 ev" entry per launch.
+          disableSessionPersistence: true,
         });
         if (!probe.providers.getActiveName()) needsInit = true;
       } catch {
@@ -71,6 +85,32 @@ export async function runTuiWithBootstrap(argv: ParsedArgv): Promise<number> {
   const effectiveModel = cliModel ?? prefs.model;
   const version = cliVersion();
 
+  // Capture the resolved session so the shutdown handlers below can
+  // fire `onShutdown` plugin hooks — without this the browser-sidecar
+  // (and its headless Chromium) survives moxxy exiting, eats memory,
+  // and slows down the next boot.
+  let bootedSession: Session | null = null;
+  let shuttingDown = false;
+
+  const shutdown = async (signal: NodeJS.Signals | 'normal'): Promise<void> => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    const s = bootedSession;
+    bootedSession = null;
+    if (!s) return;
+    try {
+      await s.close(signal === 'normal' ? undefined : signal);
+    } catch {
+      // Best-effort; never block process exit on cleanup errors.
+    }
+  };
+
+  const onSignal = (signal: NodeJS.Signals) => {
+    void shutdown(signal).then(() => process.exit(0));
+  };
+  process.once('SIGINT', onSignal);
+  process.once('SIGTERM', onSignal);
+
   const { waitUntilExit } = render(
     React.createElement(InteractiveSession, {
       bootstrap: async (progress: (step: InteractiveBootStep) => void) => {
@@ -78,7 +118,9 @@ export async function runTuiWithBootstrap(argv: ParsedArgv): Promise<number> {
           ...argvToSetupOptions(argv),
           resolver,
           onProgress: (step: BootStep) => progress(toInteractiveStep(step)),
+          ...(tuiOpts.resumeSessionId ? { resumeSessionId: tuiOpts.resumeSessionId } : {}),
         });
+        bootedSession = result.session;
         return result.session;
       },
       registerInteractiveResolver: (handler) => {
@@ -86,10 +128,15 @@ export async function runTuiWithBootstrap(argv: ParsedArgv): Promise<number> {
       },
       ...(effectiveModel ? { model: effectiveModel } : {}),
       ...(version ? { version } : {}),
+      ...(tuiOpts.resumeSessionId ? { resumed: true } : {}),
     }),
   );
 
-  await waitUntilExit();
+  try {
+    await waitUntilExit();
+  } finally {
+    await shutdown('normal');
+  }
   return 0;
 }
 

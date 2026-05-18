@@ -23,6 +23,9 @@ import {
   ScheduleStore,
   type SchedulePromptRunner,
 } from '@moxxy/plugin-scheduler';
+import { SessionPersistence, restoreSessionEvents } from '@moxxy/core';
+import { EventLog } from '@moxxy/core';
+import { definePlugin } from '@moxxy/sdk';
 import type { EmbeddingProvider, PermissionResolver, Plugin } from '@moxxy/sdk';
 import { buildConfigPlugin, loadConfig, type EmbeddingsConfig, type MoxxyConfig } from '@moxxy/config';
 import { buildSessionConfigApplier } from './config-applier.js';
@@ -52,6 +55,8 @@ import { buildMcpAdminPluginWithApi, type McpAdminApi } from '@moxxy/plugin-mcp'
 import { cliPlugin } from '@moxxy/plugin-cli';
 import { httpChannelPlugin } from '@moxxy/plugin-channel-http';
 import { browserPlugin } from '@moxxy/plugin-browser';
+import { buildSubagentsPlugin } from '@moxxy/plugin-subagents';
+import { buildPluginsAdminPlugin } from '@moxxy/plugin-plugins-admin';
 import { resolveProviderCredentials } from './provider-credentials.js';
 
 export interface SetupOptions {
@@ -89,6 +94,15 @@ export interface SetupOptions {
    * deadlock against the terminal.
    */
   readonly onProgress?: (step: BootStep) => void;
+  /**
+   * Resume a previously-persisted session by id. Loads its event log
+   * from `~/.moxxy/sessions/<id>.jsonl` into the new Session, reusing
+   * the original sessionId so subsequent persistence appends continue
+   * the same file. Skip persistence entirely when this is null.
+   */
+  readonly resumeSessionId?: string;
+  /** Disable session persistence (default: persistence is on). */
+  readonly disableSessionPersistence?: boolean;
 }
 
 /**
@@ -115,6 +129,8 @@ export interface SetupResult {
   /** Scheduler store + poller, surfaced so the CLI subcommands
    *  (`moxxy schedule list|run`) can reach them without a model turn. */
   readonly scheduler: { readonly store: ScheduleStore; readonly poller: SchedulerPoller };
+  /** Session persistence handle. Null when `disableSessionPersistence` is set. */
+  readonly persistence: SessionPersistence | null;
 }
 
 export async function setupSession(opts: SetupOptions): Promise<Session> {
@@ -161,6 +177,21 @@ export async function setupSessionWithConfig(opts: SetupOptions): Promise<SetupR
     config.permissions?.policyPath ?? path.join(os.homedir(), '.moxxy', 'permissions.json');
   const permissionEngine = await PermissionEngine.load(userPolicyPath);
 
+  // Resume: when an id is given, replay its event log into the new
+  // Session. The Session constructor accepts a `sessionId` AND we
+  // mutate its internal log via the constructor's seed (handled
+  // below by replacing the log after construction).
+  let restoredEvents: ReadonlyArray<import('@moxxy/sdk').MoxxyEvent> = [];
+  if (opts.resumeSessionId) {
+    try {
+      restoredEvents = await restoreSessionEvents(opts.resumeSessionId);
+    } catch (err) {
+      throw new Error(
+        `Failed to resume session ${opts.resumeSessionId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
   const session = new Session({
     cwd: opts.cwd,
     logger,
@@ -168,6 +199,14 @@ export async function setupSessionWithConfig(opts: SetupOptions): Promise<SetupR
     permissionResolver: opts.resolver ?? denyByDefaultResolver,
     hookTimeoutMs: config.hookTimeoutMs,
     pluginLoader: createPluginLoader({ cwd: opts.cwd }),
+    ...(opts.resumeSessionId
+      ? { sessionId: opts.resumeSessionId as import('@moxxy/sdk').SessionId }
+      : {}),
+    // Seed restored events directly into the log so subscribers don't
+    // re-fire side effects for historical events. New appends from this
+    // point onward fire subscribers normally (and the persistence
+    // subscriber continues writing to the same JSONL file).
+    ...(restoredEvents.length > 0 ? { log: new EventLog(restoredEvents) } : {}),
   });
 
   // Build the builtin list first WITHOUT the config plugin so we can pass the
@@ -191,6 +230,36 @@ export async function setupSessionWithConfig(opts: SetupOptions): Promise<SetupR
     { name: '@moxxy/plugin-channel-http', plugin: httpChannelPlugin },
     { name: '@moxxy/plugin-telegram', plugin: buildTelegramPlugin({ vault }) },
     { name: '@moxxy/plugin-browser', plugin: browserPlugin },
+    // Subagents are a swappable block: this plugin owns the
+    // dispatch_agent tool and the auto-detection skill. Drop it
+    // (`config.plugins['@moxxy/plugin-subagents'].enabled = false`) and
+    // the model can't spawn children — the normal single-loop flow runs.
+    // Agent kinds (researcher, code-reviewer, ...) come from OTHER plugins
+    // via `PluginSpec.agents`; the closure here reads the live registry.
+    {
+      name: '@moxxy/plugin-subagents',
+      plugin: buildSubagentsPlugin({
+        getAgent: (name) => session.agents.get(name),
+      }),
+    },
+    // Runtime plugin installer — exposes `install_plugin` to the model.
+    // Hot-reloads via session.pluginHost.reload() so newly-npm-installed
+    // packages drop into the active registries without restart. Drop this
+    // plugin to lock the plugin set (e.g. for production deployments).
+    {
+      name: '@moxxy/plugin-plugins-admin',
+      plugin: buildPluginsAdminPlugin({
+        reload: () => session.pluginHost.reload(),
+        snapshot: () => ({
+          tools: session.tools.list().map((t) => t.name),
+          agents: session.agents.list().map((a) => a.name),
+          providers: session.providers.list().map((p) => p.name),
+          loops: session.loops.list().map((l) => l.name),
+          compactors: session.compactors.list().map((c) => c.name),
+          channels: session.channels.list().map((c) => c.name),
+        }),
+      }),
+    },
     // Admin tools (mcp_add_server, mcp_list_servers, mcp_remove_server,
     // mcp_test_server) plus the boot-time lazy attach. Passing the
     // session's live tool registry enables both hot-attach for runtime
@@ -279,11 +348,16 @@ export async function setupSessionWithConfig(opts: SetupOptions): Promise<SetupR
   // config.plugins[pkgName].enabled. Failures are logged, not fatal.
   const loader = createPluginLoader({ cwd: opts.cwd });
   const userPluginsDir = path.join(os.homedir(), '.moxxy', 'plugins');
+  // Scan BOTH the user plugin dir (scaffolded via `moxxy plugins new`,
+  // which drops dirs straight under here) AND its node_modules subtree
+  // (where `npm install --prefix ~/.moxxy/plugins ...` lands packages
+  // installed at runtime by the `install_plugin` tool).
+  const userPluginsNodeModules = path.join(userPluginsDir, 'node_modules');
   try {
     const manifests = await discoverPlugins({
       cwd: opts.cwd,
       logger,
-      extraPaths: [userPluginsDir],
+      extraPaths: [userPluginsDir, userPluginsNodeModules],
     });
     for (const manifest of manifests) {
       if (registered.has(manifest.packageName)) continue;
@@ -472,6 +546,41 @@ export async function setupSessionWithConfig(opts: SetupOptions): Promise<SetupR
   progress({ kind: 'init-hooks-done' });
   progress({ kind: 'ready' });
 
+  // Wire session persistence last — after seeded events are in place
+  // and after onInit hooks have run, so we only record the user's
+  // actual turn activity (not boot artifacts). The handle is closed
+  // when Session.close() fires; the persistence subscriber unwires
+  // itself there via the closeHook below.
+  let persistence: SessionPersistence | null = null;
+  if (!opts.disableSessionPersistence) {
+    persistence = new SessionPersistence({
+      sessionId: session.id,
+      cwd: opts.cwd,
+      providerName: session.providers.getActiveName() ?? undefined,
+      modelId: (() => {
+        try {
+          return session.providers.getActive().models[0]?.id;
+        } catch {
+          return undefined;
+        }
+      })(),
+    });
+    const detach = persistence.attach(session.log);
+    // Make sure persistence stops cleanly on Session.close so we get
+    // a final index update with the real lastActivity timestamp.
+    session.pluginHost.registerStatic(
+      definePlugin({
+        name: '@moxxy/session-persistence-handle',
+        version: '0.0.0',
+        hooks: {
+          onShutdown: async () => {
+            detach();
+          },
+        },
+      }),
+    );
+  }
+
   return {
     session,
     config,
@@ -479,6 +588,7 @@ export async function setupSessionWithConfig(opts: SetupOptions): Promise<SetupR
     vault,
     memory,
     scheduler: { store: scheduleStore, poller: schedulerPoller },
+    persistence,
   };
 }
 

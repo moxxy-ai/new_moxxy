@@ -205,7 +205,56 @@ function write(reply: Reply): void {
   process.stdout.write(JSON.stringify(reply) + '\n');
 }
 
+/**
+ * Tears down the browser context AND exits the process. Used both by
+ * the explicit `close` RPC path and the parent-loss / stdin-close
+ * paths so all cleanup goes through one routine.
+ */
+async function shutdownAndExit(code: number): Promise<void> {
+  if (handle) {
+    try {
+      await handle.context.close();
+      await handle.browser.close();
+    } catch {
+      /* ignore */
+    }
+    handle = null;
+  }
+  process.exit(code);
+}
+
+/**
+ * Parent watchdog: if the moxxy process that spawned this sidecar
+ * disappears (crash, SIGKILL, terminal hangup), there's no stdin EOF
+ * to rely on — orphan Chromium would keep running and chew CPU/memory
+ * until the user notices. Poll the parent PID every few seconds and
+ * self-terminate when it goes away.
+ *
+ * `process.kill(pid, 0)` is the POSIX trick for "does this PID
+ * exist?" — no signal is actually delivered. Throws ESRCH when the
+ * process is gone (or EPERM when it exists but we can't signal it —
+ * still alive, so don't treat as gone).
+ */
+function startParentWatchdog(): void {
+  const parentPid = process.ppid;
+  if (!parentPid || parentPid <= 1) return; // already orphaned (init), nothing to watch
+  const interval = setInterval(() => {
+    try {
+      process.kill(parentPid, 0);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === 'ESRCH') {
+        clearInterval(interval);
+        void shutdownAndExit(0);
+      }
+      // EPERM means the process exists but we can't signal it — still alive.
+    }
+  }, 2000);
+  interval.unref?.(); // never block the event loop from exiting
+}
+
 async function main(): Promise<void> {
+  startParentWatchdog();
   const rl = readline.createInterface({ input: process.stdin });
   rl.on('line', (line) => {
     if (!line.trim()) return;
@@ -232,16 +281,16 @@ async function main(): Promise<void> {
       write(reply);
     });
   });
-  rl.once('close', async () => {
-    if (handle) {
-      try {
-        await handle.context.close();
-        await handle.browser.close();
-      } catch {
-        /* ignore */
-      }
+  rl.once('close', () => {
+    void shutdownAndExit(0);
+  });
+  // Defensive: if our stdout pipe breaks (parent died mid-write), Node
+  // would otherwise throw an uncaught EPIPE on the next write. Treat
+  // it as a signal to clean up gracefully instead.
+  process.stdout.on('error', (err) => {
+    if ((err as NodeJS.ErrnoException).code === 'EPIPE') {
+      void shutdownAndExit(0);
     }
-    process.exit(0);
   });
 }
 
@@ -249,5 +298,5 @@ let queue: Promise<void> = Promise.resolve();
 
 main().catch((err) => {
   process.stderr.write(`sidecar fatal: ${errMsg(err)}\n`);
-  process.exit(1);
+  void shutdownAndExit(1);
 });

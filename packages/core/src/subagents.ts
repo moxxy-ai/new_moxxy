@@ -61,22 +61,47 @@ async function runOne(rt: SubagentRuntime, spec: SubagentSpec): Promise<Subagent
   const childSessionId = newSessionId();
   const childTurnId = newTurnId();
   const label = spec.label ?? `subagent-${String(childSessionId).slice(-6)}`;
-  const strategyName = spec.loopStrategy ?? 'tool-use';
+  const requestedStrategy = spec.loopStrategy ?? 'tool-use';
 
   // Look up the requested strategy in the parent's loop registry. The
   // registry only exposes list() / getActive(), so we scan.
-  const strategy = parentSession.loops.list().find((s) => s.name === strategyName);
+  let strategy = parentSession.loops.list().find((s) => s.name === requestedStrategy);
+  let strategyName = requestedStrategy;
+  // Fall back to the default tool-use loop if the model invented a name
+  // (e.g. "react"). Failing the child outright wastes the user's turn —
+  // any reasonable agent task can run on tool-use. We surface the
+  // fallback as a non-fatal warning event so the operator sees it.
   if (!strategy) {
-    await emitSubagentStart(parentSession, parentTurnId, label, childSessionId, spec, strategyName);
-    const errorMsg = `Subagent failed: unknown loop strategy "${strategyName}"`;
-    await emitSubagentCompleted(parentSession, parentTurnId, label, childSessionId, '', 'error', errorMsg);
-    return {
-      label,
-      childSessionId,
-      text: '',
-      stopReason: 'error' as StopReason,
-      error: { message: errorMsg },
-    };
+    const fallback = parentSession.loops.list().find((s) => s.name === 'tool-use');
+    if (fallback) {
+      strategy = fallback;
+      strategyName = 'tool-use';
+      await parentSession.log.append({
+        type: 'plugin_event',
+        sessionId: parentSession.id,
+        turnId: parentTurnId,
+        source: 'plugin',
+        pluginId: SUBAGENT_PLUGIN_ID,
+        subtype: 'subagent_warning',
+        payload: {
+          label,
+          childSessionId: String(childSessionId),
+          message: `unknown loop strategy "${requestedStrategy}" — falling back to "tool-use"`,
+        },
+      });
+    } else {
+      // No tool-use either — that's a config error, not a model mistake.
+      await emitSubagentStart(parentSession, parentTurnId, label, childSessionId, spec, requestedStrategy);
+      const errorMsg = `Subagent failed: unknown loop strategy "${requestedStrategy}" and no fallback available`;
+      await emitSubagentCompleted(parentSession, parentTurnId, label, childSessionId, '', 'error', errorMsg);
+      return {
+        label,
+        childSessionId,
+        text: '',
+        stopReason: 'error' as StopReason,
+        error: { message: errorMsg },
+      };
+    }
   }
 
   // Filter tools if the spec asks for a restricted set. Otherwise the

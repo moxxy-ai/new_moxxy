@@ -1,4 +1,5 @@
 import type {
+  AgentDef,
   ChannelDef,
   CompactorDef,
   LoopStrategyDef,
@@ -9,6 +10,7 @@ import type {
   ToolDef,
 } from '@moxxy/sdk';
 import type { Logger } from '../logger.js';
+import type { AgentRegistry } from '../registries/agents.js';
 import type { ChannelRegistryImpl } from '../registries/channels.js';
 import type { CompactorRegistry } from '../registries/compactors.js';
 import type { LoopRegistry } from '../registries/loops.js';
@@ -25,6 +27,7 @@ export interface PluginHostOptions {
   readonly loops: LoopRegistry;
   readonly compactors: CompactorRegistry;
   readonly channels: ChannelRegistryImpl;
+  readonly agents: AgentRegistry;
   readonly dispatcher: HookDispatcherImpl;
   readonly loader?: PluginLoader;
 }
@@ -41,6 +44,7 @@ interface LoadedRecord {
   readonly loopNames: ReadonlyArray<string>;
   readonly compactorNames: ReadonlyArray<string>;
   readonly channelNames: ReadonlyArray<string>;
+  readonly agentNames: ReadonlyArray<string>;
 }
 
 export class PluginHost implements PluginHostHandle {
@@ -105,6 +109,7 @@ export class PluginHost implements PluginHostHandle {
     for (const loopName of record.loopNames) this.opts.loops.unregister(loopName);
     for (const compName of record.compactorNames) this.opts.compactors.unregister(compName);
     for (const channelName of record.channelNames) this.opts.channels.unregister(channelName);
+    for (const agentName of record.agentNames) this.opts.agents.unregister(agentName);
     this.loaded.delete(name);
     this.refreshDispatcher();
   }
@@ -128,14 +133,25 @@ export class PluginHost implements PluginHostHandle {
     const loopNames = (plugin.loopStrategies ?? []).map((l: LoopStrategyDef) => l.name);
     const compactorNames = (plugin.compactors ?? []).map((c: CompactorDef) => c.name);
     const channelNames = (plugin.channels ?? []).map((c: ChannelDef) => c.name);
+    const agentNames = (plugin.agents ?? []).map((a: AgentDef) => a.name);
 
     for (const tool of plugin.tools ?? []) this.opts.tools.register(tool);
     for (const provider of plugin.providers ?? []) this.opts.providers.register(provider);
     for (const loop of plugin.loopStrategies ?? []) this.opts.loops.register(loop);
     for (const compactor of plugin.compactors ?? []) this.opts.compactors.register(compactor);
     for (const channel of plugin.channels ?? []) this.opts.channels.register(channel);
+    for (const agent of plugin.agents ?? []) this.opts.agents.register(agent);
 
-    return { plugin, manifest, toolNames, providerNames, loopNames, compactorNames, channelNames };
+    return {
+      plugin,
+      manifest,
+      toolNames,
+      providerNames,
+      loopNames,
+      compactorNames,
+      channelNames,
+      agentNames,
+    };
   }
 
   private refreshDispatcher(): void {
