@@ -5,14 +5,13 @@ import {
   definePlugin,
   defineTool,
   skillFrontmatterSchema,
-  type LLMProvider,
   type Plugin,
   type Skill,
   type SkillScope,
 } from '@moxxy/sdk';
 import { z } from 'zod';
 import { defaultProjectSkillsDir, defaultUserSkillsDir } from './loader.js';
-import { parseSkillFile } from './parse.js';
+import { draftSkill } from './synthesize-draft.js';
 import type { Session } from '../session.js';
 
 export interface SynthesizeOptions {
@@ -110,50 +109,6 @@ export async function synthesizeSkill(
   });
 
   return { skill, path: finalPath, scope };
-}
-
-interface DraftedSkill {
-  raw: string;
-  frontmatter: Record<string, unknown>;
-  body: string;
-}
-
-async function draftSkill(
-  provider: LLMProvider,
-  model: string,
-  intent: string,
-  signal: AbortSignal,
-): Promise<DraftedSkill> {
-  const system = `You are a skill-author. Output ONLY a Markdown file with YAML frontmatter. No prose outside the Markdown. Frontmatter MUST include:
-- name (kebab-case slug, <=60 chars, lowercase letters/numbers/hyphens only, starting with a letter)
-- description (1 sentence, <=120 chars)
-- triggers (array of 2-5 short phrases the user might say)
-- allowed-tools (array of tool names, e.g. ["Read", "Edit", "Bash"])
-
-The body is the instructions for future invocations. Keep it under 30 lines. Numbered steps preferred.`;
-
-  let accumulated = '';
-  for await (const event of provider.stream({
-    model,
-    system,
-    messages: [{ role: 'user', content: [{ type: 'text', text: `User intent: ${intent}` }] }],
-    maxTokens: 2000,
-    signal,
-  })) {
-    if (event.type === 'text_delta') accumulated += event.delta;
-    if (event.type === 'error') {
-      throw new Error(`synthesizeSkill: provider error: ${event.message}`);
-    }
-  }
-
-  const raw = extractMarkdownBlock(accumulated);
-  const { frontmatter, body } = parseSkillFile(raw);
-  return { raw, frontmatter: frontmatter as Record<string, unknown>, body };
-}
-
-function extractMarkdownBlock(s: string): string {
-  const fence = /```(?:markdown|md)?\n([\s\S]*?)```/.exec(s);
-  return fence ? fence[1]! : s;
 }
 
 function slugify(name: string): string {
