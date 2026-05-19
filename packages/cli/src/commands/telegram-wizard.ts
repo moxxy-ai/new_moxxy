@@ -17,7 +17,7 @@ import type { VaultStore } from '@moxxy/plugin-vault';
 import { bootSessionWithConfig } from '../argv-helpers.js';
 import type { ParsedArgv } from '../argv.js';
 import { colors } from '../colors.js';
-import { runChannelByName } from './run-channel.js';
+import { startRegisteredChannel } from './start-registered-channel.js';
 import { actionPair } from './telegram/pair.js';
 
 interface State {
@@ -95,7 +95,7 @@ export async function runTelegramWizard(argv: ParsedArgv): Promise<number> {
     if (action === 'start') {
       log.info('Starting the bot. Press Ctrl+C to stop.');
       outro(colors.dim('handing off to bot…'));
-      return runChannelByName('telegram', {
+      return startRegisteredChannel('telegram', {
         ...argv,
         flags: { ...argv.flags, __skipWizard: true },
       });
