@@ -20,6 +20,7 @@ description: The shape of moxxy — sdk, core, plugins, channels.
 @moxxy/plugin-channel-http <— HTTP channel (POST /v1/turn + audio)
 @moxxy/plugin-scheduler   <— time-driven prompts
 @moxxy/plugin-webhooks    <— external-event triggers (verified HTTP listener)
+@moxxy/plugin-security    <— pluggable capability isolation (opt-in)
 @moxxy/cli             <— the `moxxy` binary
 ```
 
