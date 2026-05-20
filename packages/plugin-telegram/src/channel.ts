@@ -28,6 +28,7 @@ import {
 } from './channel/callback-handler.js';
 import { runUserTurn } from './channel/turn-runner.js';
 import { handleTextMessage } from './channel/text-handler.js';
+import { handleVoiceMessage } from './channel/voice-handler.js';
 
 const TOKEN_KEY = 'telegram_bot_token';
 
@@ -131,6 +132,10 @@ export class TelegramChannel implements Channel<TelegramStartOpts> {
     this.bot.command('start', (ctx) => this.pairing.handleStartCommand(ctx));
     this.bot.on('callback_query:data', (ctx) => this.dispatchCallback(ctx));
     this.bot.on('message:text', (ctx) => this.handleText(ctx));
+    // Voice notes (press-and-hold) and uploaded audio files. Both go
+    // through the same transcribe-then-runUserTurn pipeline; the
+    // handler picks the right one off `ctx.message`.
+    this.bot.on(['message:voice', 'message:audio'], (ctx) => this.handleVoice(ctx, token));
     // Surface the shared registry commands in Telegram's bot-command
     // menu so users see /info, /clear, /new, /exit, /help next to the
     // Telegram-local /model, /loop, /yolo, /tools, /skills, /cancel.
@@ -179,6 +184,33 @@ export class TelegramChannel implements Channel<TelegramStartOpts> {
 
   async confirmPairingCode(rawInput: string): Promise<PairingConfirmResult> {
     return this.pairing.confirmCode(rawInput);
+  }
+
+  private handleVoice(ctx: Context, token: string): Promise<void> {
+    return handleVoiceMessage(
+      ctx,
+      {
+        session: this.session,
+        model: this.model,
+        activeModelOverride: this.activeModelOverride,
+        yolo: this.yolo,
+        busy: this.busy,
+        turnController: this.turnController,
+        awaitingApprovalText: this.awaitingApprovalText,
+        handle: this.handle,
+      },
+      {
+        pairing: this.pairing,
+        approvalResolver: this.approvalResolver,
+        permissionResolver: this.permissionResolver,
+        framePump: this.framePump,
+        token,
+        ...(this.opts.logger ? { logger: this.opts.logger } : {}),
+      },
+      {
+        runUserTurn: (c, chatId, text) => this.runUserTurn(c, chatId, text),
+      },
+    );
   }
 
   private handleText(ctx: Context): Promise<void> {

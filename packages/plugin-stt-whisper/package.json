@@ -1,0 +1,33 @@
+{
+  "name": "@moxxy/plugin-stt-whisper",
+  "version": "0.0.0",
+  "description": "OpenAI Whisper Transcriber for moxxy. Audio bytes → text + segments. Plugs into the session's TranscriberRegistry; channels with audio input (Telegram voice, HTTP multipart) consume it transparently.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf dist .turbo"
+  },
+  "moxxy": { "plugin": { "entry": "./dist/index.js", "kind": "transcriber" } },
+  "dependencies": {
+    "@moxxy/sdk": "workspace:*",
+    "openai": "^4.80.0"
+  },
+  "devDependencies": {
+    "@moxxy/tsconfig": "workspace:*",
+    "@moxxy/vitest-preset": "workspace:*",
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}
