@@ -14,6 +14,7 @@ tool allow-list and a bearer token.
 | `GET` | `/v1/health` | — | `{ "status": "ok" }` |
 | `POST` | `/v1/turn` | `{ prompt, model?, systemPrompt? }` | `{ events: MoxxyEvent[], assistant: string }` |
 | `POST` | `/v1/turn/stream` | same | SSE: one `data:` line per `MoxxyEvent`, terminating with `data: [DONE]` |
+| `POST` | `/v1/turn/audio` | raw audio bytes with `Content-Type: audio/*` | `{ transcript, events, assistant }` |
 
 The request body schema is exported as `turnRequestSchema` from
 `@moxxy/plugin-channel-http`.
@@ -62,6 +63,59 @@ Each event is one of the discriminated `MoxxyEvent` variants exported
 from `@moxxy/sdk`. For a chat UI, pull `assistant_chunk` events and append
 their `delta` field; for tool activity, watch `tool_call_requested` →
 `tool_result`.
+
+## Audio input
+
+`POST /v1/turn/audio` takes raw audio bytes in the body and the audio
+type in the `Content-Type` header. The session must have an active
+`Transcriber` (e.g. `@moxxy/plugin-stt-whisper`) — otherwise the
+endpoint returns `503 no_transcriber`. The bytes are transcribed, the
+transcript becomes the user prompt, and the rest of the run is
+identical to `/v1/turn`.
+
+Optional tuning lives in the query string so the body stays raw:
+
+```sh
+curl -X POST \
+  "http://localhost:3737/v1/turn/audio?model=claude-sonnet-4-6&language=en" \
+  -H "Authorization: Bearer $MOXXY_HTTP_TOKEN" \
+  -H "Content-Type: audio/m4a" \
+  --data-binary @voicenote.m4a
+```
+
+Response:
+
+```json
+{
+  "transcript": "summarize today's calendar",
+  "assistant": "you have three meetings: ...",
+  "events": [...]
+}
+```
+
+### iOS Shortcut recipe
+
+Build a Shortcut on iPhone (or Mac) and assign it to the Action Button
+or a Home Screen icon for one-tap voice → agent:
+
+1. **Record Audio** — record from microphone, output as M4A
+2. **Get Contents of URL** — set:
+   - Method: `POST`
+   - URL: `https://<your-tunnel-or-LAN>/v1/turn/audio`
+   - Headers:
+     - `Authorization`: `Bearer <your MOXXY_HTTP_TOKEN>`
+     - `Content-Type`: `audio/m4a`
+   - Request Body: `File` → the Recording from step 1
+3. **Get Dictionary Value** — key `assistant`
+4. **Show Result** *(or Speak Text, or send to Notes)*
+
+Bind the Shortcut to the Action Button (Settings → Action Button →
+Shortcut) and you have a push-to-talk personal assistant. Open the bind
+on Apple Watch and the same Shortcut works wrist-side.
+
+Hosting note: bind the moxxy HTTP channel to `127.0.0.1` and front it
+with Tailscale, Cloudflare Tunnel, or a reverse proxy that re-checks
+auth. Never expose the bare port to the internet.
 
 ## Run as a service
 

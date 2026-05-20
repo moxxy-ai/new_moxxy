@@ -9,7 +9,7 @@ import {
   autoAllowResolver,
   silentLogger,
 } from '@moxxy/core';
-import { defineProvider, definePlugin } from '@moxxy/sdk';
+import { defineProvider, definePlugin, defineTranscriber } from '@moxxy/sdk';
 import { FakeProvider, textReply } from '@moxxy/testing';
 import { toolUseLoopPlugin } from '@moxxy/loop-tool-use';
 import { builtinToolsPlugin } from '@moxxy/tools-builtin';
@@ -18,7 +18,7 @@ import type { ChannelHandle } from '@moxxy/sdk';
 
 const TOKEN = 'test-token-123';
 
-function buildSession(): Session {
+function buildSession(opts: { withTranscriber?: string } = {}): Session {
   const provider = new FakeProvider({
     script: [textReply('hello from the HTTP channel')],
   });
@@ -27,7 +27,7 @@ function buildSession(): Session {
     logger: silentLogger,
     permissionResolver: autoAllowResolver,
   });
-  session.pluginHost.registerStatic(
+  const plugins = [
     definePlugin({
       name: 'http-integration-shim',
       providers: [
@@ -37,9 +37,24 @@ function buildSession(): Session {
           createClient: () => provider,
         }),
       ],
+      ...(opts.withTranscriber !== undefined
+        ? {
+            transcribers: [
+              defineTranscriber({
+                name: 'fake-stt',
+                createClient: () => ({
+                  name: 'fake-stt',
+                  transcribe: async () => ({ text: opts.withTranscriber! }),
+                }),
+              }),
+            ],
+          }
+        : {}),
     }),
-  );
+  ];
+  for (const p of plugins) session.pluginHost.registerStatic(p);
   session.providers.setActive(provider.name);
+  if (opts.withTranscriber !== undefined) session.transcribers.setActive('fake-stt');
   session.pluginHost.registerStatic(builtinToolsPlugin);
   session.pluginHost.registerStatic(toolUseLoopPlugin);
   return session;
@@ -163,6 +178,70 @@ describe('HttpChannel integration', () => {
   it('GET on an unknown path returns 404', async () => {
     const res = await fetch(`${baseUrl}/nonsense`);
     expect(res.status).toBe(404);
+  });
+});
+
+describe('HttpChannel /v1/turn/audio integration', () => {
+  let audioChannel: HttpChannel;
+  let audioHandle: ChannelHandle;
+  let audioBaseUrl: string;
+
+  beforeEach(async () => {
+    audioChannel = new HttpChannel({
+      port: 0,
+      authToken: TOKEN,
+      allowedTools: ['Read', 'Glob'],
+    });
+    const port = 50000 + Math.floor(Math.random() * 10000);
+    const real = new HttpChannel({
+      port,
+      host: '127.0.0.1',
+      authToken: TOKEN,
+      allowedTools: ['Read', 'Glob'],
+    });
+    Object.assign(audioChannel, real);
+    audioHandle = await audioChannel.start({
+      session: buildSession({ withTranscriber: 'transcribed voice content' }),
+    });
+    audioBaseUrl = `http://127.0.0.1:${port}`;
+  });
+
+  afterEach(async () => {
+    await audioHandle.stop();
+  });
+
+  it('POST /v1/turn/audio transcribes the body and runs a full turn', async () => {
+    const oggBytes = new Uint8Array([0x4f, 0x67, 0x67, 0x53]); // "OggS"
+    const res = await fetch(`${audioBaseUrl}/v1/turn/audio`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'audio/ogg',
+        authorization: `Bearer ${TOKEN}`,
+      },
+      body: oggBytes,
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      transcript: string;
+      assistant: string;
+      events: Array<{ type: string }>;
+    };
+    expect(body.transcript).toBe('transcribed voice content');
+    expect(body.assistant).toContain('hello from the HTTP channel');
+    expect(body.events.some((e) => e.type === 'user_prompt')).toBe(true);
+    expect(body.events.some((e) => e.type === 'assistant_message')).toBe(true);
+  });
+
+  it('POST /v1/turn/audio rejects non-audio Content-Type with 415', async () => {
+    const res = await fetch(`${audioBaseUrl}/v1/turn/audio`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/octet-stream',
+        authorization: `Bearer ${TOKEN}`,
+      },
+      body: 'bytes',
+    });
+    expect(res.status).toBe(415);
   });
 });
 

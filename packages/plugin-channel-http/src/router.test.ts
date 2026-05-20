@@ -2,7 +2,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { IncomingMessage, ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
 import { Socket } from 'node:net';
-import { routeRequest, handleHealth, turnRequestSchema } from './router.js';
+import { Session, silentLogger } from '@moxxy/core';
+import { defineTranscriber } from '@moxxy/sdk';
+import {
+  routeRequest,
+  handleHealth,
+  handleTurnAudio,
+  turnRequestSchema,
+} from './router.js';
 
 function makeIncoming(opts: { method: string; url: string; headers?: Record<string, string>; body?: string }): IncomingMessage {
   const readable = Readable.from(opts.body ? [Buffer.from(opts.body)] : []);
@@ -65,6 +72,116 @@ describe('routeRequest', () => {
 
   it('matches POST /v1/turn/stream', () => {
     expect(routeRequest(makeIncoming({ method: 'POST', url: '/v1/turn/stream' }))).not.toBeNull();
+  });
+
+  it('matches POST /v1/turn/audio (with or without query string)', () => {
+    expect(routeRequest(makeIncoming({ method: 'POST', url: '/v1/turn/audio' }))).toBe(
+      handleTurnAudio,
+    );
+    expect(
+      routeRequest(makeIncoming({ method: 'POST', url: '/v1/turn/audio?model=sonnet' })),
+    ).toBe(handleTurnAudio);
+  });
+});
+
+describe('handleTurnAudio', () => {
+  const ctx = (session: Session) => ({ session, authToken: 'x', logger: silentLogger });
+
+  it('rejects requests without Bearer auth with 401', async () => {
+    const session = new Session({ cwd: '/tmp', silent: true });
+    const res = makeResponse();
+    await handleTurnAudio(
+      makeIncoming({ method: 'POST', url: '/v1/turn/audio', headers: { 'content-type': 'audio/ogg' } }),
+      res,
+      ctx(session),
+    );
+    expect(res._status).toBe(401);
+  });
+
+  it('returns 503 when no transcriber is active on the session', async () => {
+    const session = new Session({ cwd: '/tmp', silent: true });
+    const res = makeResponse();
+    await handleTurnAudio(
+      makeIncoming({
+        method: 'POST',
+        url: '/v1/turn/audio',
+        headers: { 'content-type': 'audio/ogg', authorization: 'Bearer x' },
+        body: 'oggbytes',
+      }),
+      res,
+      ctx(session),
+    );
+    expect(res._status).toBe(503);
+    expect(JSON.parse(res._body).error).toBe('no_transcriber');
+  });
+
+  it('rejects non-audio Content-Type with 415', async () => {
+    const session = new Session({ cwd: '/tmp', silent: true });
+    session.transcribers.register(
+      defineTranscriber({
+        name: 't',
+        createClient: () => ({ name: 't', transcribe: async () => ({ text: 'x' }) }),
+      }),
+    );
+    session.transcribers.setActive('t');
+    const res = makeResponse();
+    await handleTurnAudio(
+      makeIncoming({
+        method: 'POST',
+        url: '/v1/turn/audio',
+        headers: { 'content-type': 'application/octet-stream', authorization: 'Bearer x' },
+        body: 'bytes',
+      }),
+      res,
+      ctx(session),
+    );
+    expect(res._status).toBe(415);
+  });
+
+  it('returns 400 on empty body', async () => {
+    const session = new Session({ cwd: '/tmp', silent: true });
+    session.transcribers.register(
+      defineTranscriber({
+        name: 't',
+        createClient: () => ({ name: 't', transcribe: async () => ({ text: 'x' }) }),
+      }),
+    );
+    session.transcribers.setActive('t');
+    const res = makeResponse();
+    await handleTurnAudio(
+      makeIncoming({
+        method: 'POST',
+        url: '/v1/turn/audio',
+        headers: { 'content-type': 'audio/ogg', authorization: 'Bearer x' },
+        body: '',
+      }),
+      res,
+      ctx(session),
+    );
+    expect(res._status).toBe(400);
+  });
+
+  it('returns 422 when the transcriber yields an empty transcript', async () => {
+    const session = new Session({ cwd: '/tmp', silent: true });
+    session.transcribers.register(
+      defineTranscriber({
+        name: 't',
+        createClient: () => ({ name: 't', transcribe: async () => ({ text: '   ' }) }),
+      }),
+    );
+    session.transcribers.setActive('t');
+    const res = makeResponse();
+    await handleTurnAudio(
+      makeIncoming({
+        method: 'POST',
+        url: '/v1/turn/audio',
+        headers: { 'content-type': 'audio/ogg', authorization: 'Bearer x' },
+        body: 'oggbytes',
+      }),
+      res,
+      ctx(session),
+    );
+    expect(res._status).toBe(422);
   });
 });
 

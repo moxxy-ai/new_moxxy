@@ -21,10 +21,15 @@ export type RouteHandler = (req: IncomingMessage, res: ServerResponse, ctx: Rout
 
 /** Match HTTP request to a handler. Returns null if no route matches. */
 export function routeRequest(req: IncomingMessage): RouteHandler | null {
-  const url = req.url ?? '/';
-  if (req.method === 'GET' && url === '/v1/health') return handleHealth;
-  if (req.method === 'POST' && url === '/v1/turn') return handleTurn;
-  if (req.method === 'POST' && url === '/v1/turn/stream') return handleTurnStream;
+  const rawUrl = req.url ?? '/';
+  // Strip the query string before matching — `/v1/turn/audio?model=...`
+  // is the same route as `/v1/turn/audio`. The handler reads query
+  // params off req.url itself.
+  const pathname = rawUrl.split('?')[0] ?? rawUrl;
+  if (req.method === 'GET' && pathname === '/v1/health') return handleHealth;
+  if (req.method === 'POST' && pathname === '/v1/turn') return handleTurn;
+  if (req.method === 'POST' && pathname === '/v1/turn/stream') return handleTurnStream;
+  if (req.method === 'POST' && pathname === '/v1/turn/audio') return handleTurnAudio;
   return null;
 }
 
@@ -43,6 +48,15 @@ function checkAuth(req: IncomingMessage, expected: string | null): boolean {
 }
 
 async function readBody(req: IncomingMessage, max = 64 * 1024): Promise<string> {
+  return (await readBodyBytes(req, max)).toString('utf8');
+}
+
+/** Audio uploads need a much larger cap than JSON; 10 MB covers a few
+ *  minutes of Opus voice (Telegram caps voice notes at 50 MB, but
+ *  realistic notes are well under that). */
+const DEFAULT_AUDIO_MAX = 10 * 1024 * 1024;
+
+async function readBodyBytes(req: IncomingMessage, max: number): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let size = 0;
@@ -55,7 +69,7 @@ async function readBody(req: IncomingMessage, max = 64 * 1024): Promise<string> 
       }
       chunks.push(chunk);
     });
-    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', reject);
   });
 }
@@ -101,6 +115,101 @@ export async function handleTurn(
   const assistant =
     finalAssistant && finalAssistant.type === 'assistant_message' ? finalAssistant.content : '';
   reply(res, 200, { events, assistant });
+}
+
+/**
+ * Audio-in turn. Designed for iOS Shortcuts and curl: the client POSTs
+ * raw audio bytes with `Content-Type: audio/<format>`. Optional query
+ * params (`model`, `language`, `systemPrompt`) tune the run.
+ *
+ * The session must have an active Transcriber registered (e.g. via
+ * `@moxxy/plugin-stt-whisper`); without one the endpoint returns 503
+ * rather than transparently dropping the audio.
+ */
+export async function handleTurnAudio(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: RouterContext,
+): Promise<void> {
+  if (!checkAuth(req, ctx.authToken)) {
+    reply(res, 401, { error: 'unauthorized' });
+    return;
+  }
+
+  const transcriber = ctx.session.transcribers.tryGetActive();
+  if (!transcriber) {
+    reply(res, 503, {
+      error: 'no_transcriber',
+      message:
+        'No active Transcriber on this session. Install @moxxy/plugin-stt-whisper (or another transcriber plugin) and activate it before POSTing audio.',
+    });
+    return;
+  }
+
+  const contentType = (req.headers['content-type'] ?? '').toLowerCase();
+  if (!contentType.startsWith('audio/')) {
+    reply(res, 415, {
+      error: 'unsupported_media_type',
+      message: "Expected Content-Type: audio/* (e.g. audio/ogg, audio/m4a, audio/mpeg).",
+    });
+    return;
+  }
+
+  let bytes: Buffer;
+  try {
+    bytes = await readBodyBytes(req, DEFAULT_AUDIO_MAX);
+  } catch (err) {
+    reply(res, 413, { error: 'payload_too_large', message: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+  if (bytes.length === 0) {
+    reply(res, 400, { error: 'empty_body', message: 'audio body is empty' });
+    return;
+  }
+
+  // Pull tuning params off the query string — keeping them out of the
+  // body lets the payload remain raw audio (cleanest curl / Shortcut flow).
+  const url = new URL(req.url ?? '/', 'http://localhost');
+  const model = url.searchParams.get('model') ?? undefined;
+  const language = url.searchParams.get('language') ?? undefined;
+  const promptHint = url.searchParams.get('prompt') ?? undefined;
+  const systemPrompt = url.searchParams.get('systemPrompt') ?? undefined;
+
+  let transcript: string;
+  try {
+    const result = await transcriber.transcribe(new Uint8Array(bytes), {
+      mimeType: contentType,
+      ...(language ? { language } : {}),
+      ...(promptHint ? { prompt: promptHint } : {}),
+    });
+    transcript = result.text.trim();
+  } catch (err) {
+    ctx.logger?.warn('http audio transcription failed', { err: err instanceof Error ? err.message : String(err) });
+    reply(res, 502, { error: 'transcription_failed', message: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+  if (!transcript) {
+    reply(res, 422, { error: 'empty_transcript', message: 'transcriber returned empty text' });
+    return;
+  }
+
+  const events: MoxxyEvent[] = [];
+  try {
+    for await (const event of runTurn(ctx.session, transcript, {
+      ...(model ? { model } : {}),
+      ...(systemPrompt ? { systemPrompt } : {}),
+    })) {
+      events.push(event);
+    }
+  } catch (err) {
+    reply(res, 500, { error: 'turn_failed', message: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+
+  const finalAssistant = events.findLast?.((e) => e.type === 'assistant_message');
+  const assistant =
+    finalAssistant && finalAssistant.type === 'assistant_message' ? finalAssistant.content : '';
+  reply(res, 200, { transcript, events, assistant });
 }
 
 export async function handleTurnStream(

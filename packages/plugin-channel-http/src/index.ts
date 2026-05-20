@@ -7,6 +7,7 @@ export {
   handleHealth,
   handleTurn,
   handleTurnStream,
+  handleTurnAudio,
   turnRequestSchema,
   type TurnRequest,
   type RouterContext,
