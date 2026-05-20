@@ -69,17 +69,35 @@ const BlockNode: React.FC<{ block: Block; suppressTopMargin?: boolean }> = ({
           ))}
         </Box>
       );
-    case 'code':
+    case 'code': {
+      // Drop leading/trailing blank lines so the frame doesn't sprout
+      // orphan rows above/below the code (models often emit
+      // ```lang\n\n<code>\n``` with empty padding lines).
+      const lines = block.body.split('\n');
+      while (lines.length > 0 && lines[0]!.trim() === '') lines.shift();
+      while (lines.length > 0 && lines[lines.length - 1]!.trim() === '') lines.pop();
+      // `alignSelf="flex-start"` keeps the box at content width instead
+      // of stretching to fill the parent column. That keeps the right
+      // border tight against the code rather than running off into a
+      // long empty rectangle where some terminals fail to draw it.
       return (
-        <Box flexDirection="column" borderStyle="round" borderColor="gray" borderDimColor paddingX={1}>
+        <Box
+          flexDirection="column"
+          borderStyle="round"
+          borderColor="gray"
+          borderDimColor
+          paddingX={1}
+          alignSelf="flex-start"
+        >
           {block.lang ? (
             <Text dimColor italic>{block.lang}</Text>
           ) : null}
-          {block.body.split('\n').map((line, i) => (
+          {lines.map((line, i) => (
             <Text key={i} color="cyan">{line}</Text>
           ))}
         </Box>
       );
+    }
     case 'table':
       return <TableBlock block={block} suppressTopMargin={!!suppressTopMargin} />;
     case 'blank':
