@@ -6,8 +6,9 @@ import type { LifecycleHooks } from './hooks.js';
 import type { LoopStrategyDef } from './loop.js';
 import type { ProviderDef } from './provider.js';
 import type { ToolDef } from './tool.js';
+import type { TranscriberDef } from './transcriber.js';
 
-export type PluginKind = 'tools' | 'provider' | 'loop' | 'compactor' | 'mcp' | 'cli' | 'channel' | 'hooks' | 'agent' | 'command';
+export type PluginKind = 'tools' | 'provider' | 'loop' | 'compactor' | 'mcp' | 'cli' | 'channel' | 'hooks' | 'agent' | 'command' | 'transcriber';
 
 export interface PluginSpec {
   readonly name: string;
@@ -18,6 +19,13 @@ export interface PluginSpec {
   readonly loopStrategies?: ReadonlyArray<LoopStrategyDef>;
   readonly compactors?: ReadonlyArray<CompactorDef>;
   readonly channels?: ReadonlyArray<ChannelDef>;
+  /**
+   * Speech-to-text backends contributed by the plugin. Selected by name via
+   * `session.transcribers.setActive(name)`; channels with audio input use
+   * `session.transcribers.getActive()` to convert bytes → transcript when
+   * the active provider does not advertise `supportsAudio`.
+   */
+  readonly transcribers?: ReadonlyArray<TranscriberDef>;
   /**
    * Typed subagent kinds the plugin contributes. Each becomes
    * dispatchable as `dispatch_agent({ agentType: <name>, ... })`.

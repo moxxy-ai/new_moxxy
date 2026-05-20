@@ -13,12 +13,19 @@ export interface EventBase {
 }
 
 export interface UserPromptAttachment {
-  readonly kind: 'stdin' | 'file' | 'image';
-  /** Inline payload. For images this is base64-encoded bytes. */
+  readonly kind: 'stdin' | 'file' | 'image' | 'audio';
+  /**
+   * Inline payload. For images this is base64-encoded bytes; for audio it
+   * is either base64-encoded bytes (when the channel hands raw audio
+   * straight through to a model with `supportsAudio`) or the transcript
+   * (when the channel pre-transcribed via the session's Transcriber).
+   * Channels SHOULD set `name` to disambiguate the two; `mediaType` is
+   * required when carrying raw audio bytes.
+   */
   readonly content: string;
-  /** Human-readable label, e.g. the file path or `image.png`. */
+  /** Human-readable label, e.g. the file path, `image.png`, or `voice.ogg`. */
   readonly name?: string;
-  /** MIME type — required for images so providers translate correctly. */
+  /** MIME type — required for images and raw audio so providers translate correctly. */
   readonly mediaType?: string;
 }
 

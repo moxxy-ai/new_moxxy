@@ -9,6 +9,7 @@ import type {
   ProviderDef,
   ResolvedPluginManifest,
   ToolDef,
+  TranscriberDef,
 } from '@moxxy/sdk';
 import type { Logger } from '../logger.js';
 import type { AgentRegistry } from '../registries/agents.js';
@@ -18,6 +19,7 @@ import type { CompactorRegistry } from '../registries/compactors.js';
 import type { LoopRegistry } from '../registries/loops.js';
 import type { ProviderRegistry } from '../registries/providers.js';
 import type { ToolRegistry } from '../registries/tools.js';
+import type { TranscriberRegistry } from '../registries/transcribers.js';
 import type { HookDispatcherImpl } from './lifecycle.js';
 import { discoverPlugins } from './discovery.js';
 
@@ -31,6 +33,7 @@ export interface PluginHostOptions {
   readonly channels: ChannelRegistryImpl;
   readonly agents: AgentRegistry;
   readonly commands: CommandRegistry;
+  readonly transcribers: TranscriberRegistry;
   readonly dispatcher: HookDispatcherImpl;
   readonly loader?: PluginLoader;
 }
@@ -49,6 +52,7 @@ interface LoadedRecord {
   readonly channelNames: ReadonlyArray<string>;
   readonly agentNames: ReadonlyArray<string>;
   readonly commandNames: ReadonlyArray<string>;
+  readonly transcriberNames: ReadonlyArray<string>;
 }
 
 export class PluginHost implements PluginHostHandle {
@@ -115,6 +119,7 @@ export class PluginHost implements PluginHostHandle {
     for (const channelName of record.channelNames) this.opts.channels.unregister(channelName);
     for (const agentName of record.agentNames) this.opts.agents.unregister(agentName);
     for (const cmdName of record.commandNames) this.opts.commands.unregister(cmdName);
+    for (const transcriberName of record.transcriberNames) this.opts.transcribers.unregister(transcriberName);
     this.loaded.delete(name);
     this.refreshDispatcher();
   }
@@ -140,6 +145,7 @@ export class PluginHost implements PluginHostHandle {
     const channelNames = (plugin.channels ?? []).map((c: ChannelDef) => c.name);
     const agentNames = (plugin.agents ?? []).map((a: AgentDef) => a.name);
     const commandNames = (plugin.commands ?? []).map((c: CommandDef) => c.name);
+    const transcriberNames = (plugin.transcribers ?? []).map((t: TranscriberDef) => t.name);
 
     for (const tool of plugin.tools ?? []) this.opts.tools.register(tool);
     for (const provider of plugin.providers ?? []) this.opts.providers.register(provider);
@@ -148,6 +154,7 @@ export class PluginHost implements PluginHostHandle {
     for (const channel of plugin.channels ?? []) this.opts.channels.register(channel);
     for (const agent of plugin.agents ?? []) this.opts.agents.register(agent);
     for (const cmd of plugin.commands ?? []) this.opts.commands.register(cmd);
+    for (const transcriber of plugin.transcribers ?? []) this.opts.transcribers.register(transcriber);
 
     return {
       plugin,
@@ -159,6 +166,7 @@ export class PluginHost implements PluginHostHandle {
       channelNames,
       agentNames,
       commandNames,
+      transcriberNames,
     };
   }
 

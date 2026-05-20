@@ -41,6 +41,7 @@ export { CompactorRegistry } from './registries/compactors.js';
 export { ChannelRegistryImpl } from './registries/channels.js';
 export { AgentRegistry } from './registries/agents.js';
 export { CommandRegistry } from './registries/commands.js';
+export { TranscriberRegistry } from './registries/transcribers.js';
 export {
   SessionPersistence,
   defaultSessionsDir,

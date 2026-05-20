@@ -6,6 +6,7 @@ import type { Plugin, PluginSpec } from './plugin.js';
 import type { ProviderDef } from './provider.js';
 import type { SkillDef, SkillFrontmatter } from './skill.js';
 import type { ToolContext, ToolDef } from './tool.js';
+import type { TranscriberDef } from './transcriber.js';
 import type { z } from 'zod';
 
 export function definePlugin(spec: PluginSpec): Plugin {
@@ -74,5 +75,9 @@ export function definePermission(spec: PermissionRule): PermissionRule {
 }
 
 export function defineSkill(spec: { frontmatter: SkillFrontmatter; body: string }): SkillDef {
+  return Object.freeze(spec);
+}
+
+export function defineTranscriber(spec: TranscriberDef): TranscriberDef {
   return Object.freeze(spec);
 }

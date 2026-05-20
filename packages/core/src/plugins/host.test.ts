@@ -1,11 +1,22 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { defineCompactor, defineLoopStrategy, definePlugin, defineProvider, defineTool } from '@moxxy/sdk';
+import {
+  defineCompactor,
+  defineLoopStrategy,
+  definePlugin,
+  defineProvider,
+  defineTool,
+  defineTranscriber,
+} from '@moxxy/sdk';
 import { silentLogger } from '../logger.js';
 import { ToolRegistryImpl } from '../registries/tools.js';
 import { ProviderRegistry } from '../registries/providers.js';
 import { LoopRegistry } from '../registries/loops.js';
 import { CompactorRegistry } from '../registries/compactors.js';
+import { ChannelRegistryImpl } from '../registries/channels.js';
+import { AgentRegistry } from '../registries/agents.js';
+import { CommandRegistry } from '../registries/commands.js';
+import { TranscriberRegistry } from '../registries/transcribers.js';
 import { HookDispatcherImpl } from './lifecycle.js';
 import { PluginHost } from './host.js';
 
@@ -14,6 +25,10 @@ const makeHost = () => {
   const providers = new ProviderRegistry();
   const loops = new LoopRegistry();
   const compactors = new CompactorRegistry();
+  const channels = new ChannelRegistryImpl();
+  const agents = new AgentRegistry();
+  const commands = new CommandRegistry();
+  const transcribers = new TranscriberRegistry();
   const dispatcher = new HookDispatcherImpl({ logger: silentLogger });
   const host = new PluginHost({
     cwd: '/tmp',
@@ -22,9 +37,13 @@ const makeHost = () => {
     providers,
     loops,
     compactors,
+    channels,
+    agents,
+    commands,
+    transcribers,
     dispatcher,
   });
-  return { host, tools, providers, loops, compactors, dispatcher };
+  return { host, tools, providers, loops, compactors, channels, agents, commands, transcribers, dispatcher };
 };
 
 describe('PluginHost', () => {
@@ -91,5 +110,19 @@ describe('PluginHost', () => {
     const result = await host.discoverAndLoad();
     expect(result).toEqual([]);
     warn.mockRestore();
+  });
+
+  it('registerStatic + unload roundtrip transcribers', async () => {
+    const { host, transcribers } = makeHost();
+    const t = defineTranscriber({
+      name: 'fake-stt',
+      createClient: () => ({ name: 'fake-stt', transcribe: async () => ({ text: '' }) }),
+    });
+    host.registerStatic(definePlugin({ name: 'stt-demo', transcribers: [t] }));
+    expect(transcribers.has('fake-stt')).toBe(true);
+    expect(transcribers.list()).toHaveLength(1);
+
+    await host.unload('stt-demo');
+    expect(transcribers.has('fake-stt')).toBe(false);
   });
 });

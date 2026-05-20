@@ -90,6 +90,16 @@ function toAnthropicBlock(block: ContentBlock): AnthropicContentBlock {
         type: 'image',
         source: { type: 'base64', media_type: block.mediaType, data: block.data },
       };
+    case 'audio':
+      // Anthropic's Messages API does not accept native audio yet. Channels
+      // are supposed to transcribe up-front when the active model lacks
+      // `supportsAudio`; if an audio block reaches the translator anyway
+      // (e.g. a resumed session originally captured on a different
+      // provider), degrade to a text placeholder rather than throwing.
+      return {
+        type: 'text',
+        text: `[audio attachment dropped: ${block.mediaType} not supported by this model]`,
+      };
   }
 }
 

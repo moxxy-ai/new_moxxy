@@ -8,6 +8,7 @@ import {
   defineProvider,
   defineSkill,
   defineTool,
+  defineTranscriber,
 } from './define.js';
 
 describe('define* factories', () => {
@@ -43,14 +44,33 @@ describe('define* factories', () => {
     expect(out).toBe('HI');
   });
 
-  it('defineProvider, defineLoopStrategy, defineCompactor, definePermission, defineSkill all freeze', () => {
+  it('defineProvider, defineLoopStrategy, defineCompactor, definePermission, defineSkill, defineTranscriber all freeze', () => {
     const items = [
       defineProvider({ name: 'p', models: [], createClient: () => ({}) as never }),
       defineLoopStrategy({ name: 'l', run: async function* () {} }),
       defineCompactor({ name: 'c', shouldCompact: () => false, compact: async () => ({}) as never }),
       definePermission({ action: 'allow' }),
       defineSkill({ frontmatter: { name: 'foo', description: 'd' }, body: '' }),
+      defineTranscriber({
+        name: 't',
+        createClient: () => ({ name: 't', transcribe: async () => ({ text: '' }) }),
+      }),
     ];
     for (const item of items) expect(Object.isFrozen(item)).toBe(true);
+  });
+
+  it('defineTranscriber preserves displayName + createClient identity', () => {
+    const t = defineTranscriber({
+      name: 'whisper-fake',
+      displayName: 'Whisper (fake)',
+      createClient: (cfg) => ({
+        name: 'whisper-fake',
+        transcribe: async () => ({ text: String(cfg.echo ?? '') }),
+      }),
+    });
+    expect(t.name).toBe('whisper-fake');
+    expect(t.displayName).toBe('Whisper (fake)');
+    const client = t.createClient({ echo: 'hi' });
+    expect(client.name).toBe('whisper-fake');
   });
 });

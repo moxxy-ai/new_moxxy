@@ -9,7 +9,8 @@ export type ContentBlock =
   | { readonly type: 'text'; readonly text: string }
   | { readonly type: 'tool_use'; readonly id: string; readonly name: string; readonly input: unknown }
   | { readonly type: 'tool_result'; readonly toolUseId: string; readonly content: string; readonly isError?: boolean }
-  | { readonly type: 'image'; readonly mediaType: string; readonly data: string };
+  | { readonly type: 'image'; readonly mediaType: string; readonly data: string }
+  | { readonly type: 'audio'; readonly mediaType: string; readonly data: string };
 
 export interface ProviderRequest {
   readonly model: string;
@@ -50,6 +51,13 @@ export interface ModelDescriptor {
    * refuses or warns instead of silently dropping the bytes.
    */
   readonly supportsImages?: boolean;
+  /**
+   * Whether this model accepts `audio` ContentBlocks in user messages
+   * (GPT-4o, Gemini-Live-class models). When false, channels with audio
+   * input route through the session's active `Transcriber` and forward
+   * the transcript as text instead.
+   */
+  readonly supportsAudio?: boolean;
 }
 
 export interface LLMProvider {
