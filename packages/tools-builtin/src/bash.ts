@@ -12,6 +12,24 @@ export const bashTool = defineTool({
     env: z.record(z.string(), z.string()).optional(),
   }),
   permission: { action: 'prompt' },
+  // Bash is the highest-privilege built-in: it spawns a real shell.
+  // Declared caps are *honest* — Bash genuinely needs subprocess + any
+  // net + broad fs + a shell-friendly env subset. The `inproc` isolator
+  // can only enforce the few fields it can introspect (`cwd` against
+  // fs.read, `timeMs` against the wall clock); the command string is
+  // opaque to in-process cap checks by design. A future `subprocess`
+  // isolator that re-spawns Bash under a constrained env / cgroup would
+  // enforce these caps for real.
+  isolation: {
+    required: 'inproc',
+    capabilities: {
+      subprocess: true,
+      fs: { read: ['$cwd/**', '/tmp/**'], write: ['$cwd/**', '/tmp/**'] },
+      net: { mode: 'any' },
+      env: ['PATH', 'HOME', 'USER', 'SHELL', 'LANG', 'LC_ALL', 'TERM'],
+      timeMs: 600_000,
+    },
+  },
   async handler({ command, cwd, timeoutMs, env }, ctx) {
     return await new Promise<string>((resolve, reject) => {
       const child = spawn('/bin/sh', ['-lc', command], {

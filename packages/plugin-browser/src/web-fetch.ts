@@ -41,6 +41,12 @@ export const webFetchTool = defineTool({
       ),
   }),
   permission: { action: 'prompt' },
+  isolation: {
+    capabilities: {
+      net: { mode: 'any' },
+      timeMs: 120_000,
+    },
+  },
   async handler({ url, format, method, headers, maxBytes, timeoutMs, selector }, ctx) {
     const cap = maxBytes ?? MAX_BYTES_DEFAULT;
     const timeout = timeoutMs ?? FETCH_TIMEOUT_MS_DEFAULT;

@@ -6,6 +6,7 @@ import type { Plugin, PluginSpec } from './plugin.js';
 import type { ProviderDef } from './provider.js';
 import type { SkillDef, SkillFrontmatter } from './skill.js';
 import type { ToolCompactPresentation, ToolContext, ToolDef } from './tool.js';
+import type { ToolIsolationSpec } from './isolation.js';
 import type { TranscriberDef } from './transcriber.js';
 import type { z } from 'zod';
 
@@ -36,6 +37,7 @@ export function defineTool<S extends z.ZodTypeAny, O = unknown>(spec: {
   permission?: PermissionRule;
   handler: (input: z.output<S>, ctx: ToolContext) => Promise<O> | O;
   compact?: ToolCompactPresentation;
+  isolation?: ToolIsolationSpec;
 }): ToolDef {
   return Object.freeze({
     name: spec.name,
@@ -46,6 +48,7 @@ export function defineTool<S extends z.ZodTypeAny, O = unknown>(spec: {
     permission: spec.permission,
     handler: spec.handler as (input: unknown, ctx: ToolContext) => Promise<unknown> | unknown,
     compact: spec.compact,
+    isolation: spec.isolation,
   });
 }
 

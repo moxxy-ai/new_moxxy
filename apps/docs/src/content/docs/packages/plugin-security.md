@@ -82,10 +82,10 @@ configured isolator, which enforces the capabilities.
 |---|---|---|
 | `fs.read` / `fs.write` | `string[]` of globs | Path access allowlist. `$cwd` prefix resolves to `ToolContext.cwd`. |
 | `net.mode` | `'none' \| 'any' \| 'allowlist'` | Network policy. Allowlist takes a list of host patterns. |
-| `env` | `string[]` | Env vars the tool may read. Everything else is masked. |
-| `timeMs` | `number` | Wall-clock budget. Aborted via `ctx.signal`. |
-| `memMb` | `number` | Soft memory ceiling. Honored by isolators that support it. |
-| `subprocess` | `boolean` | Whether the tool may spawn child processes. Default `false`. |
+| `env` | `string[]` | Env vars the tool may read. Informational under `inproc` (the handler shares the parent's `process.env`); enforceable by `subprocess`/`worker` isolators that can spawn with a restricted env. |
+| `timeMs` | `number` | Wall-clock budget. Aborted via `ctx.signal`. Enforced by every isolator. |
+| `memMb` | `number` | Soft memory ceiling. Honored by isolators that support it (e.g. `worker_threads` via `resourceLimits`). |
+| `subprocess` | `boolean` | Whether the tool may spawn child processes. Default `false`. Informational under `inproc`. |
 
 ## Isolators
 
@@ -97,11 +97,12 @@ Built-in:
 | `inproc` | 1 | In-process. Validates capabilities on entry (fs/net/env checks via `checkAllCaps`) and wraps execution in a `timeMs` deadline that aborts `ctx.signal`. Memory ceiling is not enforced. |
 
 Stronger isolators (`worker` / `subprocess` / `vm` / `wasm` / `docker`)
-implement the same `Isolator` interface and register through the same
-SDK shape — no SDK changes when adding new ones:
+implement the same `Isolator` interface — no SDK changes when adding
+new ones. They register at plugin construction time by passing into
+`buildSecurityPlugin({ isolators: [...] })`:
 
 ```ts
-import { definePlugin, type Isolator } from '@moxxy/sdk';
+import { buildSecurityPlugin, type Isolator } from '@moxxy/plugin-security';
 
 export const workerIsolator: Isolator = {
   name: 'worker',
@@ -112,16 +113,18 @@ export const workerIsolator: Isolator = {
   },
 };
 
-export default definePlugin({
-  name: '@acme/moxxy-isolator-worker',
-  hooks: {
-    onInit: async (ctx) => {
-      // Register the isolator into the security plugin's registry.
-      // …
-    },
-  },
+// At setup time:
+const { plugin } = buildSecurityPlugin({
+  config: { enabled: true, isolator: 'worker' },
+  toolRegistry: session.tools,
+  isolators: [workerIsolator],
 });
 ```
+
+See [`.claude/agents/isolator-author.md`](https://github.com/moxxy-ai/new_moxxy/blob/main/.claude/agents/isolator-author.md)
+for the full author guide — particularly the section on **handler
+marshalling**, which is the hard problem any out-of-process isolator
+must solve before its strength claim is real.
 
 ## Per-tool / per-plugin overrides
 

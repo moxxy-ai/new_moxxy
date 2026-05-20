@@ -19,6 +19,13 @@ export const grepTool = defineTool({
     noun: { one: 'pattern', other: 'patterns' },
     previewKey: 'pattern',
   },
+  isolation: {
+    capabilities: {
+      fs: { read: ['$cwd/**'] },
+      net: { mode: 'none' },
+      timeMs: 60_000,
+    },
+  },
   async handler({ pattern, cwd, glob, caseInsensitive, maxMatches }, ctx) {
     const baseDir = resolveSafe(ctx.cwd, cwd ?? '.');
     const re = new RegExp(pattern, caseInsensitive ? 'i' : '');

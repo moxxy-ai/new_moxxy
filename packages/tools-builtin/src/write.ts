@@ -16,6 +16,13 @@ export const writeTool = defineTool({
     noun: { one: 'file', other: 'files' },
     previewKey: 'file_path',
   },
+  isolation: {
+    capabilities: {
+      fs: { read: ['$cwd/**'], write: ['$cwd/**'] },
+      net: { mode: 'none' },
+      timeMs: 30_000,
+    },
+  },
   async handler({ file_path, content }, ctx) {
     const resolved = resolveSafe(ctx.cwd, file_path);
     await fs.mkdir(path.dirname(resolved), { recursive: true });

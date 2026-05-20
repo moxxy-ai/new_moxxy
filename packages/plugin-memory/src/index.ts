@@ -47,6 +47,13 @@ export function buildMemoryPlugin(opts: BuildMemoryPluginOptions = {}): { plugin
           tags: z.array(z.string().min(1)).optional(),
         }),
         permission: { action: 'prompt' },
+        isolation: {
+          capabilities: {
+            fs: { read: ['~/.moxxy/memory/**'], write: ['~/.moxxy/memory/**'] },
+            net: { mode: 'none' },
+            timeMs: 5_000,
+          },
+        },
         handler: async ({ name, type, description, body, tags }) => {
           const saved = await store.save({ name, type, description, body, tags });
           return { name: saved.frontmatter.name, path: saved.path };
@@ -64,6 +71,17 @@ export function buildMemoryPlugin(opts: BuildMemoryPluginOptions = {}): { plugin
           type: memoryTypeSchema.optional(),
           mode: z.enum(['auto', 'vector', 'keyword']).optional().default('auto'),
         }),
+        isolation: {
+          capabilities: {
+            fs: { read: ['~/.moxxy/memory/**'] },
+            // Vector recall may call out to an EmbeddingProvider (OpenAI,
+            // local transformers, …). The inproc isolator can't enforce
+            // this; a stronger isolator should constrain to the actual
+            // configured embedder's host.
+            net: { mode: 'any' },
+            timeMs: 15_000,
+          },
+        },
         handler: async ({ query, limit, type, mode }) => {
           const matches = await store.recall(query, { limit, type, mode });
           return matches.map(({ entry, score }) => ({
@@ -79,6 +97,13 @@ export function buildMemoryPlugin(opts: BuildMemoryPluginOptions = {}): { plugin
         name: 'memory_list',
         description: 'List all stored memories (name + type + description, no body).',
         inputSchema: z.object({ type: memoryTypeSchema.optional() }),
+        isolation: {
+          capabilities: {
+            fs: { read: ['~/.moxxy/memory/**'] },
+            net: { mode: 'none' },
+            timeMs: 5_000,
+          },
+        },
         handler: async ({ type }) => {
           const entries = await store.list(type);
           return entries.map((e) => ({
@@ -94,6 +119,13 @@ export function buildMemoryPlugin(opts: BuildMemoryPluginOptions = {}): { plugin
         description: 'Delete a memory by name. Use only when the memory is incorrect or no longer relevant.',
         inputSchema: z.object({ name: z.string().min(1) }),
         permission: { action: 'prompt' },
+        isolation: {
+          capabilities: {
+            fs: { read: ['~/.moxxy/memory/**'], write: ['~/.moxxy/memory/**'] },
+            net: { mode: 'none' },
+            timeMs: 5_000,
+          },
+        },
         handler: async ({ name }) => {
           const removed = await store.forget(name);
           return removed ? `forgot ${name}` : `not found: ${name}`;
@@ -109,6 +141,13 @@ export function buildMemoryPlugin(opts: BuildMemoryPluginOptions = {}): { plugin
           tags: z.array(z.string().min(1)).optional(),
         }),
         permission: { action: 'prompt' },
+        isolation: {
+          capabilities: {
+            fs: { read: ['~/.moxxy/memory/**'], write: ['~/.moxxy/memory/**'] },
+            net: { mode: 'none' },
+            timeMs: 5_000,
+          },
+        },
         handler: async ({ name, description, body, tags }) => {
           const updated = await store.update(name, { description, body, tags });
           if (!updated) throw new Error(`memory '${name}' not found`);

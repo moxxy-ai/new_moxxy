@@ -40,6 +40,53 @@ describe('checkFsCap', () => {
     );
     expect(r.ok).toBe(true);
   });
+
+  it('detects file_path (snake_case) as a path field', () => {
+    const r = checkFsCap(
+      { file_path: '/etc/passwd' },
+      { read: ['$cwd/**'] },
+      '/work',
+    );
+    expect(r.ok).toBe(false);
+  });
+
+  it('detects filePath (camelCase) as a path field', () => {
+    const r = checkFsCap(
+      { filePath: '/etc/passwd' },
+      { read: ['$cwd/**'] },
+      '/work',
+    );
+    expect(r.ok).toBe(false);
+  });
+
+  it('detects outputDir as a path field', () => {
+    const r = checkFsCap(
+      { outputDir: '/etc' },
+      { write: ['$cwd/**'] },
+      '/work',
+    );
+    expect(r.ok).toBe(false);
+  });
+
+  it('does NOT scan command strings or generic value fields', () => {
+    // Bash-shaped input: `command` is an opaque string. The inproc
+    // isolator can't enforce on shell commands; that's by design.
+    const r = checkFsCap(
+      { command: 'cat /etc/passwd', cwd: '/work' },
+      { read: ['$cwd/**'] },
+      '/work',
+    );
+    expect(r.ok).toBe(true);
+  });
+
+  it('does NOT flag absolute paths embedded in prose', () => {
+    const r = checkFsCap(
+      { description: 'see /usr/bin/foo for details' },
+      { read: ['$cwd/**'] },
+      '/work',
+    );
+    expect(r.ok).toBe(true);
+  });
 });
 
 describe('checkNetCap', () => {

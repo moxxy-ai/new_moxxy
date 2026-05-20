@@ -17,6 +17,13 @@ export const globTool = defineTool({
     noun: { one: 'glob', other: 'globs' },
     previewKey: 'pattern',
   },
+  isolation: {
+    capabilities: {
+      fs: { read: ['$cwd/**'] },
+      net: { mode: 'none' },
+      timeMs: 30_000,
+    },
+  },
   async handler({ pattern, cwd, max }, ctx) {
     const baseDir = resolveSafe(ctx.cwd, cwd ?? '.');
     const matches: string[] = [];

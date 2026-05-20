@@ -17,6 +17,13 @@ export const editTool = defineTool({
     noun: { one: 'file', other: 'files' },
     previewKey: 'file_path',
   },
+  isolation: {
+    capabilities: {
+      fs: { read: ['$cwd/**'], write: ['$cwd/**'] },
+      net: { mode: 'none' },
+      timeMs: 30_000,
+    },
+  },
   async handler({ file_path, old_string, new_string, replace_all }, ctx) {
     const resolved = resolveSafe(ctx.cwd, file_path);
     const original = await fs.readFile(resolved, 'utf8');

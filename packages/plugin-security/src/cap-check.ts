@@ -105,15 +105,56 @@ export function maskEnv(
 
 // ---------- helpers ----------
 
-const PATH_KEY = /\b(path|paths|file|files|filename|dir|directory|cwd|out|output)\b/i;
-const URL_KEY = /\b(url|uri|endpoint|href|src)\b/i;
+/**
+ * Fields whose value should be treated as a filesystem path. Match is
+ * by *word* — `file_path`, `filePath`, `outputDir`, `src_path` all
+ * decompose into the same word set as `file`/`path`/`dir`/`src`.
+ *
+ * Conservative — we don't include overloaded words like `out` or
+ * `source` that frequently appear in non-path contexts (`outputFormat`,
+ * `sourceCode`). Tools that need broader coverage should expose a more
+ * specific field name (`source_path`, `out_dir`).
+ */
+const PATH_WORDS = new Set([
+  'file', 'files', 'filename',
+  'path', 'paths',
+  'dir', 'dirs', 'directory', 'directories',
+  'cwd', 'workdir',
+  'src', 'dest', 'destination',
+  'target',
+  'location',
+]);
+
+const URL_WORDS = new Set([
+  'url', 'urls', 'uri', 'endpoint', 'href', 'src',
+]);
+
+/** Split snake_case AND camelCase into lowercase word tokens. */
+function tokenize(key: string): string[] {
+  return key
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .toLowerCase()
+    .split(/[_\-\s.]+/)
+    .filter(Boolean);
+}
+
+function isPathKey(key: string): boolean {
+  return tokenize(key).some((w) => PATH_WORDS.has(w));
+}
+
+function isUrlKey(key: string): boolean {
+  return tokenize(key).some((w) => URL_WORDS.has(w));
+}
 
 function extractPaths(input: unknown): string[] {
   const out: string[] = [];
   walkStrings(input, (key, value) => {
-    if (PATH_KEY.test(key)) out.push(value);
-    else if (value.startsWith('file://')) out.push(value.slice('file://'.length));
-    else if (value.startsWith('/') || /^[A-Za-z]:[\\/]/.test(value)) out.push(value);
+    if (isPathKey(key)) {
+      out.push(value);
+    } else if (value.startsWith('file://')) {
+      // file:// URLs are unambiguous regardless of key name
+      out.push(value.slice('file://'.length));
+    }
   });
   return out;
 }
@@ -121,8 +162,12 @@ function extractPaths(input: unknown): string[] {
 function extractUrls(input: unknown): string[] {
   const out: string[] = [];
   walkStrings(input, (key, value) => {
-    if (URL_KEY.test(key) && /^https?:\/\//.test(value)) out.push(value);
-    else if (/^https?:\/\//.test(value)) out.push(value);
+    // Conservative: only scan URL-shaped key names. This avoids false
+    // positives on prose ("see https://example.com") or opaque command
+    // strings ("curl https://api.example.com"). Tools that want URL
+    // enforcement on a custom field should name it `url`, `endpoint`,
+    // `href`, etc.
+    if (isUrlKey(key) && /^https?:\/\//.test(value)) out.push(value);
   });
   return out;
 }
@@ -158,9 +203,14 @@ function resolvePattern(pattern: string, cwd: string): string {
  * Minimal glob matcher: `**` matches across slashes, `*` matches within
  * a path segment, everything else is literal. Adequate for capability
  * declarations; this isn't user-facing fnmatch.
+ *
+ * Special case: a pattern ending in `/**` also matches the parent
+ * directory itself (without trailing slash). i.e. `/work/**` matches
+ * both `/work` and `/work/anything`. This mirrors the conventional
+ * "this dir and everything under it" reading.
  */
 function matchesGlob(p: string, pattern: string): boolean {
-  // Anchor and escape; convert ** → .*, * → [^/]*.
+  if (pattern.endsWith('/**') && p === pattern.slice(0, -3)) return true;
   const re =
     '^' +
     pattern

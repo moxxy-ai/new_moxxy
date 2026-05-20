@@ -16,6 +16,13 @@ export const readTool = defineTool({
     noun: { one: 'file', other: 'files' },
     previewKey: 'file_path',
   },
+  isolation: {
+    capabilities: {
+      fs: { read: ['$cwd/**'] },
+      net: { mode: 'none' },
+      timeMs: 30_000,
+    },
+  },
   async handler({ file_path, offset = 0, limit = 2000 }, ctx) {
     const resolved = resolveSafe(ctx.cwd, file_path);
     const buf = await fs.readFile(resolved);
