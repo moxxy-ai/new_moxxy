@@ -24,6 +24,14 @@ describe('define* factories', () => {
     expect(p.version).toBe('1.2.3');
   });
 
+  it('definePlugin preserves requirements', () => {
+    const p = definePlugin({
+      name: 'p',
+      requirements: [{ kind: 'plugin', name: 'base', state: 'registered' }],
+    });
+    expect(p.requirements).toEqual([{ kind: 'plugin', name: 'base', state: 'registered' }]);
+  });
+
   it('definePlugin defaults version when spec.version is explicitly undefined', () => {
     // Reproduces the spread-order bug: a spec with `version: undefined`
     // (e.g. produced by destructuring) must not erase the default.
@@ -63,6 +71,7 @@ describe('define* factories', () => {
     const t = defineTranscriber({
       name: 'whisper-fake',
       displayName: 'Whisper (fake)',
+      requirements: [{ kind: 'provider', name: 'openai-codex', state: 'active' }],
       createClient: (cfg) => ({
         name: 'whisper-fake',
         transcribe: async () => ({ text: String(cfg.echo ?? '') }),
@@ -70,6 +79,7 @@ describe('define* factories', () => {
     });
     expect(t.name).toBe('whisper-fake');
     expect(t.displayName).toBe('Whisper (fake)');
+    expect(t.requirements).toEqual([{ kind: 'provider', name: 'openai-codex', state: 'active' }]);
     const client = t.createClient({ echo: 'hi' });
     expect(client.name).toBe('whisper-fake');
   });

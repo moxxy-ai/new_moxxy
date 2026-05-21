@@ -1,8 +1,14 @@
 import type { CompactorDef } from '@moxxy/sdk';
+import { assertRequirementsReady, type RequirementChecker } from '../requirements.js';
 
 export class CompactorRegistry {
   private readonly compactors = new Map<string, CompactorDef>();
   private active: string | null = null;
+  private requirementChecker?: RequirementChecker;
+
+  setRequirementChecker(checker: RequirementChecker): void {
+    this.requirementChecker = checker;
+  }
 
   /**
    * Register a compactor. Throws on duplicate — use `replace()` for
@@ -13,12 +19,12 @@ export class CompactorRegistry {
       throw new Error(`Compactor already registered: ${c.name}`);
     }
     this.compactors.set(c.name, c);
-    if (!this.active) this.active = c.name;
+    if (!this.active) this.activate(c);
   }
 
   replace(c: CompactorDef): void {
     this.compactors.set(c.name, c);
-    if (!this.active) this.active = c.name;
+    if (!this.active) this.activate(c);
   }
 
   /**
@@ -35,12 +41,18 @@ export class CompactorRegistry {
   }
 
   setActive(name: string): void {
-    if (!this.compactors.has(name)) throw new Error(`Compactor not registered: ${name}`);
-    this.active = name;
+    const compactor = this.compactors.get(name);
+    if (!compactor) throw new Error(`Compactor not registered: ${name}`);
+    this.activate(compactor);
   }
 
   getActive(): CompactorDef | null {
     if (!this.active) return null;
     return this.compactors.get(this.active) ?? null;
+  }
+
+  private activate(compactor: CompactorDef): void {
+    assertRequirementsReady(`compactor: ${compactor.name}`, compactor.requirements, this.requirementChecker);
+    this.active = compactor.name;
   }
 }

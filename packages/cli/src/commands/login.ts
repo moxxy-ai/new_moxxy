@@ -119,6 +119,7 @@ async function loginProvider(argv: ParsedArgv, providerName: string): Promise<nu
 
   try {
     const result = await def.auth.login(ctx);
+    session.requirements.setRuntime(`auth:provider:${providerName}`, 'ready');
     const expires =
       result.expiresAt !== undefined
         ? `token expires ${new Date(result.expiresAt).toLocaleString()}`
@@ -236,6 +237,7 @@ async function loginLogout(argv: ParsedArgv): Promise<number> {
   const ctx = buildProviderAuthContext(vault, { headless: true });
   const removed = await def.auth.logout(ctx);
   if (removed) {
+    session.requirements.clearRuntime(`auth:provider:${providerName}`);
     process.stdout.write(
       `${colors.bold('logged out')}  ${colors.dim('OAuth credentials removed from the vault')}\n`,
     );

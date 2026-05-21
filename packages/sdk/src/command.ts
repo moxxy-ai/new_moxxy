@@ -13,6 +13,7 @@
  */
 
 import type { SessionId } from './ids.js';
+import type { MoxxyRequirement } from './requirements.js';
 
 export interface CommandDef {
   /** Name without the leading `/`. */
@@ -21,6 +22,7 @@ export interface CommandDef {
   readonly description: string;
   /** Alternative names (without leading `/`). */
   readonly aliases?: ReadonlyArray<string>;
+  readonly requirements?: ReadonlyArray<MoxxyRequirement>;
   /**
    * When set, the command only surfaces in these channels by name
    * (e.g. `['tui']` for an overlay-style command that wouldn't make

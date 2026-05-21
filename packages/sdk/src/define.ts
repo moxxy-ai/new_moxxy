@@ -4,6 +4,7 @@ import type { LoopStrategyDef } from './loop.js';
 import type { PermissionRule } from './permission.js';
 import type { Plugin, PluginSpec } from './plugin.js';
 import type { ProviderDef } from './provider.js';
+import type { MoxxyRequirement } from './requirements.js';
 import type { SkillDef, SkillFrontmatter } from './skill.js';
 import type { ToolCompactPresentation, ToolContext, ToolDef } from './tool.js';
 import type { ToolIsolationSpec } from './isolation.js';
@@ -31,6 +32,7 @@ export function definePlugin(spec: PluginSpec): Plugin {
 export function defineTool<S extends z.ZodTypeAny, O = unknown>(spec: {
   name: string;
   description: string;
+  requirements?: ReadonlyArray<MoxxyRequirement>;
   inputSchema: S;
   inputJsonSchema?: unknown;
   outputSchema?: z.ZodType<O>;
@@ -42,6 +44,7 @@ export function defineTool<S extends z.ZodTypeAny, O = unknown>(spec: {
   return Object.freeze({
     name: spec.name,
     description: spec.description,
+    requirements: spec.requirements,
     inputSchema: spec.inputSchema,
     inputJsonSchema: spec.inputJsonSchema,
     outputSchema: spec.outputSchema,

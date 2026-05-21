@@ -91,7 +91,10 @@ export class SessionPersistence {
    * the session before any events arrive.
    */
   attach(log: EventLog): () => void {
-    void this.ensureDir().then(() => this.scheduleIndexWrite());
+    void this.ensureDir()
+      .then(() => this.ensureLogFile())
+      .then(() => this.scheduleIndexWrite())
+      .catch(() => undefined);
     const unsub = log.subscribe((event) => {
       if (this.closed) return;
       this.enqueueAppend(event);
@@ -152,6 +155,7 @@ export class SessionPersistence {
   private async writeIndex(): Promise<void> {
     try {
       await this.ensureDir();
+      await this.ensureLogFile();
       const all = await readIndex(this.dir);
       const without = all.filter((m) => m.id !== this.meta.id);
       const next = [...without, this.meta].sort((a, b) =>
@@ -167,6 +171,11 @@ export class SessionPersistence {
   private async ensureDir(): Promise<void> {
     await fs.mkdir(this.dir, { recursive: true });
   }
+
+  private async ensureLogFile(): Promise<void> {
+    const handle = await fs.open(this.logPath, 'a');
+    await handle.close();
+  }
 }
 
 /** Read the session index. Returns [] when the file doesn't exist. */
@@ -176,7 +185,18 @@ export async function readIndex(dir = defaultSessionsDir()): Promise<SessionMeta
     const raw = await fs.readFile(indexPath, 'utf8');
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isSessionMeta);
+    const metas = parsed.filter(isSessionMeta);
+    const checks = await Promise.all(
+      metas.map(async (meta) => {
+        try {
+          await fs.access(path.join(dir, `${meta.id}.jsonl`));
+          return true;
+        } catch {
+          return false;
+        }
+      }),
+    );
+    return metas.filter((_, index) => checks[index]);
   } catch {
     return [];
   }

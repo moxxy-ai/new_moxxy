@@ -42,6 +42,7 @@ export { ChannelRegistryImpl } from './registries/channels.js';
 export { AgentRegistry } from './registries/agents.js';
 export { CommandRegistry } from './registries/commands.js';
 export { TranscriberRegistry } from './registries/transcribers.js';
+export { RequirementRegistry, type RequirementRegistryOptions } from './requirements.js';
 export {
   SessionPersistence,
   defaultSessionsDir,
@@ -51,7 +52,14 @@ export {
   type SessionMeta,
   type SessionPersistenceOpts,
 } from './sessions/persistence.js';
-export { PluginHost, type PluginLoader } from './plugins/host.js';
+export {
+  PluginHost,
+  PluginRequirementError,
+  type PluginLoader,
+  type PluginSkipReason,
+  type PluginSkipRecord,
+  type PluginSkipSource,
+} from './plugins/host.js';
 export { HookDispatcherImpl } from './plugins/lifecycle.js';
 export { discoverPlugins } from './plugins/discovery.js';
 export { createPluginLoader, type JitiLoaderOptions } from './plugins/loader.js';

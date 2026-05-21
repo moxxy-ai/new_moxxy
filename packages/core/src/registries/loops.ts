@@ -1,8 +1,14 @@
 import type { LoopStrategyDef } from '@moxxy/sdk';
+import { assertRequirementsReady, type RequirementChecker } from '../requirements.js';
 
 export class LoopRegistry {
   private readonly strategies = new Map<string, LoopStrategyDef>();
   private active: string | null = null;
+  private requirementChecker?: RequirementChecker;
+
+  setRequirementChecker(checker: RequirementChecker): void {
+    this.requirementChecker = checker;
+  }
 
   /**
    * Register a strategy. Throws on duplicate — use `replace()` for
@@ -14,12 +20,12 @@ export class LoopRegistry {
       throw new Error(`Loop strategy already registered: ${strategy.name}`);
     }
     this.strategies.set(strategy.name, strategy);
-    if (!this.active) this.active = strategy.name;
+    if (!this.active) this.activate(strategy);
   }
 
   replace(strategy: LoopStrategyDef): void {
     this.strategies.set(strategy.name, strategy);
-    if (!this.active) this.active = strategy.name;
+    if (!this.active) this.activate(strategy);
   }
 
   /**
@@ -37,8 +43,9 @@ export class LoopRegistry {
   }
 
   setActive(name: string): void {
-    if (!this.strategies.has(name)) throw new Error(`Loop strategy not registered: ${name}`);
-    this.active = name;
+    const strategy = this.strategies.get(name);
+    if (!strategy) throw new Error(`Loop strategy not registered: ${name}`);
+    this.activate(strategy);
   }
 
   getActive(): LoopStrategyDef {
@@ -46,5 +53,10 @@ export class LoopRegistry {
     const s = this.strategies.get(this.active);
     if (!s) throw new Error(`Active loop strategy missing: ${this.active}`);
     return s;
+  }
+
+  private activate(strategy: LoopStrategyDef): void {
+    assertRequirementsReady(`loop: ${strategy.name}`, strategy.requirements, this.requirementChecker);
+    this.active = strategy.name;
   }
 }

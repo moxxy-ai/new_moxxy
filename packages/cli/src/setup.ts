@@ -100,8 +100,12 @@ export async function setupSessionWithConfig(opts: SetupOptions): Promise<SetupR
     },
   ];
 
-  const { registered } = await registerPlugins(session, config, builtins, opts.cwd, logger);
-  progress({ kind: 'plugins-registered', count: registered.size });
+  const pluginRegistration = await registerPlugins(session, config, builtins, opts.cwd, logger);
+  progress({
+    kind: 'plugins-registered',
+    count: pluginRegistration.registered.size,
+    skipped: pluginRegistration.skipped.length,
+  });
 
   const { credentialResolver } = await activateProvider({
     session,
@@ -153,6 +157,7 @@ export async function setupSessionWithConfig(opts: SetupOptions): Promise<SetupR
     webhooks,
     persistence,
     security,
+    pluginRegistration,
   };
 }
 

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   buildFfmpegArgs,
+  checkVoiceCaptureAvailable,
   startVoiceRecording,
 } from './voice-input.js';
 
@@ -24,6 +25,25 @@ const { readFileSync } = require('node:fs');
 process.stdout.write(Buffer.from([1, 2, 3, 4]), () => {
   readFileSync(0);
 });
+`,
+    { mode: 0o755 },
+  );
+  await chmod(executable, 0o755);
+  return executable;
+}
+
+async function makeFakeFfmpegVersion(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), 'moxxy-ffmpeg-version-'));
+  tempDirs.push(dir);
+  const executable = path.join(dir, 'ffmpeg');
+  await writeFile(
+    executable,
+    `#!/usr/bin/env node
+if (process.argv.includes('-version')) {
+  process.stdout.write('ffmpeg version test');
+  process.exit(0);
+}
+process.exit(1);
 `,
     { mode: 0o755 },
   );
@@ -98,5 +118,31 @@ describe('startVoiceRecording', () => {
     await expect(startVoiceRecording({ command: '/definitely/missing/ffmpeg', platform: 'darwin' }))
       .rejects
       .toThrow(/ffmpeg/i);
+  });
+});
+
+describe('checkVoiceCaptureAvailable', () => {
+  it('reports ffmpeg capture as ready when the executable responds', async () => {
+    const executable = await makeFakeFfmpegVersion();
+
+    await expect(checkVoiceCaptureAvailable({ command: executable })).resolves.toEqual({
+      ready: true,
+      issues: [],
+    });
+  });
+
+  it('returns a requirement issue when ffmpeg is missing', async () => {
+    await expect(
+      checkVoiceCaptureAvailable({ command: '/definitely/missing/ffmpeg', timeoutMs: 500 }),
+    ).resolves.toMatchObject({
+      ready: false,
+      issues: [
+        {
+          requirement: { kind: 'runtime', name: 'voice:capture:ffmpeg', state: 'ready' },
+          code: 'not_ready',
+          message: 'ffmpeg is required for voice input',
+        },
+      ],
+    });
   });
 });

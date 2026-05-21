@@ -57,6 +57,33 @@ describe('TranscriberRegistry', () => {
     expect(() => reg.setActive('nope')).toThrow(/not registered/);
   });
 
+  it('setActive refuses transcribers whose requirements are not ready', () => {
+    const reg = new TranscriberRegistry({
+      check: () => ({
+        ready: false,
+        issues: [
+          {
+            requirement: { kind: 'provider', name: 'openai-codex', state: 'active' },
+            code: 'inactive',
+            message: 'Required provider is not active: openai-codex',
+          },
+        ],
+      }),
+    });
+    reg.register(
+      defineTranscriber({
+        name: 'openai-codex-transcribe',
+        requirements: [{ kind: 'provider', name: 'openai-codex', state: 'active' }],
+        createClient: () => ({ name: 'openai-codex-transcribe', transcribe: async () => ({ text: '' }) }),
+      }),
+    );
+
+    expect(() => reg.setActive('openai-codex-transcribe')).toThrow(
+      /Required provider is not active: openai-codex/,
+    );
+    expect(reg.getActiveName()).toBeNull();
+  });
+
   it('replace overwrites def and drops cached instance', () => {
     const reg = new TranscriberRegistry();
     reg.register(fake('whisper', 'old'));

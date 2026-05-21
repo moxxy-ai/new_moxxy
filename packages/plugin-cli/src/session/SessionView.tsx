@@ -274,6 +274,7 @@ export const SessionView: React.FC<SessionViewProps> = ({
         pendingApproval={pendingApproval}
         picker={picker}
         busy={turn.busy}
+        voiceReady={voice.ready}
         yolo={yolo}
         slashCommands={slashSuggestions}
         queueMessages={turn.queueRef.current}

@@ -6,6 +6,7 @@ import type { MemoryStore } from '@moxxy/plugin-memory';
 import type { SchedulerPoller, ScheduleStore } from '@moxxy/plugin-scheduler';
 import type { WebhookConfigStore, WebhookStore } from '@moxxy/plugin-webhooks';
 import type { SecurityPluginHandle } from '@moxxy/plugin-security';
+import type { RegistrationResult } from './register-plugins.js';
 
 export interface SetupOptions {
   readonly cwd: string;
@@ -60,7 +61,7 @@ export interface SetupOptions {
  */
 export type BootStep =
   | { kind: 'config-loaded'; sources: number }
-  | { kind: 'plugins-registered'; count: number }
+  | { kind: 'plugins-registered'; count: number; skipped?: number }
   | { kind: 'provider-activated'; name: string }
   | { kind: 'provider-failed'; tried: ReadonlyArray<string>; error: string }
   | { kind: 'prefs-applied' }
@@ -92,4 +93,6 @@ export interface SetupResult {
    *  status; `registry` exposes the available `Isolator` impls. The
    *  plugin itself is a no-op until `security.enabled: true`. */
   readonly security: SecurityPluginHandle;
+  /** Static + discovered plugin registration summary, including skipped plugins with unmet requirements. */
+  readonly pluginRegistration: RegistrationResult;
 }

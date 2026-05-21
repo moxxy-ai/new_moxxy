@@ -22,14 +22,14 @@ const callCtx: ToolCallContext = {
 };
 
 describe('HookDispatcherImpl', () => {
-  it('fires onInit in topo order', async () => {
+  it('fires onInit in plugin registration order', async () => {
     const order: string[] = [];
     const a = definePlugin({ name: 'a', hooks: { onInit: () => void order.push('a') } });
-    const b = definePlugin({ name: 'b', dependsOn: ['a'], hooks: { onInit: () => void order.push('b') } });
+    const b = definePlugin({ name: 'b', hooks: { onInit: () => void order.push('b') } });
     const d = new HookDispatcherImpl({ logger: silentLogger });
     d.setPlugins([b, a]);
     await d.dispatchInit(appCtx);
-    expect(order).toEqual(['a', 'b']);
+    expect(order).toEqual(['b', 'a']);
   });
 
   it('short-circuits onToolCall on first deny', async () => {
@@ -45,7 +45,6 @@ describe('HookDispatcherImpl', () => {
     });
     const deny = definePlugin({
       name: 'deny',
-      dependsOn: ['allow'],
       hooks: {
         onToolCall: () => {
           calls.push('deny');
@@ -55,7 +54,6 @@ describe('HookDispatcherImpl', () => {
     });
     const after = definePlugin({
       name: 'after',
-      dependsOn: ['deny'],
       hooks: { onToolCall: () => void calls.push('after') },
     });
     const d = new HookDispatcherImpl({ logger: silentLogger });
@@ -74,18 +72,17 @@ describe('HookDispatcherImpl', () => {
     });
     const p2 = definePlugin({
       name: 'p2',
-      dependsOn: ['p1'],
       hooks: {
         onBeforeProviderCall: (req) => ({ ...req, system: (req.system ?? '') + '[p2]' }),
       },
     });
     const d = new HookDispatcherImpl({ logger: silentLogger });
-    d.setPlugins([p1, p2]);
+    d.setPlugins([p2, p1]);
     const out = await d.dispatchBeforeProviderCall(
       { model: 'm', messages: [], system: '' },
       turnCtx,
     );
-    expect(out.system).toBe('[p1][p2]');
+    expect(out.system).toBe('[p2][p1]');
   });
 
   it('logs and continues when a hook throws', async () => {
@@ -98,17 +95,10 @@ describe('HookDispatcherImpl', () => {
         },
       },
     });
-    const good = definePlugin({ name: 'good', dependsOn: ['bad'], hooks: { onInit: () => {} } });
+    const good = definePlugin({ name: 'good', hooks: { onInit: () => {} } });
     const d = new HookDispatcherImpl({ logger: silentLogger, onHookFailed: failed });
     d.setPlugins([bad, good]);
     await d.dispatchInit(appCtx);
     expect(failed).toHaveBeenCalledOnce();
-  });
-
-  it('detects dependency cycles', () => {
-    const a = definePlugin({ name: 'a', dependsOn: ['b'] });
-    const b = definePlugin({ name: 'b', dependsOn: ['a'] });
-    const d = new HookDispatcherImpl({ logger: silentLogger });
-    expect(() => d.setPlugins([a, b])).toThrow(/cycle/);
   });
 });

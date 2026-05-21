@@ -51,6 +51,41 @@ export interface BuiltinEntry {
   readonly plugin: Plugin;
 }
 
+export interface BuiltinRequirementDecision {
+  readonly hardRequirements: boolean;
+  readonly reason: string;
+}
+
+export const BUILTIN_REQUIREMENT_DECISIONS: Readonly<Record<string, BuiltinRequirementDecision>> = {
+  '@moxxy/plugin-provider-anthropic': { hardRequirements: false, reason: 'provider is independently activatable' },
+  '@moxxy/plugin-provider-openai': { hardRequirements: false, reason: 'provider is independently activatable' },
+  '@moxxy/plugin-provider-openai-codex': { hardRequirements: false, reason: 'provider owns its OAuth flow' },
+  '@moxxy/tools-builtin': { hardRequirements: false, reason: 'core tool pack has no plugin dependency' },
+  '@moxxy/loop-tool-use': { hardRequirements: false, reason: 'loop strategy has no plugin dependency' },
+  '@moxxy/loop-plan-execute': { hardRequirements: false, reason: 'loop strategy has no plugin dependency' },
+  '@moxxy/loop-bmad': { hardRequirements: false, reason: 'loop strategy has no plugin dependency' },
+  '@moxxy/compactor-summarize': { hardRequirements: false, reason: 'compactor has no plugin dependency' },
+  '@moxxy/plugin-vault': { hardRequirements: false, reason: 'vault is the base secret store' },
+  '@moxxy/plugin-stt-openai-codex': { hardRequirements: true, reason: 'requires Codex provider and OAuth readiness' },
+  '@moxxy/plugin-memory': { hardRequirements: false, reason: 'memory store is created by bootstrap' },
+  '@moxxy/memory-consolidate': { hardRequirements: true, reason: 'requires @moxxy/plugin-memory contributions' },
+  '@moxxy/plugin-cli': { hardRequirements: false, reason: 'TUI channel is standalone' },
+  '@moxxy/plugin-channel-http': { hardRequirements: false, reason: 'HTTP channel is standalone' },
+  '@moxxy/plugin-telegram': { hardRequirements: false, reason: 'vault is injected by bootstrap closure' },
+  '@moxxy/plugin-browser': { hardRequirements: false, reason: 'browser runtime is diagnosed at tool/runtime level' },
+  '@moxxy/plugin-computer-control': { hardRequirements: false, reason: 'platform constraints are handled by tools' },
+  '@moxxy/plugin-oauth': { hardRequirements: false, reason: 'vault is injected by bootstrap closure' },
+  '@moxxy/plugin-commands': { hardRequirements: false, reason: 'slash commands have no plugin dependency' },
+  '@moxxy/plugin-subagents': { hardRequirements: false, reason: 'agent registry is injected by closure' },
+  '@moxxy/plugin-plugins-admin': { hardRequirements: false, reason: 'plugin host access is injected by closure' },
+  '@moxxy/plugin-mcp-admin': { hardRequirements: false, reason: 'tool and skill registries are injected by closure' },
+  '@moxxy/synthesize-skill': { hardRequirements: false, reason: 'session access is injected by closure' },
+  '@moxxy/plugin-scheduler': { hardRequirements: false, reason: 'runner and skills registry are injected by closure' },
+  '@moxxy/plugin-webhooks': { hardRequirements: false, reason: 'runner is injected by closure' },
+  '@moxxy/plugin-security': { hardRequirements: false, reason: 'disabled by default and configured at runtime' },
+  '@moxxy/plugin-config': { hardRequirements: false, reason: 'config applier is injected by bootstrap closure' },
+};
+
 export interface BuildBuiltinsArgs {
   readonly session: Session;
   readonly rawConfig: MoxxyConfig;

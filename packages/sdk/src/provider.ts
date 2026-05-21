@@ -1,4 +1,5 @@
 import type { ToolDef } from './tool.js';
+import type { MoxxyRequirement } from './requirements.js';
 
 export interface ProviderMessage {
   readonly role: 'system' | 'user' | 'assistant' | 'tool_result';
@@ -161,6 +162,7 @@ export interface ProviderOAuthStatus {
 
 export interface ProviderDef {
   readonly name: string;
+  readonly requirements?: ReadonlyArray<MoxxyRequirement>;
   readonly models: ReadonlyArray<ModelDescriptor>;
   createClient(config: Record<string, unknown>): LLMProvider;
   /**

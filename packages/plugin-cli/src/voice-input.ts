@@ -1,5 +1,8 @@
 import { Buffer } from 'node:buffer';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import type { RequirementCheck, RequirementIssue } from '@moxxy/sdk';
+
+export const VOICE_CAPTURE_RUNTIME = 'voice:capture:ffmpeg';
 
 export interface ActiveVoiceRecording {
   stop(): Promise<Buffer>;
@@ -15,6 +18,12 @@ export interface StartVoiceRecordingOptions {
   readonly platform?: NodeJS.Platform;
   readonly audioDevice?: string;
   readonly stopTimeoutMs?: number;
+  readonly spawnImpl?: typeof spawn;
+}
+
+export interface VoiceCaptureAvailabilityOptions {
+  readonly command?: string;
+  readonly timeoutMs?: number;
   readonly spawnImpl?: typeof spawn;
 }
 
@@ -85,6 +94,54 @@ export async function startVoiceRecording(
       });
       return stopPromise;
     },
+  };
+}
+
+export async function checkVoiceCaptureAvailable(
+  opts: VoiceCaptureAvailabilityOptions = {},
+): Promise<RequirementCheck> {
+  const command = opts.command ?? 'ffmpeg';
+  const child = (opts.spawnImpl ?? spawn)(command, ['-version'], {
+    stdio: ['ignore', 'ignore', 'ignore'],
+  });
+
+  return new Promise<RequirementCheck>((resolve) => {
+    let settled = false;
+    const done = (check: RequirementCheck): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(check);
+    };
+
+    const timer = setTimeout(() => {
+      if (!child.killed) child.kill('SIGKILL');
+      done(unavailableVoiceCaptureCheck());
+    }, opts.timeoutMs ?? 1_500);
+
+    child.once('error', () => done(unavailableVoiceCaptureCheck()));
+    child.once('close', (code) => {
+      done(code === 0 ? { ready: true, issues: [] } : unavailableVoiceCaptureCheck());
+    });
+  });
+}
+
+export function unavailableVoiceCaptureCheck(): RequirementCheck {
+  return {
+    ready: false,
+    issues: [
+      {
+        requirement: {
+          kind: 'runtime',
+          name: VOICE_CAPTURE_RUNTIME,
+          state: 'ready',
+          hint: 'Install ffmpeg and ensure it is available on PATH.',
+        },
+        code: 'not_ready',
+        message: 'ffmpeg is required for voice input',
+        hint: 'Install ffmpeg and ensure it is available on PATH.',
+      } satisfies RequirementIssue,
+    ],
   };
 }
 

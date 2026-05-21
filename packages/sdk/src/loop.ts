@@ -8,6 +8,7 @@ import type { LLMProvider } from './provider.js';
 import type { Skill } from './skill.js';
 import type { SubagentSpawner } from './subagent.js';
 import type { ToolDef } from './tool.js';
+import type { MoxxyRequirement } from './requirements.js';
 
 export interface ToolRegistry {
   list(): ReadonlyArray<ToolDef>;
@@ -107,5 +108,6 @@ export interface ApprovalResolver {
 
 export interface LoopStrategyDef {
   readonly name: string;
+  readonly requirements?: ReadonlyArray<MoxxyRequirement>;
   run(ctx: LoopContext): AsyncIterable<MoxxyEvent>;
 }

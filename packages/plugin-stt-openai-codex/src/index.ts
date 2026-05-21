@@ -30,10 +30,32 @@ export function buildOpenaiCodexSttPlugin(
   return definePlugin({
     name: '@moxxy/plugin-stt-openai-codex',
     version: '0.0.0',
+    requirements: [
+      {
+        kind: 'plugin',
+        name: '@moxxy/plugin-provider-openai-codex',
+        state: 'registered',
+        hint: 'Enable @moxxy/plugin-provider-openai-codex.',
+      },
+    ],
     transcribers: [
       defineTranscriber({
         name: OPENAI_CODEX_TRANSCRIBER_NAME,
         displayName: 'OpenAI Codex transcription (OAuth)',
+        requirements: [
+          {
+            kind: 'provider',
+            name: 'openai-codex',
+            state: 'active',
+            hint: 'Switch provider to openai-codex.',
+          },
+          {
+            kind: 'runtime',
+            name: 'auth:provider:openai-codex',
+            state: 'ready',
+            hint: 'Run `moxxy login openai-codex`.',
+          },
+        ],
         createClient: (config) => {
           const merged: CodexOAuthTranscriberOptions = {
             vault: opts.vault,

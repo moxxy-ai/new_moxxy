@@ -37,7 +37,7 @@ export class HookDispatcherImpl implements HookDispatcher {
   }
 
   setPlugins(plugins: ReadonlyArray<Plugin>): void {
-    this.entries = topoSort(plugins).map((plugin) => ({ plugin, hooks: plugin.hooks ?? {} }));
+    this.entries = plugins.map((plugin) => ({ plugin, hooks: plugin.hooks ?? {} }));
   }
 
   async dispatchInit(ctx: AppContext): Promise<void> {
@@ -124,29 +124,4 @@ export class HookDispatcherImpl implements HookDispatcher {
       if (timer !== undefined) clearTimeout(timer);
     }
   }
-}
-
-function topoSort(plugins: ReadonlyArray<Plugin>): ReadonlyArray<Plugin> {
-  const byName = new Map<string, Plugin>();
-  for (const p of plugins) byName.set(p.name, p);
-
-  const visited = new Set<string>();
-  const ordered: Plugin[] = [];
-
-  const visit = (p: Plugin, chain: ReadonlyArray<string>): void => {
-    if (visited.has(p.name)) return;
-    if (chain.includes(p.name)) {
-      throw new Error(`Plugin dependency cycle: ${[...chain, p.name].join(' -> ')}`);
-    }
-    for (const depName of p.dependsOn ?? []) {
-      const dep = byName.get(depName);
-      if (!dep) continue;
-      visit(dep, [...chain, p.name]);
-    }
-    visited.add(p.name);
-    ordered.push(p);
-  };
-
-  for (const p of plugins) visit(p, []);
-  return ordered;
 }

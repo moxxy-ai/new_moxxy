@@ -1,4 +1,5 @@
 import type { Transcriber, TranscriberDef } from '@moxxy/sdk';
+import { assertRequirementsReady, type RequirementChecker } from '../requirements.js';
 
 /**
  * Registry of speech-to-text backends. Mirrors `ProviderRegistry`:
@@ -15,6 +16,12 @@ export class TranscriberRegistry {
   private readonly defs = new Map<string, TranscriberDef>();
   private readonly instances = new Map<string, Transcriber>();
   private active: string | null = null;
+
+  constructor(private requirementChecker?: RequirementChecker) {}
+
+  setRequirementChecker(checker: RequirementChecker): void {
+    this.requirementChecker = checker;
+  }
 
   register(def: TranscriberDef, instance?: Transcriber): void {
     if (this.defs.has(def.name)) {
@@ -47,6 +54,7 @@ export class TranscriberRegistry {
   setActive(name: string, config?: Record<string, unknown>): Transcriber {
     const def = this.defs.get(name);
     if (!def) throw new Error(`Transcriber not registered: ${name}`);
+    this.assertRequirementsReady(def);
     let instance = this.instances.get(name);
     if (!instance) {
       instance = def.createClient(config ?? {});
@@ -71,5 +79,9 @@ export class TranscriberRegistry {
 
   getActiveName(): string | null {
     return this.active;
+  }
+
+  private assertRequirementsReady(def: TranscriberDef): void {
+    assertRequirementsReady(`transcriber: ${def.name}`, def.requirements, this.requirementChecker);
   }
 }

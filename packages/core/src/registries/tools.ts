@@ -1,6 +1,7 @@
 import type { EventLogReader, SubagentSpawner, ToolContext, ToolDef } from '@moxxy/sdk';
 import type { Logger } from '../logger.js';
 import { asToolCallId, asSessionId, asTurnId } from '@moxxy/sdk';
+import { assertRequirementsReady, type RequirementChecker } from '../requirements.js';
 
 export interface ToolRegistry {
   list(): ReadonlyArray<ToolDef>;
@@ -8,6 +9,7 @@ export interface ToolRegistry {
   has(name: string): boolean;
   register(tool: ToolDef): void;
   unregister(name: string): void;
+  setRequirementChecker(checker: RequirementChecker): void;
   execute(name: string, input: unknown, signal: AbortSignal, opts?: ExecuteOptions): Promise<unknown>;
 }
 
@@ -30,6 +32,7 @@ export class ToolRegistryImpl implements ToolRegistry {
   private readonly tools = new Map<string, ToolDef>();
   private readonly defaultLogger: Logger;
   private readonly defaultCwd: string;
+  private requirementChecker?: RequirementChecker;
 
   constructor(opts: { logger: Logger; cwd: string }) {
     this.defaultLogger = opts.logger;
@@ -46,6 +49,10 @@ export class ToolRegistryImpl implements ToolRegistry {
 
   has(name: string): boolean {
     return this.tools.has(name);
+  }
+
+  setRequirementChecker(checker: RequirementChecker): void {
+    this.requirementChecker = checker;
   }
 
   register(tool: ToolDef): void {
@@ -67,6 +74,7 @@ export class ToolRegistryImpl implements ToolRegistry {
   ): Promise<unknown> {
     const tool = this.tools.get(name);
     if (!tool) throw new Error(`Unknown tool: ${name}`);
+    assertRequirementsReady(`tool: ${tool.name}`, tool.requirements, this.requirementChecker);
     // Use safeParse so a validation failure surfaces as a clean,
     // single-line error in the tool_result instead of the raw ZodError
     // (which JSON-stringifies into 20+ lines of red noise — observed

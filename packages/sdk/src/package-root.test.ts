@@ -17,4 +17,24 @@ describe('@moxxy/sdk package root', () => {
     expect(def.name).toBe('package-root-transcriber');
     expect(Object.isFrozen(def)).toBe(true);
   });
+
+  it('exports requirement types through package root declarations', async () => {
+    const requirement: import('@moxxy/sdk').MoxxyRequirement = {
+      kind: 'runtime',
+      name: 'auth:provider:openai-codex',
+      state: 'ready',
+    };
+    const check: import('@moxxy/sdk').RequirementCheck = {
+      ready: false,
+      issues: [
+        {
+          requirement,
+          code: 'not_ready',
+          message: 'OAuth is not ready',
+        },
+      ],
+    };
+
+    expect(check.issues[0]?.requirement.name).toBe('auth:provider:openai-codex');
+  });
 });

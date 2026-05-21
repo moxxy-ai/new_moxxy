@@ -173,6 +173,14 @@ export type { EmbeddingProvider } from './embedding.js';
 export { CachedEmbeddingProvider } from './embedding-cache.js';
 
 export type {
+  RequirementKind,
+  RequirementState,
+  MoxxyRequirement,
+  RequirementIssue,
+  RequirementCheck,
+} from './requirements.js';
+
+export type {
   Transcriber,
   TranscriberDef,
   TranscriptionResult,
@@ -199,6 +207,7 @@ export {
 export {
   skillFrontmatterSchema,
   pluginManifestSchema,
+  requirementSchema,
   type SkillFrontmatterInput,
   type PluginManifestInput,
 } from './schemas.js';

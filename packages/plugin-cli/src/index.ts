@@ -25,6 +25,12 @@ export {
   type SetupSelections,
 } from './setup-yaml.js';
 export {
+  checkVoiceCaptureAvailable,
+  unavailableVoiceCaptureCheck,
+  VOICE_CAPTURE_RUNTIME,
+  type VoiceCaptureAvailabilityOptions,
+} from './voice-input.js';
+export {
   loadPreferences,
   savePreferences,
   preferencesPath,

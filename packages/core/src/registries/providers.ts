@@ -1,9 +1,15 @@
 import type { LLMProvider, ProviderDef } from '@moxxy/sdk';
+import { assertRequirementsReady, type RequirementChecker } from '../requirements.js';
 
 export class ProviderRegistry {
   private readonly defs = new Map<string, ProviderDef>();
   private readonly instances = new Map<string, LLMProvider>();
   private active: string | null = null;
+  private requirementChecker?: RequirementChecker;
+
+  setRequirementChecker(checker: RequirementChecker): void {
+    this.requirementChecker = checker;
+  }
 
   /**
    * Register a provider def. Throws on duplicate — use `replace()` for
@@ -37,6 +43,7 @@ export class ProviderRegistry {
   setActive(name: string, config?: Record<string, unknown>): LLMProvider {
     const def = this.defs.get(name);
     if (!def) throw new Error(`Provider not registered: ${name}`);
+    assertRequirementsReady(`provider: ${def.name}`, def.requirements, this.requirementChecker);
     let instance = this.instances.get(name);
     if (!instance) {
       instance = def.createClient(config ?? {});

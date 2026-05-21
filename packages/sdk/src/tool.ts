@@ -4,6 +4,7 @@ import type { PermissionRule } from './permission.js';
 import type { SessionId, ToolCallId, TurnId } from './ids.js';
 import type { SubagentSpawner } from './subagent.js';
 import type { ToolIsolationSpec } from './isolation.js';
+import type { MoxxyRequirement } from './requirements.js';
 
 /**
  * Capability-mediated filesystem operations injected by isolators that
@@ -153,6 +154,7 @@ export interface ToolCompactPresentation {
 export interface ToolDef {
   readonly name: string;
   readonly description: string;
+  readonly requirements?: ReadonlyArray<MoxxyRequirement>;
   readonly inputSchema: z.ZodTypeAny;
   /**
    * Optional native JSON Schema. When present, providers serializing tools to

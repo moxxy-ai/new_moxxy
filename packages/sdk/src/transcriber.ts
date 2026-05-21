@@ -18,6 +18,8 @@
  *     used by models that advertise `supportsAudio: true`.
  */
 
+import type { MoxxyRequirement } from './requirements.js';
+
 export interface TranscriptionSegment {
   /** Segment start, in seconds from the start of the clip. */
   readonly start: number;
@@ -67,5 +69,6 @@ export interface TranscriberDef {
   readonly name: string;
   /** Optional human-readable label for UI surfaces. */
   readonly displayName?: string;
+  readonly requirements?: ReadonlyArray<MoxxyRequirement>;
   createClient(config: Record<string, unknown>): Transcriber;
 }

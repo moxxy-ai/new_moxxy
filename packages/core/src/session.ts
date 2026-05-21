@@ -12,6 +12,7 @@ import { ToolRegistryImpl, type ToolRegistry } from './registries/tools.js';
 import { AgentRegistry } from './registries/agents.js';
 import { CommandRegistry } from './registries/commands.js';
 import { TranscriberRegistry } from './registries/transcribers.js';
+import { RequirementRegistry } from './requirements.js';
 import { PermissionEngine } from './permissions/engine.js';
 import { autoAllowResolver } from './permissions/resolvers.js';
 import type {
@@ -59,6 +60,7 @@ export class Session {
   readonly agents: AgentRegistry;
   readonly commands: CommandRegistry;
   readonly transcribers: TranscriberRegistry;
+  readonly requirements: RequirementRegistry;
   readonly permissions: PermissionEngine;
   /** Current PermissionResolver. Update via `setPermissionResolver(r)`. */
   resolver: PermissionResolver;
@@ -88,6 +90,21 @@ export class Session {
     this.agents = new AgentRegistry();
     this.commands = new CommandRegistry();
     this.transcribers = new TranscriberRegistry();
+    this.requirements = new RequirementRegistry({
+      tools: this.tools,
+      providers: this.providers,
+      loops: this.loops,
+      compactors: this.compactors,
+      channels: this.channels,
+      agents: this.agents,
+      commands: this.commands,
+      transcribers: this.transcribers,
+    });
+    this.tools.setRequirementChecker(this.requirements);
+    this.providers.setRequirementChecker(this.requirements);
+    this.loops.setRequirementChecker(this.requirements);
+    this.compactors.setRequirementChecker(this.requirements);
+    this.transcribers.setRequirementChecker(this.requirements);
     this.permissions = opts.permissionEngine ?? new PermissionEngine();
     // Always wrap the user-supplied resolver with the persistent
     // policy engine, so saved `allow_always` / `deny` rules from
@@ -114,6 +131,7 @@ export class Session {
       agents: this.agents,
       commands: this.commands,
       transcribers: this.transcribers,
+      requirements: this.requirements,
       dispatcher: this.dispatcher,
       loader: opts.pluginLoader,
     });

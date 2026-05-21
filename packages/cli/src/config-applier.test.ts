@@ -46,6 +46,16 @@ function makeBuiltin(name: string): { name: string; plugin: Plugin } {
   };
 }
 
+function makeBuiltinWithRequirement(name: string): { name: string; plugin: Plugin } {
+  return {
+    name,
+    plugin: definePlugin({
+      name,
+      requirements: [{ kind: 'plugin', name: '@test/missing-base', hint: 'Enable @test/missing-base.' }],
+    }),
+  };
+}
+
 describe('buildSessionConfigApplier', () => {
   it('changes to `loop` are applied immediately', async () => {
     const session = makeSession();
@@ -108,6 +118,23 @@ describe('buildSessionConfigApplier', () => {
 
     expect(r.applied).toContain('plugins[@test/plugin-x].enabled=true');
     expect(session.pluginHost.list().some((p) => p.name === '@test/plugin-x')).toBe(true);
+  });
+
+  it('reports plugin enablement as pending when requirements are missing', async () => {
+    const session = makeSession();
+    const entry = makeBuiltinWithRequirement('@test/needs-base');
+    const apply = buildSessionConfigApplier(
+      session,
+      { plugins: { '@test/needs-base': { enabled: false } } },
+      [entry],
+    );
+
+    const r = await apply({ plugins: { '@test/needs-base': { enabled: true } } });
+
+    expect(r.applied).not.toContain('plugins[@test/needs-base].enabled=true');
+    expect(r.pending).toContain(
+      'plugins[@test/needs-base].enabled=true (Required plugin is not registered: @test/missing-base)',
+    );
   });
 
   it('toggle is a no-op when the plugin has no builtin entry registered with the applier', async () => {

@@ -62,10 +62,12 @@ describe('WhisperTranscriber', () => {
 
   it('plugin registers a transcriber whose createClient yields the right name', () => {
     const plugin = buildWhisperPlugin({});
+    expect(plugin.requirements).toBeUndefined();
     expect(plugin.transcribers).toHaveLength(1);
     const def = plugin.transcribers![0]!;
     expect(def.name).toBe('openai-whisper-1');
     expect(def.displayName).toBe('OpenAI whisper-1');
+    expect(def.requirements).toBeUndefined();
     const inst = def.createClient({ apiKey: 'sk-test' });
     expect(inst.name).toBe('openai-whisper-1');
   });

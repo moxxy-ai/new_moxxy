@@ -61,7 +61,7 @@ export default definePlugin({
 });
 ```
 
-Hook ordering is topologically sorted by `dependsOn`. `onToolCall` short-circuits on first deny.
+Hook ordering follows plugin registration order. Use `requirements` to describe availability/readiness, not hook ordering. `onToolCall` short-circuits on first deny.
 
 ## Don't
 

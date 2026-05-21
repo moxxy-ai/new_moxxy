@@ -105,14 +105,19 @@ export async function activateProvider(args: ActivateProviderArgs): Promise<Acti
   // failures leave the provider out of the ready set. The currently
   // activated provider is auto-included.
   const readyProviders = new Set<string>();
-  if (activated) readyProviders.add(activated.name);
+  if (activated) {
+    readyProviders.add(activated.name);
+    session.requirements.setRuntime(`auth:provider:${activated.name}`, 'ready');
+  }
   for (const p of session.providers.list()) {
     if (readyProviders.has(p.name)) continue;
     try {
       await resolveProviderCredentials(p.name, vault, { interactive: false });
       readyProviders.add(p.name);
+      session.requirements.setRuntime(`auth:provider:${p.name}`, 'ready');
     } catch {
       // not ready — leave out
+      session.requirements.clearRuntime(`auth:provider:${p.name}`);
     }
   }
   (session as unknown as { readyProviders: Set<string> }).readyProviders = readyProviders;

@@ -10,9 +10,12 @@
  * agents via `PluginSpec.agents`, and the core's `AgentRegistry`
  * surfaces them at runtime.
  */
+import type { MoxxyRequirement } from './requirements.js';
+
 export interface AgentDef {
   /** Stable name; what `dispatch_agent({ agentType })` looks up. */
   readonly name: string;
+  readonly requirements?: ReadonlyArray<MoxxyRequirement>;
   /** One-line user-visible summary — surfaced in the `/agents` modal. */
   readonly description: string;
   /**

@@ -1,9 +1,12 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Session } from '@moxxy/core';
-import type { Transcriber } from '@moxxy/sdk';
+import type { RequirementCheck, RequirementIssue, Transcriber } from '@moxxy/sdk';
 import type { ExternalInsert } from '../components/prompt/external-insert.js';
 import {
   startVoiceRecording,
+  checkVoiceCaptureAvailable,
+  unavailableVoiceCaptureCheck,
+  VOICE_CAPTURE_RUNTIME,
   type ActiveVoiceRecording,
   type StartVoiceRecordingOptions,
 } from '../voice-input.js';
@@ -15,10 +18,12 @@ export interface UseVoiceInputOptions {
   readonly session: Session;
   readonly setSystemNotice: (notice: string | null) => void;
   readonly startRecording?: (opts?: StartVoiceRecordingOptions) => Promise<ActiveVoiceRecording>;
+  readonly checkCaptureAvailable?: () => Promise<RequirementCheck>;
 }
 
 export interface VoiceInputState {
   readonly externalInsert?: ExternalInsert;
+  readonly ready: boolean;
   readonly toggleVoiceInput: () => void;
 }
 
@@ -27,10 +32,31 @@ type VoicePhase = 'idle' | 'recording' | 'transcribing';
 export function useVoiceInput(opts: UseVoiceInputOptions): VoiceInputState {
   const { session, setSystemNotice } = opts;
   const startRecording = opts.startRecording ?? startVoiceRecording;
+  const checkCaptureAvailable = opts.checkCaptureAvailable ?? checkVoiceCaptureAvailable;
   const phaseRef = useRef<VoicePhase>('idle');
   const recordingRef = useRef<ActiveVoiceRecording | null>(null);
   const insertIdRef = useRef(0);
   const [externalInsert, setExternalInsert] = useState<ExternalInsert | undefined>();
+  const [captureReadiness, setCaptureReadiness] = useState<RequirementCheck>(() =>
+    unavailableVoiceCaptureCheck(),
+  );
+  const readiness = combineVoiceInputReadiness(checkCodexVoiceInputReady(session), captureReadiness);
+  const ready = readiness.ready;
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const next = await checkCaptureAvailable();
+        if (!cancelled) setCaptureReadiness(next);
+      } catch {
+        if (!cancelled) setCaptureReadiness(unavailableVoiceCaptureCheck());
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [checkCaptureAvailable]);
 
   const toggleVoiceInput = useCallback(() => {
     void (async () => {
@@ -47,7 +73,7 @@ export function useVoiceInput(opts: UseVoiceInputOptions): VoiceInputState {
         try {
           if (!recording) throw new Error('voice recorder is not running');
           const pcm = await recording.stop();
-          const transcriber = resolveTranscriber(session);
+          const transcriber = resolveCodexTranscriber(session);
           const result = await transcriber.transcribe(pcm, {
             mimeType: MOXXY_PCM16_24KHZ_MIME,
           });
@@ -69,6 +95,14 @@ export function useVoiceInput(opts: UseVoiceInputOptions): VoiceInputState {
       }
 
       try {
+        const readiness = combineVoiceInputReadiness(
+          checkCodexVoiceInputReady(session),
+          captureReadiness,
+        );
+        if (!readiness.ready) {
+          setSystemNotice(formatVoiceReadinessNotice(readiness));
+          return;
+        }
         recordingRef.current = await startRecording();
         phaseRef.current = 'recording';
         setSystemNotice('voice: recording, press Ctrl+R to stop');
@@ -78,20 +112,73 @@ export function useVoiceInput(opts: UseVoiceInputOptions): VoiceInputState {
         setSystemNotice(formatVoiceError(err));
       }
     })();
-  }, [session, setSystemNotice, startRecording]);
+  }, [captureReadiness, session, setSystemNotice, startRecording]);
 
-  return { externalInsert, toggleVoiceInput };
+  return { externalInsert, ready, toggleVoiceInput };
 }
 
-function resolveTranscriber(session: Session): Transcriber {
-  const active = session.transcribers.tryGetActive();
-  if (active) return active;
+export function checkCodexVoiceInputReady(session: Session): RequirementCheck {
+  const check = session.requirements.isReady('transcriber', CODEX_TRANSCRIBER_NAME);
+  const activeName = session.transcribers.getActiveName();
+  if (!activeName || activeName === CODEX_TRANSCRIBER_NAME) return check;
+
+  const conflict: RequirementIssue = {
+    requirement: {
+      kind: 'transcriber',
+      name: CODEX_TRANSCRIBER_NAME,
+      state: 'active',
+      hint: `Switch active transcriber to ${CODEX_TRANSCRIBER_NAME}.`,
+    },
+    code: 'inactive',
+    message: `Required active transcriber ${CODEX_TRANSCRIBER_NAME}; active is ${activeName}`,
+    hint: `Switch active transcriber to ${CODEX_TRANSCRIBER_NAME}.`,
+  };
+  return {
+    ready: false,
+    issues: [conflict, ...check.issues],
+  };
+}
+
+export function combineVoiceInputReadiness(
+  codexCheck: RequirementCheck,
+  captureCheck: RequirementCheck,
+): RequirementCheck {
+  return {
+    ready: codexCheck.ready && captureCheck.ready,
+    issues: [...codexCheck.issues, ...captureCheck.issues],
+  };
+}
+
+export function resolveCodexTranscriber(session: Session): Transcriber {
+  const activeName = session.transcribers.getActiveName();
+  if (activeName && activeName !== CODEX_TRANSCRIBER_NAME) {
+    throw new Error(`Codex voice requires active transcriber ${CODEX_TRANSCRIBER_NAME}.`);
+  }
+  if (activeName === CODEX_TRANSCRIBER_NAME) return session.transcribers.getActive();
   if (session.transcribers.has(CODEX_TRANSCRIBER_NAME)) {
     return session.transcribers.setActive(CODEX_TRANSCRIBER_NAME);
   }
   throw new Error(
     `No speech-to-text backend is registered. Run \`moxxy login openai-codex\` and restart with the Codex STT plugin enabled.`,
   );
+}
+
+export function formatVoiceReadinessNotice(check: RequirementCheck): string {
+  const issue = check.issues.find((i) => !i.requirement.optional) ?? check.issues[0];
+  if (!issue) return 'voice: unavailable';
+  if (issue.requirement.kind === 'provider' && issue.requirement.name === 'openai-codex') {
+    return 'voice: Codex voice requires active provider openai-codex';
+  }
+  if (issue.requirement.kind === 'runtime' && issue.requirement.name === 'auth:provider:openai-codex') {
+    return 'voice: run moxxy login openai-codex to enable Codex voice';
+  }
+  if (issue.requirement.kind === 'runtime' && issue.requirement.name === VOICE_CAPTURE_RUNTIME) {
+    return 'voice: ffmpeg is required for voice input';
+  }
+  if (issue.requirement.kind === 'transcriber' && issue.code === 'inactive') {
+    return `voice: Codex voice requires active transcriber ${CODEX_TRANSCRIBER_NAME}`;
+  }
+  return `voice: ${issue.hint ?? issue.message}`;
 }
 
 function formatVoiceError(err: unknown): string {

@@ -56,6 +56,40 @@ describe('pluginManifestSchema', () => {
     ]);
   });
 
+  it('accepts every public plugin kind, including transcriber/agent/command', () => {
+    expect(pluginManifestSchema.parse({ entry: 'a', kind: 'transcriber' }).kind).toBe(
+      'transcriber',
+    );
+    expect(pluginManifestSchema.parse({ entry: 'a', kind: ['agent', 'command'] }).kind).toEqual([
+      'agent',
+      'command',
+    ]);
+  });
+
+  it('accepts plugin requirements in package manifests', () => {
+    const parsed = pluginManifestSchema.parse({
+      entry: './dist/index.js',
+      kind: 'transcriber',
+      requirements: [
+        {
+          kind: 'plugin',
+          name: '@moxxy/plugin-provider-openai-codex',
+          state: 'registered',
+          hint: 'Enable @moxxy/plugin-provider-openai-codex.',
+        },
+      ],
+    });
+
+    expect(parsed.requirements).toEqual([
+      {
+        kind: 'plugin',
+        name: '@moxxy/plugin-provider-openai-codex',
+        state: 'registered',
+        hint: 'Enable @moxxy/plugin-provider-openai-codex.',
+      },
+    ]);
+  });
+
   it('rejects unknown kind', () => {
     expect(() => pluginManifestSchema.parse({ entry: 'a', kind: 'weird' })).toThrow();
   });

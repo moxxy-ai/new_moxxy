@@ -1,11 +1,23 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { createPluginLoader, discoverPlugins, type Logger, type Session } from '@moxxy/core';
+import {
+  createPluginLoader,
+  discoverPlugins,
+  PluginRequirementError,
+  type Logger,
+  type PluginSkipRecord,
+  type Session,
+} from '@moxxy/core';
 import type { MoxxyConfig } from '@moxxy/config';
 import type { BuiltinEntry } from './builtins.js';
 
 export interface RegistrationResult {
   readonly registered: ReadonlySet<string>;
+  readonly skipped: ReadonlyArray<PluginSkipRecord>;
+}
+
+export interface RegisterPluginsOptions {
+  readonly discover?: boolean;
 }
 
 /**
@@ -20,6 +32,7 @@ export async function registerPlugins(
   builtins: ReadonlyArray<BuiltinEntry>,
   cwd: string,
   logger: Logger,
+  opts: RegisterPluginsOptions = {},
 ): Promise<RegistrationResult> {
   const registered = new Set<string>();
 
@@ -28,8 +41,20 @@ export async function registerPlugins(
       logger.info('skipping disabled plugin', { plugin: name });
       continue;
     }
-    session.pluginHost.registerStatic(plugin);
-    registered.add(plugin.name);
+    try {
+      session.pluginHost.registerStatic(plugin);
+      registered.add(plugin.name);
+    } catch (err) {
+      if (!(err instanceof PluginRequirementError)) throw err;
+      logger.warn('skipping plugin with unmet requirements', {
+        plugin: name,
+        err: err.message,
+      });
+    }
+  }
+
+  if (opts.discover === false) {
+    return { registered, skipped: session.pluginHost.listSkipped() };
   }
 
   const loader = createPluginLoader({ cwd });
@@ -55,7 +80,7 @@ export async function registerPlugins(
       try {
         const plugin = await loader.load(manifest);
         if (registered.has(plugin.name)) continue;
-        session.pluginHost.registerStatic(plugin);
+        session.pluginHost.registerDiscovered(plugin, manifest);
         registered.add(plugin.name);
         logger.info('auto-loaded plugin', { plugin: plugin.name, from: manifest.packagePath });
       } catch (err) {
@@ -71,5 +96,5 @@ export async function registerPlugins(
     });
   }
 
-  return { registered };
+  return { registered, skipped: session.pluginHost.listSkipped() };
 }

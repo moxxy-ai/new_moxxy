@@ -18,6 +18,7 @@ interface InteractiveZoneProps {
   pendingApproval: PendingApproval | null;
   picker: Picker;
   busy: boolean;
+  voiceReady: boolean;
   yolo: boolean;
   slashCommands: ReadonlyArray<SlashCommand>;
   /** Live queue contents for the always-visible QueueView. */
@@ -50,6 +51,7 @@ export const InteractiveZone: React.FC<InteractiveZoneProps> = ({
   pendingApproval,
   picker,
   busy,
+  voiceReady,
   yolo,
   slashCommands,
   queueMessages,
@@ -103,7 +105,7 @@ export const InteractiveZone: React.FC<InteractiveZoneProps> = ({
         disabled={false}
         yolo={yolo}
         slashCommands={slashCommands}
-        placeholder={buildPromptPlaceholder(busy)}
+        placeholder={buildPromptPlaceholder(busy, voiceReady)}
         onPasteText={onPasteText}
         commandHotkeys={commandHotkeys}
         externalInsert={externalInsert}
@@ -112,8 +114,7 @@ export const InteractiveZone: React.FC<InteractiveZoneProps> = ({
   );
 };
 
-export function buildPromptPlaceholder(busy: boolean): string {
-  return busy
-    ? 'type to queue a message — sent after the current turn (ctrl+t to force-send first)'
-    : 'type a prompt, / for commands, Ctrl+R voice';
+export function buildPromptPlaceholder(busy: boolean, voiceReady = true): string {
+  if (busy) return 'type to queue a message — sent after the current turn (ctrl+t to force-send first)';
+  return voiceReady ? 'type a prompt, / for commands, Ctrl+R voice' : 'type a prompt, / for commands';
 }

@@ -246,6 +246,14 @@ export function buildMemoryConsolidatePlugin(
   return definePlugin({
     name: '@moxxy/memory-consolidate',
     version: '0.0.0',
+    requirements: [
+      {
+        kind: 'plugin',
+        name: '@moxxy/plugin-memory',
+        state: 'registered',
+        hint: 'Enable @moxxy/plugin-memory.',
+      },
+    ],
     hooks:
       threshold > 0
         ? {

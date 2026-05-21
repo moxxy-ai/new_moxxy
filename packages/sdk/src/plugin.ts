@@ -5,6 +5,7 @@ import type { CompactorDef } from './compactor.js';
 import type { LifecycleHooks } from './hooks.js';
 import type { LoopStrategyDef } from './loop.js';
 import type { ProviderDef } from './provider.js';
+import type { MoxxyRequirement } from './requirements.js';
 import type { ToolDef } from './tool.js';
 import type { TranscriberDef } from './transcriber.js';
 
@@ -13,7 +14,7 @@ export type PluginKind = 'tools' | 'provider' | 'loop' | 'compactor' | 'mcp' | '
 export interface PluginSpec {
   readonly name: string;
   readonly version?: string;
-  readonly dependsOn?: ReadonlyArray<string>;
+  readonly requirements?: ReadonlyArray<MoxxyRequirement>;
   readonly tools?: ReadonlyArray<ToolDef>;
   readonly providers?: ReadonlyArray<ProviderDef>;
   readonly loopStrategies?: ReadonlyArray<LoopStrategyDef>;
@@ -55,6 +56,7 @@ export interface Plugin extends PluginSpec {
 export interface PluginManifest {
   readonly entry: string;
   readonly kind?: PluginKind | ReadonlyArray<PluginKind>;
+  readonly requirements?: ReadonlyArray<MoxxyRequirement>;
   readonly skills?: string;
 }
 

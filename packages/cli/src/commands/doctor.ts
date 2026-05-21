@@ -1,19 +1,28 @@
 import { promises as fs } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import type { Session } from '@moxxy/core';
+import { checkVoiceCaptureAvailable } from '@moxxy/plugin-cli';
+import type { RequirementIssue } from '@moxxy/sdk';
+import type { RequirementCheck } from '@moxxy/sdk';
 import type { ParsedArgv } from '../argv.js';
 import { setupSessionWithConfig } from '../setup.js';
+import type { RegistrationResult } from '../setup/register-plugins.js';
 import { canonicalKey } from '../provider-keys.js';
 import { colors } from '../colors.js';
 import { formatHelp } from './help-format.js';
 
 type Status = 'ok' | 'warn' | 'fail';
 
-interface Check {
+export interface Check {
   readonly id: string;
   readonly status: Status;
   readonly message: string;
 }
+
+const CODEX_TRANSCRIBER_NAME = 'openai-codex-transcribe';
+const CODEX_PROVIDER_NAME = 'openai-codex';
+const CODEX_AUTH_RUNTIME = 'auth:provider:openai-codex';
 
 const HELP = formatHelp({
   title: 'moxxy doctor',
@@ -56,7 +65,7 @@ export async function runDoctorCommand(argv: ParsedArgv): Promise<number> {
     return emit(checks, asJson);
   }
 
-  const { session, config, configSources, vault, memory } = setupResult.value;
+  const { session, config, configSources, vault, memory, pluginRegistration } = setupResult.value;
 
   // Config
   if (configSources.length > 0) {
@@ -152,13 +161,11 @@ export async function runDoctorCommand(argv: ParsedArgv): Promise<number> {
     }
   }
 
+  // Voice / STT
+  checks.push(buildVoiceDoctorCheck(session, await checkVoiceCaptureAvailable()));
+
   // Plugins
-  const pluginList = session.pluginHost.list();
-  checks.push({
-    id: 'plugins',
-    status: 'ok',
-    message: `${pluginList.length} loaded`,
-  });
+  checks.push(...buildPluginDoctorChecks(pluginRegistration));
 
   // Memory
   const memDir = path.join(os.homedir(), '.moxxy', 'memory');
@@ -199,6 +206,92 @@ export async function runDoctorCommand(argv: ParsedArgv): Promise<number> {
   });
 
   return emit(checks, asJson);
+}
+
+export function buildVoiceDoctorCheck(
+  session: Session,
+  captureReadiness: RequirementCheck = { ready: true, issues: [] },
+): Check {
+  const readiness = combineRequirementChecks(
+    session.requirements.isReady('transcriber', CODEX_TRANSCRIBER_NAME),
+    captureReadiness,
+  );
+  const activeProvider = session.providers.getActiveName() ?? '(none)';
+  const activeTranscriber = session.transcribers.getActiveName();
+  const hasCodexTranscriber = session.transcribers.has(CODEX_TRANSCRIBER_NAME);
+
+  if (!readiness.ready) {
+    return {
+      id: 'voice',
+      status: 'warn',
+      message: `unavailable — ${formatVoiceRequirementIssue(readiness.issues[0])}`,
+    };
+  }
+
+  if (activeTranscriber && activeTranscriber !== CODEX_TRANSCRIBER_NAME) {
+    return {
+      id: 'voice',
+      status: 'warn',
+      message: `unavailable — active transcriber is ${activeTranscriber}; expected ${CODEX_TRANSCRIBER_NAME}`,
+    };
+  }
+
+  return {
+    id: 'voice',
+    status: hasCodexTranscriber && activeProvider === CODEX_PROVIDER_NAME ? 'ok' : 'warn',
+    message:
+      hasCodexTranscriber && activeProvider === CODEX_PROVIDER_NAME
+        ? `ready — provider=${activeProvider} transcriber=${CODEX_TRANSCRIBER_NAME}`
+        : `unavailable — ${CODEX_TRANSCRIBER_NAME} is not registered`,
+  };
+}
+
+function combineRequirementChecks(a: RequirementCheck, b: RequirementCheck): RequirementCheck {
+  return { ready: a.ready && b.ready, issues: [...a.issues, ...b.issues] };
+}
+
+export function buildPluginDoctorChecks(summary: RegistrationResult): Check[] {
+  const loaded = summary.registered.size;
+  const skipped = summary.skipped.length;
+  const checks: Check[] = [
+    {
+      id: 'plugins',
+      status: skipped > 0 ? 'warn' : 'ok',
+      message: `${loaded} loaded, ${skipped} skipped`,
+    },
+  ];
+
+  for (const record of summary.skipped) {
+    const hint = record.hints[0];
+    checks.push({
+      id: `plugin:${record.pluginName}`,
+      status: 'warn',
+      message: `skipped — ${record.message}${hint ? ` (${hint})` : ''}`,
+    });
+  }
+  return checks;
+}
+
+function formatVoiceRequirementIssue(issue: RequirementIssue | undefined): string {
+  if (!issue) return 'unknown voice requirement is not ready';
+  if (issue.requirement.kind === 'provider' && issue.requirement.name === CODEX_PROVIDER_NAME) {
+    if (issue.code === 'missing') return `${CODEX_PROVIDER_NAME} is not registered`;
+    return `${CODEX_PROVIDER_NAME} is not active`;
+  }
+  if (issue.requirement.kind === 'runtime' && issue.requirement.name === CODEX_AUTH_RUNTIME) {
+    return 'run moxxy login openai-codex';
+  }
+  if (issue.requirement.kind === 'runtime' && issue.requirement.name === 'voice:capture:ffmpeg') {
+    return 'ffmpeg is required for voice input';
+  }
+  if (issue.requirement.kind === 'transcriber' && issue.requirement.name === CODEX_TRANSCRIBER_NAME) {
+    return `${CODEX_TRANSCRIBER_NAME} is not registered`;
+  }
+  return issue.hint ? stripBackticks(issue.hint).replace(/\.$/, '') : issue.message;
+}
+
+function stripBackticks(value: string): string {
+  return value.replace(/`/g, '');
 }
 
 function emit(checks: ReadonlyArray<Check>, asJson: boolean): number {
