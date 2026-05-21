@@ -4,6 +4,7 @@ import type { MoxxyConfig } from '@moxxy/config';
 import { anthropicPlugin } from '@moxxy/plugin-provider-anthropic';
 import { openaiPlugin } from '@moxxy/plugin-provider-openai';
 import { openaiCodexPlugin } from '@moxxy/plugin-provider-openai-codex';
+import { buildOpenaiCodexSttPlugin } from '@moxxy/plugin-stt-openai-codex';
 import { builtinToolsPlugin } from '@moxxy/tools-builtin';
 import { toolUseLoopPlugin } from '@moxxy/loop-tool-use';
 import { planExecuteLoopPlugin } from '@moxxy/loop-plan-execute';
@@ -92,6 +93,7 @@ export function buildBuiltinsCore(args: BuildBuiltinsArgs): BuiltBuiltinsCore {
     { name: '@moxxy/loop-bmad', plugin: bmadLoopPlugin },
     { name: '@moxxy/compactor-summarize', plugin: summarizeCompactorPlugin },
     { name: '@moxxy/plugin-vault', plugin: vaultPlugin },
+    { name: '@moxxy/plugin-stt-openai-codex', plugin: buildOpenaiCodexSttPlugin({ vault }) },
     { name: '@moxxy/plugin-memory', plugin: memoryPlugin },
     {
       name: '@moxxy/memory-consolidate',

@@ -20,6 +20,7 @@ import { useImageAttachments } from './use-image-attachments.js';
 import { useTurnRunner } from './use-turn-runner.js';
 import { usePermissionQueue } from './use-permission-queue.js';
 import { useGlobalHotkeys } from './use-global-hotkeys.js';
+import { useVoiceInput } from './use-voice-input.js';
 import { makePickerHandler } from './picker-handlers.js';
 import { runSlash } from './run-slash.js';
 import { OverlayOrNotice } from './OverlayOrNotice.js';
@@ -65,6 +66,7 @@ export const SessionView: React.FC<SessionViewProps> = ({
   const [picker, setPicker] = useState<Picker>(null);
   const permissions = usePermissionQueue(session, registerInteractiveResolver);
   const images = useImageAttachments((msg) => setSystemNotice(msg));
+  const voice = useVoiceInput({ session, setSystemNotice });
 
   // Keep the yolo flag in a ref so the permission handler closure
   // reads the latest value without re-registering.
@@ -119,6 +121,7 @@ export const SessionView: React.FC<SessionViewProps> = ({
         return next;
       });
     },
+    r: voice.toggleVoiceInput,
   };
 
   // Snapshot per-tool compact-presentation metadata from the live tool
@@ -276,6 +279,7 @@ export const SessionView: React.FC<SessionViewProps> = ({
         queueMessages={turn.queueRef.current}
         priorityMessage={turn.priorityMessage}
         commandHotkeys={commandHotkeys}
+        externalInsert={voice.externalInsert}
         onPermissionDecide={(perm, decision) => {
           permissions.setPendingPermissions((prev) => prev.slice(1));
           if (decision.mode === 'allow_always') {

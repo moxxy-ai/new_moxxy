@@ -7,6 +7,7 @@ import { InputBox } from '../components/InputBox.js';
 import { ListPicker } from '../components/ListPicker.js';
 import { QueueView } from '../components/QueueView.js';
 import type { SlashCommand } from '../components/SlashCommands.js';
+import type { ExternalInsert } from '../components/prompt/external-insert.js';
 import type { QueuedMessage } from './use-turn-runner.js';
 import type { PendingApproval, PendingPermission, Picker } from './types.js';
 
@@ -26,6 +27,7 @@ interface InteractiveZoneProps {
   /** Ctrl+<letter> hotkeys plumbed into the input editor (Ink's useInput
    *  can't see these once PromptInput holds stdin). */
   commandHotkeys: Record<string, () => void>;
+  externalInsert?: ExternalInsert;
   onPermissionDecide: (perm: PendingPermission, decision: import('@moxxy/sdk').PermissionDecision) => void;
   onApprovalDecide: (decision: import('@moxxy/sdk').ApprovalDecision) => void;
   onPickerSelect: (picker: NonNullable<Picker>, id: string) => void;
@@ -53,6 +55,7 @@ export const InteractiveZone: React.FC<InteractiveZoneProps> = ({
   queueMessages,
   priorityMessage,
   commandHotkeys,
+  externalInsert,
   onPermissionDecide,
   onApprovalDecide,
   onPickerSelect,
@@ -100,14 +103,17 @@ export const InteractiveZone: React.FC<InteractiveZoneProps> = ({
         disabled={false}
         yolo={yolo}
         slashCommands={slashCommands}
-        placeholder={
-          busy
-            ? 'type to queue a message — sent after the current turn (ctrl+t to force-send first)'
-            : 'type a prompt or / for commands'
-        }
+        placeholder={buildPromptPlaceholder(busy)}
         onPasteText={onPasteText}
         commandHotkeys={commandHotkeys}
+        externalInsert={externalInsert}
       />
     </Box>
   );
 };
+
+export function buildPromptPlaceholder(busy: boolean): string {
+  return busy
+    ? 'type to queue a message — sent after the current turn (ctrl+t to force-send first)'
+    : 'type a prompt, / for commands, Ctrl+R voice';
+}

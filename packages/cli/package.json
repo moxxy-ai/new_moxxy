@@ -46,6 +46,7 @@
     "@moxxy/isolator-subprocess": "workspace:*",
     "@moxxy/isolator-wasm": "workspace:*",
     "@moxxy/plugin-subagents": "workspace:*",
+    "@moxxy/plugin-stt-openai-codex": "workspace:*",
     "@moxxy/plugin-telegram": "workspace:*",
     "@moxxy/plugin-vault": "workspace:*",
     "@moxxy/plugin-webhooks": "workspace:*",

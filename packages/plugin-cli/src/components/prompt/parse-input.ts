@@ -181,6 +181,8 @@ export function parseInputChunk(chunk: string, ctx: ParseCtx): string {
         ctx.dispatch({ type: 'delete-word-back' });
       } else if (action === 'alt-enter') {
         ctx.dispatch({ type: 'insert-newline', stripBackslashAtEnd: false });
+      } else if (action === 'command-hotkey' && matched.letter) {
+        ctx.commandHotkeys?.[matched.letter]?.();
       }
       i += len;
       continue;

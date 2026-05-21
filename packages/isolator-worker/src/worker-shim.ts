@@ -18,6 +18,7 @@
  *   for an isolated boundary.
  */
 import { parentPort, workerData } from 'node:worker_threads';
+import { fileURLToPath } from 'node:url';
 
 export interface WorkerTask {
   readonly moduleUrl: string;
@@ -51,7 +52,7 @@ export type WorkerMessage = WorkerOk | WorkerFail;
  */
 export async function runTask(task: WorkerTask): Promise<WorkerMessage> {
   try {
-    const mod = await import(task.moduleUrl);
+    const mod = await import(importSpecifierFor(task.moduleUrl));
     const fn = (mod as Record<string, unknown>)[task.exportName];
     if (typeof fn !== 'function') {
       return {
@@ -85,6 +86,10 @@ export async function runTask(task: WorkerTask): Promise<WorkerMessage> {
       ...(e.stack ? { errorStack: e.stack } : {}),
     };
   }
+}
+
+function importSpecifierFor(moduleUrl: string): string {
+  return moduleUrl.startsWith('file:') ? fileURLToPath(moduleUrl) : moduleUrl;
 }
 
 function emptyLog(): {

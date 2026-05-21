@@ -7,6 +7,10 @@ import {
   type SlashCommand,
 } from './SlashCommands.js';
 import { BufferLines } from './prompt/BufferLines.js';
+import {
+  nextExternalInsertAction,
+  type ExternalInsert,
+} from './prompt/external-insert.js';
 import { INITIAL, reducer, type Action, type State } from './prompt/reducer.js';
 import { parseInputChunk } from './prompt/parse-input.js';
 
@@ -35,6 +39,7 @@ export interface PromptInputProps {
    * (a/c/e/h/j/k/u/w/y) silently no-op.
    */
   readonly commandHotkeys?: Record<string, () => void>;
+  readonly externalInsert?: ExternalInsert;
 }
 
 /**
@@ -72,6 +77,7 @@ export const PromptInput: React.FC<PromptInputProps> = ({
   slashCommands = BUILTIN_SLASH_COMMANDS,
   onPasteText,
   commandHotkeys,
+  externalInsert,
 }) => {
   const [state, dispatch] = useReducer(reducer, INITIAL);
   const [slashCursor, setSlashCursor] = React.useState(0);
@@ -122,6 +128,13 @@ export const PromptInput: React.FC<PromptInputProps> = ({
   onPasteTextRef.current = onPasteText;
   const commandHotkeysRef = useRef(commandHotkeys);
   commandHotkeysRef.current = commandHotkeys;
+  const lastExternalInsertIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const decision = nextExternalInsertAction(lastExternalInsertIdRef.current, externalInsert);
+    lastExternalInsertIdRef.current = decision.lastId;
+    if (decision.action) dispatch(decision.action);
+  }, [externalInsert]);
 
   const { stdin, setRawMode, isRawModeSupported } = useStdin();
 

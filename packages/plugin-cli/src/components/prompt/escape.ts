@@ -11,8 +11,10 @@ export interface EscapeMatch {
     | 'delete'
     | 'word-back-delete'
     | 'esc-clear'
-    | 'alt-enter';
+    | 'alt-enter'
+    | 'command-hotkey';
   len: number;
+  letter?: string;
 }
 
 export function matchEscape(rest: string): EscapeMatch | null {
@@ -30,6 +32,12 @@ export function matchEscape(rest: string): EscapeMatch | null {
       const modifiers = Number(kitty[2] ?? '1');
       if (keycode === 13 && modifiers > 1) {
         return { action: 'alt-enter', len: kitty[0].length };
+      }
+      if (hasCtrlModifier(modifiers)) {
+        const letter = keycodeToLetter(keycode);
+        if (letter) {
+          return { action: 'command-hotkey', letter, len: kitty[0].length };
+        }
       }
       // Other kitty-encoded keys we don't handle yet — consume so we
       // don't render them as junk text.
@@ -85,4 +93,14 @@ export function matchEscape(rest: string): EscapeMatch | null {
   // Unknown Alt+key — eat the prefix only, leave the trailing key for
   // the next iteration to handle as printable.
   return { action: 'esc-clear' as never, len: 1 };
+}
+
+function hasCtrlModifier(modifiers: number): boolean {
+  return ((modifiers - 1) & 4) !== 0;
+}
+
+function keycodeToLetter(keycode: number): string | undefined {
+  if (keycode >= 65 && keycode <= 90) return String.fromCharCode(keycode + 32);
+  if (keycode >= 97 && keycode <= 122) return String.fromCharCode(keycode);
+  return undefined;
 }
