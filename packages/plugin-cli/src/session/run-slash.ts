@@ -31,6 +31,7 @@ export function runSlash(cmd: string, deps: SlashDeps): void {
   if (registered) {
     void (async () => {
       try {
+        if (registered.pendingNotice) deps.setSystemNotice(registered.pendingNotice);
         const result = await registered.handler({
           channel: 'tui',
           sessionId: deps.session.id,

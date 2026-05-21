@@ -2,6 +2,7 @@ import type { ContentBlock, ProviderEvent, ProviderMessage } from './provider.js
 import type { LoopContext } from './loop.js';
 import type { StopReason } from './provider-utils.js';
 import type { Skill } from './skill.js';
+import type { CompactionEvent, MoxxyEvent } from './events.js';
 
 /**
  * Shared bits used by every loop strategy: a typed tool-use struct and a
@@ -61,6 +62,37 @@ export interface ProjectMessagesOptions {
   readonly trailingUserText?: string;
 }
 
+interface CompactionRange {
+  readonly from: number;
+  readonly to: number;
+  readonly summary: string;
+}
+
+function activeCompactionRanges(events: ReadonlyArray<MoxxyEvent>): ReadonlyArray<CompactionRange> {
+  return events
+    .filter((event): event is CompactionEvent =>
+      event.type === 'compaction' &&
+      event.tokensSaved > 0 &&
+      event.summary.trim().length > 0 &&
+      event.replacedRange[0] <= event.replacedRange[1],
+    )
+    .map((event) => ({
+      from: event.replacedRange[0],
+      to: event.replacedRange[1],
+      summary: event.summary,
+    }));
+}
+
+function eventInCompactionRange(
+  seq: number,
+  ranges: ReadonlyArray<CompactionRange>,
+): CompactionRange | null {
+  for (const range of ranges) {
+    if (seq >= range.from && seq <= range.to) return range;
+  }
+  return null;
+}
+
 /**
  * Project the session's event log to a flat list of ProviderMessages
  * suitable for handing to `provider.stream`. Used by every loop strategy.
@@ -84,6 +116,8 @@ export function projectMessagesFromLog(
   }
 
   const allEvents = ctx.log.slice();
+  const compactions = activeCompactionRanges(allEvents);
+  const emittedCompactions = new Set<CompactionRange>();
   // Pre-scan: build the set of callIds that have a matching tool_result
   // (or tool_call_denied) somewhere in the log. Used to synthesize a
   // fallback `[interrupted]` tool_result for orphan tool_use blocks
@@ -134,6 +168,19 @@ export function projectMessagesFromLog(
   };
 
   for (const e of allEvents) {
+    const compaction = eventInCompactionRange(e.seq, compactions);
+    if (compaction) {
+      if (!emittedCompactions.has(compaction)) {
+        emittedCompactions.add(compaction);
+        flush();
+        messages.push({
+          role: 'user',
+          content: [{ type: 'text', text: `[summary of earlier turns]\n${compaction.summary}` }],
+        });
+      }
+      continue;
+    }
+
     switch (e.type) {
       case 'user_prompt': {
         flush();

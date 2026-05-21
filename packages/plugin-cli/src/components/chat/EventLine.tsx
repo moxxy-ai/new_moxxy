@@ -3,7 +3,6 @@ import { Box, Text } from 'ink';
 import type { MoxxyEvent } from '@moxxy/sdk';
 import { Colors, Glyphs } from '../../theme.js';
 import { AssistantBlock } from './AssistantBlock.js';
-import { truncate } from './format.js';
 
 export const EventLine: React.FC<{ event: MoxxyEvent }> = ({ event }) => {
   switch (event.type) {
@@ -44,9 +43,7 @@ export const EventLine: React.FC<{ event: MoxxyEvent }> = ({ event }) => {
       return (
         <Box marginTop={1}>
           <Text dimColor>⤺ </Text>
-          <Text dimColor>
-            compacted {event.replacedRange[1] - event.replacedRange[0] + 1} events ({truncate(event.summary, 100)})
-          </Text>
+          <Text dimColor>{formatCompactionEvent(event)}</Text>
         </Box>
       );
     case 'error':
@@ -67,3 +64,29 @@ export const EventLine: React.FC<{ event: MoxxyEvent }> = ({ event }) => {
       return null;
   }
 };
+
+export function formatCompactionEvent(event: Extract<MoxxyEvent, { type: 'compaction' }>): string {
+  if (event.tokensSaved <= 0 || event.summary.trim().length === 0) {
+    return 'context checked · nothing to compact';
+  }
+  const compactedEvents = event.replacedRange[1] - event.replacedRange[0] + 1;
+  return `context compacted · ${formatCount(compactedEvents)} ${plural(compactedEvents, 'event')} · ~${formatTokenCount(event.tokensSaved)} tokens saved`;
+}
+
+function formatCount(value: number): string {
+  return new Intl.NumberFormat('en-US').format(value);
+}
+
+function formatTokenCount(value: number): string {
+  if (value >= 1_000_000) return `${trimFixed(value / 1_000_000)}M`;
+  if (value >= 1_000) return `${trimFixed(value / 1_000)}k`;
+  return formatCount(value);
+}
+
+function trimFixed(value: number): string {
+  return value.toFixed(1).replace(/\.0$/, '');
+}
+
+function plural(count: number, noun: string): string {
+  return count === 1 ? noun : `${noun}s`;
+}

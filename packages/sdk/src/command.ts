@@ -27,6 +27,8 @@ export interface CommandDef {
    * sense in Telegram). Omit for "all channels".
    */
   readonly channels?: ReadonlyArray<string>;
+  /** Optional short status shown by interactive channels while the command runs. */
+  readonly pendingNotice?: string;
   /** Handler invoked by the channel. Receives raw args after the name. */
   readonly handler: (ctx: CommandContext) => Promise<CommandOutput> | CommandOutput;
 }
