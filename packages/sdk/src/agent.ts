@@ -21,11 +21,11 @@ export interface AgentDef {
    */
   readonly systemPrompt?: string;
   /**
-   * Loop strategy name for the child. Defaults to `'tool-use'`. The
+   * Mode name for the child. Defaults to `'tool-use'`. The
    * spawner falls back to tool-use if the named strategy isn't
    * registered (no point failing a child over a missing block).
    */
-  readonly loopStrategy?: string;
+  readonly mode?: string;
   /**
    * Restrict the child to these tools by name. Omit for full
    * inheritance from the parent's registry.

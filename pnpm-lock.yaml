@@ -60,9 +60,9 @@ importers:
       '@moxxy/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@moxxy/loop-tool-use':
+      '@moxxy/mode-tool-use':
         specifier: workspace:*
-        version: link:../../packages/loop-tool-use
+        version: link:../../packages/mode-tool-use
       '@moxxy/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
@@ -100,9 +100,9 @@ importers:
       '@moxxy/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@moxxy/loop-tool-use':
+      '@moxxy/mode-tool-use':
         specifier: workspace:*
-        version: link:../../packages/loop-tool-use
+        version: link:../../packages/mode-tool-use
       '@moxxy/plugin-memory':
         specifier: workspace:*
         version: link:../../packages/plugin-memory
@@ -143,9 +143,9 @@ importers:
       '@moxxy/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@moxxy/loop-tool-use':
+      '@moxxy/mode-tool-use':
         specifier: workspace:*
-        version: link:../../packages/loop-tool-use
+        version: link:../../packages/mode-tool-use
       '@moxxy/plugin-provider-anthropic':
         specifier: workspace:*
         version: link:../../packages/plugin-provider-anthropic
@@ -201,15 +201,15 @@ importers:
       '@moxxy/isolator-worker':
         specifier: workspace:*
         version: link:../isolator-worker
-      '@moxxy/loop-bmad':
+      '@moxxy/mode-bmad':
         specifier: workspace:*
-        version: link:../loop-bmad
-      '@moxxy/loop-plan-execute':
+        version: link:../mode-bmad
+      '@moxxy/mode-plan-execute':
         specifier: workspace:*
-        version: link:../loop-plan-execute
-      '@moxxy/loop-tool-use':
+        version: link:../mode-plan-execute
+      '@moxxy/mode-tool-use':
         specifier: workspace:*
-        version: link:../loop-tool-use
+        version: link:../mode-tool-use
       '@moxxy/plugin-browser':
         specifier: workspace:*
         version: link:../plugin-browser
@@ -473,7 +473,7 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.19.18)
 
-  packages/loop-bmad:
+  packages/mode-bmad:
     dependencies:
       '@moxxy/sdk':
         specifier: workspace:*
@@ -504,7 +504,7 @@ importers:
         specifier: ^3.24.0
         version: 3.25.76
 
-  packages/loop-plan-execute:
+  packages/mode-plan-execute:
     dependencies:
       '@moxxy/sdk':
         specifier: workspace:*
@@ -535,7 +535,7 @@ importers:
         specifier: ^3.24.0
         version: 3.25.76
 
-  packages/loop-tool-use:
+  packages/mode-tool-use:
     dependencies:
       '@moxxy/sdk':
         specifier: workspace:*
@@ -603,9 +603,9 @@ importers:
         specifier: ^3.24.0
         version: 3.25.76
     devDependencies:
-      '@moxxy/loop-tool-use':
+      '@moxxy/mode-tool-use':
         specifier: workspace:*
-        version: link:../loop-tool-use
+        version: link:../mode-tool-use
       '@moxxy/testing':
         specifier: workspace:*
         version: link:../testing
@@ -914,9 +914,9 @@ importers:
       '@moxxy/core':
         specifier: workspace:*
         version: link:../core
-      '@moxxy/loop-tool-use':
+      '@moxxy/mode-tool-use':
         specifier: workspace:*
-        version: link:../loop-tool-use
+        version: link:../mode-tool-use
       '@moxxy/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig
@@ -1116,9 +1116,9 @@ importers:
       '@moxxy/core':
         specifier: workspace:*
         version: link:../core
-      '@moxxy/loop-tool-use':
+      '@moxxy/mode-tool-use':
         specifier: workspace:*
-        version: link:../loop-tool-use
+        version: link:../mode-tool-use
       '@moxxy/testing':
         specifier: workspace:*
         version: link:../testing
@@ -1309,9 +1309,9 @@ importers:
       '@moxxy/core':
         specifier: workspace:*
         version: link:../core
-      '@moxxy/loop-tool-use':
+      '@moxxy/mode-tool-use':
         specifier: workspace:*
-        version: link:../loop-tool-use
+        version: link:../mode-tool-use
       '@moxxy/testing':
         specifier: workspace:*
         version: link:../testing

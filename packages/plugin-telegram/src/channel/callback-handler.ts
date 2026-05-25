@@ -27,7 +27,7 @@ export interface CallbackCallbacks {
  *  - `perm:`   → permission resolver
  *  - `appr:`   → approval resolver
  *  - `model:`  → provider+model switch (with credential resolve)
- *  - `loop:`   → loop strategy switch
+ *  - `mode:`   → mode switch
  */
 export async function handleCallback(
   ctx: Context,
@@ -49,8 +49,8 @@ export async function handleCallback(
     await handleModel(ctx, data, state.session, cb);
     return;
   }
-  if (data.startsWith('loop:')) {
-    await handleLoop(ctx, data, state.session);
+  if (data.startsWith('mode:')) {
+    await handleMode(ctx, data, state.session);
     return;
   }
 }
@@ -197,23 +197,23 @@ async function handleModel(
   }
 }
 
-async function handleLoop(
+async function handleMode(
   ctx: Context,
   data: string,
   session: Session | null,
 ): Promise<void> {
-  const loopName = data.slice(5);
-  if (!loopName || !session) {
-    await ctx.answerCallbackQuery({ text: 'invalid loop' });
+  const modeName = data.slice(5);
+  if (!modeName || !session) {
+    await ctx.answerCallbackQuery({ text: 'invalid mode' });
     return;
   }
   try {
-    session.loops.setActive(loopName);
-    void savePreferences({ loopStrategy: loopName });
-    await ctx.answerCallbackQuery({ text: `loop → ${loopName}` });
+    session.modes.setActive(modeName);
+    void savePreferences({ mode: modeName });
+    await ctx.answerCallbackQuery({ text: `mode → ${modeName}` });
     if (ctx.callbackQuery?.message) {
       try {
-        await ctx.editMessageText(`✓ loop strategy → ${loopName}`);
+        await ctx.editMessageText(`✓ mode → ${modeName}`);
       } catch {
         /* ignore */
       }

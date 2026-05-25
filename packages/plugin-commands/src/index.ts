@@ -17,7 +17,7 @@ interface SessionShape {
   readonly id: string;
   readonly cwd: string;
   readonly providers: { getActiveName(): string | null };
-  readonly loops: { getActive(): { name: string } | undefined };
+  readonly modes: { getActive(): { name: string } | undefined };
   readonly tools: { list(): ReadonlyArray<unknown> };
   readonly skills: { list(): ReadonlyArray<unknown> };
   readonly agents: { list(): ReadonlyArray<{ name: string; description: string }> };
@@ -36,14 +36,14 @@ interface CompactSessionShape {
 
 const infoCmd: CommandDef = {
   name: 'info',
-  description: 'Show provider · model · loop · plugin/skill counts',
+  description: 'Show provider · model · mode · plugin/skill counts',
   handler: ({ session }) => {
     const s = session as SessionShape;
     const lines = [
       `session:   ${s.id}`,
       `cwd:       ${s.cwd}`,
       `provider:  ${safe(() => s.providers.getActiveName()) ?? '(none)'}`,
-      `loop:      ${safe(() => s.loops.getActive()?.name) ?? '(none)'}`,
+      `mode:      ${safe(() => s.modes.getActive()?.name) ?? '(none)'}`,
       `tools:     ${s.tools.list().length}`,
       `skills:    ${s.skills.list().length}`,
       `agents:    ${s.agents.list().length}`,

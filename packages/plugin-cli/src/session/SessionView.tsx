@@ -3,13 +3,14 @@ import { Box } from 'ink';
 import { useApp } from 'ink';
 import type { UserPromptAttachment } from '@moxxy/sdk';
 import type { Session } from '@moxxy/core';
+import { savePreferences } from '@moxxy/core';
 import { ChatView } from '../components/ChatView.js';
 import { StatusLine } from '../components/StatusLine.js';
 import { estimateContextTokens } from '../context-estimate.js';
 import {
   buildSlashSuggestions,
   clearTerminalScreen,
-  getLoopName,
+  getModeName,
   resolveActiveDescriptor,
   resolveActiveModel,
   resolveContextWindow,
@@ -143,7 +144,31 @@ export const SessionView: React.FC<SessionViewProps> = ({
   // Re-estimate every render. estimateContextTokens is char-cheap so
   // this stays well under a millisecond even on busy logs.
   const contextUsed = estimateContextTokens(session.log);
-  const loopName = getLoopName(session);
+  const modeName = getModeName(session);
+
+  // Shift+Tab (and /mode) advance to the next registered mode, wrapping
+  // around. Mirrors the model/loop picker's persistence so the choice
+  // survives across sessions. setSystemNotice forces the re-render that
+  // refreshes the footer's mode label.
+  const cycleMode = React.useCallback(() => {
+    const modes = session.modes.list();
+    if (modes.length === 0) return;
+    let current: string;
+    try {
+      current = session.modes.getActive().name;
+    } catch {
+      current = '';
+    }
+    const idx = modes.findIndex((m) => m.name === current);
+    const next = modes[(idx + 1) % modes.length]!;
+    try {
+      session.modes.setActive(next.name);
+      void savePreferences({ mode: next.name });
+      setSystemNotice(`mode → ${next.name}`);
+    } catch {
+      /* registry empty or name vanished — leave the active mode as-is */
+    }
+  }, [session]);
 
   const slashSuggestions = React.useMemo(() => buildSlashSuggestions(session), [session]);
 
@@ -203,7 +228,7 @@ export const SessionView: React.FC<SessionViewProps> = ({
         session,
         providerName,
         activeModel,
-        loopName,
+        modeName,
         setSystemNotice,
         setOverlay,
         setYolo,
@@ -281,6 +306,7 @@ export const SessionView: React.FC<SessionViewProps> = ({
         queueMessages={turn.queueRef.current}
         priorityMessage={turn.priorityMessage}
         commandHotkeys={commandHotkeys}
+        onCycleMode={cycleMode}
         externalInsert={voice.externalInsert}
         onPermissionDecide={(perm, decision) => {
           permissions.setPendingPermissions((prev) => prev.slice(1));
@@ -307,6 +333,7 @@ export const SessionView: React.FC<SessionViewProps> = ({
           turn.busy && !pendingPermission && !pendingApproval ? turn.busyStartedAt : null
         }
         queueCount={turn.queueCount}
+        modeName={modeName}
         provider={providerName}
         model={activeModel}
         mcp={mcpStatus}

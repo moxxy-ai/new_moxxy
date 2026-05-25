@@ -43,7 +43,7 @@ function makeSession(cwd = '/tmp'): Session {
     logger: silentLogger,
     permissionResolver: autoAllowResolver,
   });
-  // Minimum wiring so loops/compactors exist for setActive() calls
+  // Minimum wiring so modes/compactors exist for setActive() calls
   session.pluginHost.registerStatic(
     definePlugin({
       name: '@moxxy/test-bootstrap',
@@ -54,7 +54,7 @@ function makeSession(cwd = '/tmp'): Session {
           createClient: () => ({ name: 'test', models: [], stream: async function* () {}, countTokens: async () => 0 }),
         }),
       ],
-      loopStrategies: [
+      modes: [
         { name: 'tool-use', run: async function* () {} },
         { name: 'plan-execute', run: async function* () {} },
       ],
@@ -85,12 +85,12 @@ function makeBuiltin_(name: string): { name: string; plugin: Plugin } {
 }
 
 describe('buildSessionConfigApplier', () => {
-  it('changes to `loop` are applied immediately', async () => {
+  it('changes to `mode` are applied immediately', async () => {
     const session = makeSession();
-    const apply = buildSessionConfigApplier(session, { loop: 'tool-use' });
-    const r = await apply({ loop: 'plan-execute' });
-    expect(r.applied).toContain('loop');
-    expect(r.pending).not.toContain('loop');
+    const apply = buildSessionConfigApplier(session, { mode: 'tool-use' });
+    const r = await apply({ mode: 'plan-execute' });
+    expect(r.applied).toContain('mode');
+    expect(r.pending).not.toContain('mode');
   });
 
   it('changes to `compactor` are applied when the compactor is registered', async () => {
@@ -183,7 +183,7 @@ describe('buildSessionConfigApplier', () => {
   });
 
   it('an unchanged config produces empty applied + pending lists', async () => {
-    const cfg = { loop: 'tool-use', compactor: 'summarize-old-turns' };
+    const cfg = { mode: 'tool-use', compactor: 'summarize-old-turns' };
     const apply = buildSessionConfigApplier(makeSession(), cfg);
     const r = await apply(cfg);
     expect(r.applied).toEqual([]);

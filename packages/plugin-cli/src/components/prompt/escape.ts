@@ -12,6 +12,7 @@ export interface EscapeMatch {
     | 'word-back-delete'
     | 'esc-clear'
     | 'alt-enter'
+    | 'shift-tab'
     | 'command-hotkey';
   len: number;
   letter?: string;
@@ -33,6 +34,10 @@ export function matchEscape(rest: string): EscapeMatch | null {
       if (keycode === 13 && modifiers > 1) {
         return { action: 'alt-enter', len: kitty[0].length };
       }
+      // Shift+Tab (keycode 9 = Tab) cycles the active mode. Shift bit set.
+      if (keycode === 9 && hasShiftModifier(modifiers)) {
+        return { action: 'shift-tab', len: kitty[0].length };
+      }
       if (hasCtrlModifier(modifiers)) {
         const letter = keycodeToLetter(keycode);
         if (letter) {
@@ -52,6 +57,8 @@ export function matchEscape(rest: string): EscapeMatch | null {
     if (csi3 === 'D') return { action: 'left', len: 3 };
     if (csi3 === 'H') return { action: 'home', len: 3 };
     if (csi3 === 'F') return { action: 'end', len: 3 };
+    // Legacy back-tab (Shift+Tab) in terminals without the kitty protocol.
+    if (csi3 === 'Z') return { action: 'shift-tab', len: 3 };
     // CSI 3~ delete, CSI 1;3D alt-left, etc.
     if (rest.startsWith('\x1b[3~')) return { action: 'delete', len: 4 };
     if (rest.startsWith('\x1b[1~') || rest.startsWith('\x1b[7~')) return { action: 'home', len: 4 };
@@ -97,6 +104,10 @@ export function matchEscape(rest: string): EscapeMatch | null {
 
 function hasCtrlModifier(modifiers: number): boolean {
   return ((modifiers - 1) & 4) !== 0;
+}
+
+function hasShiftModifier(modifiers: number): boolean {
+  return ((modifiers - 1) & 1) !== 0;
 }
 
 function keycodeToLetter(keycode: number): string | undefined {

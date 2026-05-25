@@ -3,7 +3,7 @@ export type RequirementKind =
   | 'provider'
   | 'tool'
   | 'transcriber'
-  | 'loop'
+  | 'mode'
   | 'compactor'
   | 'channel'
   | 'agent'

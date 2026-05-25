@@ -3,7 +3,7 @@ import { z } from 'zod';
 const pluginKindSchema = z.enum([
   'tools',
   'provider',
-  'loop',
+  'mode',
   'compactor',
   'mcp',
   'cli',
@@ -20,7 +20,7 @@ export const requirementSchema = z.object({
     'provider',
     'tool',
     'transcriber',
-    'loop',
+    'mode',
     'compactor',
     'channel',
     'agent',

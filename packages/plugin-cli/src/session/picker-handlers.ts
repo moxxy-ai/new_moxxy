@@ -25,8 +25,8 @@ export function makePickerHandler(deps: PickerHandlerDeps): (picker: Picker, id:
     if (kind === 'model') {
       return handleModelSelected(id, deps);
     }
-    if (kind === 'loop') {
-      return handleLoopSelected(id, deps);
+    if (kind === 'mode') {
+      return handleModeSelected(id, deps);
     }
   };
 }
@@ -178,14 +178,14 @@ function handleModelSelected(id: string, deps: PickerHandlerDeps): void {
   })();
 }
 
-function handleLoopSelected(id: string, deps: PickerHandlerDeps): void {
+function handleModeSelected(id: string, deps: PickerHandlerDeps): void {
   try {
-    deps.session.loops.setActive(id);
-    deps.setSystemNotice(`loop strategy → ${id}`);
-    void savePreferences({ loopStrategy: id });
+    deps.session.modes.setActive(id);
+    deps.setSystemNotice(`mode → ${id}`);
+    void savePreferences({ mode: id });
   } catch (err) {
     deps.setSystemNotice(
-      `failed to switch loop: ${err instanceof Error ? err.message : String(err)}`,
+      `failed to switch mode: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
 }

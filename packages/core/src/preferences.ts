@@ -16,7 +16,7 @@ export interface MoxxyPreferences {
   /** Active model id under that provider (e.g. "gpt-5.4-mini"). */
   readonly model?: string;
   /** Active loop strategy name (e.g. "tool-use", "plan-execute"). */
-  readonly loopStrategy?: string;
+  readonly mode?: string;
 }
 
 export function preferencesPath(): string {

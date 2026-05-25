@@ -1,4 +1,4 @@
-import type { EmittedEvent, LoopContext, MoxxyEvent, UserPromptAttachment } from '@moxxy/sdk';
+import type { EmittedEvent, ModeContext, MoxxyEvent, UserPromptAttachment } from '@moxxy/sdk';
 import type { Session } from './session.js';
 import { createSubagentSpawner } from './subagents.js';
 
@@ -61,13 +61,13 @@ export async function* runTurn(
         : {}),
     });
 
-    const strategy = session.loops.getActive();
+    const strategy = session.modes.getActive();
     // Combine the session's signal with the per-turn one (if provided)
     // so either firing cancels the turn.
     const effectiveSignal = opts.signal
       ? AbortSignal.any([session.signal, opts.signal])
       : session.signal;
-    const ctx: LoopContext = {
+    const ctx: ModeContext = {
       sessionId: session.id,
       turnId,
       model,

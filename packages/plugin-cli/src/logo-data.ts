@@ -33,11 +33,11 @@ export const LOGO_LINES: ReadonlyArray<string> = [
  * chars and a mild attitude.
  */
 export const SLOGANS: ReadonlyArray<string> = [
-  'block-by-block agentic loops',
+  'block-by-block agentic modes',
   'every block swappable, every skill replicable',
   'skills that breed skills, plugins that hot-load',
   'the framework that builds itself',
-  'loops. tools. skills. all yours.',
+  'modes. tools. skills. all yours.',
   'agents, assembled from interchangeable parts',
   'an event log, a loop, and a lot of plugins',
   'your agent stack, with the cover off',

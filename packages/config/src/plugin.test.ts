@@ -42,7 +42,7 @@ describe('buildConfigPlugin tools', () => {
   });
 
   it('config_path finds an existing moxxy.config.yaml in cwd', async () => {
-    await fs.writeFile(path.join(tmp, 'moxxy.config.yaml'), 'loop: tool-use\n');
+    await fs.writeFile(path.join(tmp, 'moxxy.config.yaml'), 'mode: tool-use\n');
     const out = (await tool('config_path').handler({ scope: 'project' }, ctx)) as {
       path: string;
     };
@@ -50,11 +50,11 @@ describe('buildConfigPlugin tools', () => {
   });
 
   it('config_show returns the raw text', async () => {
-    await fs.writeFile(path.join(tmp, 'moxxy.config.yaml'), 'loop: tool-use\n');
+    await fs.writeFile(path.join(tmp, 'moxxy.config.yaml'), 'mode: tool-use\n');
     const out = (await tool('config_show').handler({ scope: 'project' }, ctx)) as {
       text: string;
     };
-    expect(out.text).toContain('loop: tool-use');
+    expect(out.text).toContain('mode: tool-use');
   });
 
   it('config_get reads a value at a dot-path', async () => {
@@ -69,14 +69,14 @@ describe('buildConfigPlugin tools', () => {
   it('config_set writes a value, preserving the rest of the file', async () => {
     await fs.writeFile(
       path.join(tmp, 'moxxy.config.yaml'),
-      `loop: tool-use\nprovider:\n  name: anthropic\n  model: haiku\n`,
+      `mode: tool-use\nprovider:\n  name: anthropic\n  model: haiku\n`,
     );
     await tool('config_set').handler(
       { scope: 'project', path: 'provider.model', value: '"sonnet"' },
       ctx,
     );
     const text = await fs.readFile(path.join(tmp, 'moxxy.config.yaml'), 'utf8');
-    expect(text).toContain('loop: tool-use');
+    expect(text).toContain('mode: tool-use');
     expect(text).toContain('name: anthropic');
     expect(text).toContain('model: sonnet');
   });
@@ -105,11 +105,11 @@ describe('buildConfigPlugin tools', () => {
     expect(out.created).toBe(true);
     const text = await fs.readFile(out.path, 'utf8');
     expect(text).toContain('provider:');
-    expect(text).toContain('loop: tool-use');
+    expect(text).toContain('mode: tool-use');
   });
 
   it('config_init is a no-op when a file already exists', async () => {
-    await fs.writeFile(path.join(tmp, 'moxxy.config.yaml'), 'loop: tool-use\n');
+    await fs.writeFile(path.join(tmp, 'moxxy.config.yaml'), 'mode: tool-use\n');
     const out = (await tool('config_init').handler({ scope: 'project' }, ctx)) as {
       created: boolean;
     };

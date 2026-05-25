@@ -3,14 +3,14 @@ title: Introduction
 description: moxxy — a block-based agentic loop framework for TypeScript.
 ---
 
-**moxxy** is a TypeScript framework for building agentic loops where every block — provider, loop strategy, tool, compactor, channel — is swappable. Skills (Markdown + frontmatter) and plugins (npm packages) compose around a tiny, deterministic core.
+**moxxy** is a TypeScript framework for building agentic modes where every block — provider, mode, tool, compactor, channel — is swappable. Skills (Markdown + frontmatter) and plugins (npm packages) compose around a tiny, deterministic core.
 
 ## Why
 
 Existing agent frameworks lock you into one LLM provider, one loop topology, one frontend, one set of opinions about how the agent should behave. moxxy starts from a typed contract — `@moxxy/sdk` — and lets you plug everything else in.
 
 - Providers are plugins (`@moxxy/plugin-provider-anthropic`, `@moxxy/plugin-provider-openai`, `@moxxy/plugin-provider-openai-codex` for the ChatGPT-OAuth backend).
-- Loop strategies are plugins (`@moxxy/loop-tool-use`, `@moxxy/loop-plan-execute`, `@moxxy/loop-bmad`).
+- Modes are plugins (`@moxxy/mode-tool-use`, `@moxxy/mode-plan-execute`, `@moxxy/mode-bmad`).
 - The CLI / TUI / Telegram bot / HTTP server are all `Channel` implementations.
 - Skills are prompt-only Markdown files the agent can author for itself.
 
@@ -41,12 +41,12 @@ Or embed the SDK directly:
 import { Session, runTurn, autoAllowResolver } from '@moxxy/core';
 import { anthropicPlugin } from '@moxxy/plugin-provider-anthropic';
 import { builtinToolsPlugin } from '@moxxy/tools-builtin';
-import { toolUseLoopPlugin } from '@moxxy/loop-tool-use';
+import { toolUseModePlugin } from '@moxxy/mode-tool-use';
 
 const session = new Session({ cwd: process.cwd(), permissionResolver: autoAllowResolver });
 session.pluginHost.registerStatic(anthropicPlugin);
 session.pluginHost.registerStatic(builtinToolsPlugin);
-session.pluginHost.registerStatic(toolUseLoopPlugin);
+session.pluginHost.registerStatic(toolUseModePlugin);
 session.providers.setActive('anthropic');
 
 for await (const event of runTurn(session, 'list TS files')) {

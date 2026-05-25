@@ -36,7 +36,7 @@ export {
 export { newTurnId, newSessionId } from './events/factory.js';
 export { ToolRegistryImpl, type ToolRegistry } from './registries/tools.js';
 export { ProviderRegistry } from './registries/providers.js';
-export { LoopRegistry } from './registries/loops.js';
+export { ModeRegistry } from './registries/modes.js';
 export { CompactorRegistry } from './registries/compactors.js';
 export { ChannelRegistryImpl } from './registries/channels.js';
 export { AgentRegistry } from './registries/agents.js';

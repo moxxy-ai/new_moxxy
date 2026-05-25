@@ -3,20 +3,20 @@ import type { ChannelDef } from './channel.js';
 import type { CommandDef } from './command.js';
 import type { CompactorDef } from './compactor.js';
 import type { LifecycleHooks } from './hooks.js';
-import type { LoopStrategyDef } from './loop.js';
+import type { ModeDef } from './mode.js';
 import type { ProviderDef } from './provider.js';
 import type { MoxxyRequirement } from './requirements.js';
 import type { ToolDef } from './tool.js';
 import type { TranscriberDef } from './transcriber.js';
 
-export type PluginKind = 'tools' | 'provider' | 'loop' | 'compactor' | 'mcp' | 'cli' | 'channel' | 'hooks' | 'agent' | 'command' | 'transcriber';
+export type PluginKind = 'tools' | 'provider' | 'mode' | 'compactor' | 'mcp' | 'cli' | 'channel' | 'hooks' | 'agent' | 'command' | 'transcriber';
 
 export interface PluginSpec {
   readonly name: string;
   readonly version?: string;
   readonly tools?: ReadonlyArray<ToolDef>;
   readonly providers?: ReadonlyArray<ProviderDef>;
-  readonly loopStrategies?: ReadonlyArray<LoopStrategyDef>;
+  readonly modes?: ReadonlyArray<ModeDef>;
   readonly compactors?: ReadonlyArray<CompactorDef>;
   readonly channels?: ReadonlyArray<ChannelDef>;
   /**

@@ -9,22 +9,22 @@ description: Typed public surface — event types, define* helpers, all the cont
 
 ### Define* factories
 
-- `definePlugin(spec)` — bundles tools, providers, loop strategies, compactors, hooks
+- `definePlugin(spec)` — bundles tools, providers, modes, compactors, hooks
 - `defineTool({name, description, inputSchema, handler, ...})` — one tool
 - `defineProvider({name, models, createClient})` — an LLM backend
-- `defineLoopStrategy({name, run})` — a turn topology
+- `defineMode({name, run})` — a turn topology
 - `defineCompactor({name, shouldCompact, compact})` — context-window management
 - `definePermission(rule)` — declarative allow/deny/prompt rule
 - `defineSkill({frontmatter, body})` — programmatic skill (Markdown remains canonical)
 
 ### Event types
 
-`MoxxyEvent` discriminated union covers every appended event: `user_prompt`, `assistant_chunk`, `assistant_message`, `tool_call_requested`, `tool_call_approved`, `tool_call_denied`, `tool_result`, `skill_invoked`, `skill_created`, `plugin_registered`, `plugin_unregistered`, `loop_iteration`, `compaction`, `provider_request`, `provider_response`, `error`, `abort`, `plugin_event`.
+`MoxxyEvent` discriminated union covers every appended event: `user_prompt`, `assistant_chunk`, `assistant_message`, `tool_call_requested`, `tool_call_approved`, `tool_call_denied`, `tool_result`, `skill_invoked`, `skill_created`, `plugin_registered`, `plugin_unregistered`, `mode_iteration`, `compaction`, `provider_request`, `provider_response`, `error`, `abort`, `plugin_event`.
 
 ### Interfaces
 
 - `LLMProvider` — provider implementations
-- `LoopContext`, `LoopStrategyDef` — loop strategies
+- `ModeContext`, `ModeDef` — modes
 - `Channel`, `ChannelHandle` — frontends (TUI, Telegram, …)
 - `EmbeddingProvider` — vector embedders (for memory recall)
 - `PermissionResolver`, `PermissionRule`, `PermissionDecision`

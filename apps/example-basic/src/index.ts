@@ -13,7 +13,7 @@
  */
 import { defineProvider, definePlugin, defineTool, z } from '@moxxy/sdk';
 import { Session, autoAllowResolver, collectTurn, silentLogger } from '@moxxy/core';
-import { toolUseLoopPlugin } from '@moxxy/loop-tool-use';
+import { toolUseModePlugin } from '@moxxy/mode-tool-use';
 import { builtinToolsPlugin } from '@moxxy/tools-builtin';
 import { FakeProvider, textReply, toolUseReply } from '@moxxy/testing';
 
@@ -49,7 +49,7 @@ export async function runExample(): Promise<void> {
   );
   session.providers.setActive('fake');
   session.pluginHost.registerStatic(builtinToolsPlugin);
-  session.pluginHost.registerStatic(toolUseLoopPlugin);
+  session.pluginHost.registerStatic(toolUseModePlugin);
   session.pluginHost.registerStatic(
     definePlugin({
       name: 'example-tools',

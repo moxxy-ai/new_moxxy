@@ -49,4 +49,4 @@ screen + keyboard is exactly the wrong default — review each call.
 The tool list staying stable means a "click on the menubar icon" prompt
 on Linux returns a clear "macOS only" error to the model instead of
 the tool silently disappearing — which used to send the agent into
-loops trying to figure out why its first step failed.
+modes trying to figure out why its first step failed.

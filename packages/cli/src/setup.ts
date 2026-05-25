@@ -120,7 +120,7 @@ export async function setupSessionWithConfig(opts: SetupOptions): Promise<SetupR
     logger,
   });
 
-  if (config.loop) session.loops.setActive(config.loop);
+  if (config.mode) session.modes.setActive(config.mode);
   if (config.compactor) session.compactors.setActive(config.compactor);
 
   await applyPreferences(session, credentialResolver, logger);

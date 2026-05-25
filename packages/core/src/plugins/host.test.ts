@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import {
   defineCompactor,
-  defineLoopStrategy,
+  defineMode,
   definePlugin,
   defineProvider,
   defineTool,
@@ -11,7 +11,7 @@ import {
 import { silentLogger } from '../logger.js';
 import { ToolRegistryImpl } from '../registries/tools.js';
 import { ProviderRegistry } from '../registries/providers.js';
-import { LoopRegistry } from '../registries/loops.js';
+import { ModeRegistry } from '../registries/modes.js';
 import { CompactorRegistry } from '../registries/compactors.js';
 import { ChannelRegistryImpl } from '../registries/channels.js';
 import { AgentRegistry } from '../registries/agents.js';
@@ -24,7 +24,7 @@ import { RequirementRegistry } from '../requirements.js';
 const makeHost = () => {
   const tools = new ToolRegistryImpl({ logger: silentLogger, cwd: '/tmp' });
   const providers = new ProviderRegistry();
-  const loops = new LoopRegistry();
+  const modes = new ModeRegistry();
   const compactors = new CompactorRegistry();
   const channels = new ChannelRegistryImpl();
   const agents = new AgentRegistry();
@@ -33,7 +33,7 @@ const makeHost = () => {
   const requirements = new RequirementRegistry({
     tools,
     providers,
-    loops,
+    modes,
     compactors,
     channels,
     agents,
@@ -46,7 +46,7 @@ const makeHost = () => {
     logger: silentLogger,
     tools,
     providers,
-    loops,
+    modes,
     compactors,
     channels,
     agents,
@@ -55,12 +55,12 @@ const makeHost = () => {
     requirements,
     dispatcher,
   });
-  return { host, tools, providers, loops, compactors, channels, agents, commands, transcribers, requirements, dispatcher };
+  return { host, tools, providers, modes, compactors, channels, agents, commands, transcribers, requirements, dispatcher };
 };
 
 describe('PluginHost', () => {
-  it('registerStatic wires up tools, providers, loops, compactors', () => {
-    const { host, tools, providers, loops, compactors } = makeHost();
+  it('registerStatic wires up tools, providers, modes, compactors', () => {
+    const { host, tools, providers, modes, compactors } = makeHost();
     const tool = defineTool({
       name: 'echo',
       description: '',
@@ -72,7 +72,7 @@ describe('PluginHost', () => {
       models: [],
       createClient: () => ({ name: 'fake', models: [], stream: async function* () {}, countTokens: async () => 0 }),
     });
-    const strategy = defineLoopStrategy({ name: 'fake-loop', run: async function* () {} });
+    const strategy = defineMode({ name: 'fake-loop', run: async function* () {} });
     const compactor = defineCompactor({
       name: 'fake-compact',
       shouldCompact: () => false,
@@ -82,14 +82,14 @@ describe('PluginHost', () => {
       name: 'demo',
       tools: [tool],
       providers: [provider],
-      loopStrategies: [strategy],
+      modes: [strategy],
       compactors: [compactor],
     });
 
     host.registerStatic(plugin);
     expect(tools.has('echo')).toBe(true);
     expect(providers.list()).toHaveLength(1);
-    expect(loops.list()).toHaveLength(1);
+    expect(modes.list()).toHaveLength(1);
     expect(compactors.list()).toHaveLength(1);
     expect(host.list()).toEqual([{ name: 'demo', version: '0.0.0', loaded: true }]);
   });

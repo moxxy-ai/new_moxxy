@@ -197,7 +197,7 @@ export function buildConfigPlugin(
       defineTool({
         name: 'config_reload',
         description:
-          'Re-read the merged config from disk and apply the safe subset of changes (loop, compactor, plugin enable/disable) to the active session. Anything outside that subset is reported in `pending` and requires a restart.',
+          'Re-read the merged config from disk and apply the safe subset of changes (mode, compactor, plugin enable/disable) to the active session. Anything outside that subset is reported in `pending` and requires a restart.',
         inputSchema: z.object({}),
         handler: async () => {
           if (!applier) {
@@ -223,7 +223,7 @@ export function buildConfigPlugin(
 provider:
   name: anthropic
   model: claude-sonnet-4-6
-loop: tool-use
+mode: tool-use
 `;
           await fs.writeFile(target, template);
           return { path: target, created: true };

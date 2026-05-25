@@ -39,12 +39,12 @@ export async function applyPreferences(
         });
       }
     }
-    if (prefs.loopStrategy && session.loops.list().some((s) => s.name === prefs.loopStrategy)) {
+    if (prefs.mode && session.modes.list().some((s) => s.name === prefs.mode)) {
       try {
-        session.loops.setActive(prefs.loopStrategy);
+        session.modes.setActive(prefs.mode);
       } catch (err) {
         logger.warn('failed to apply preferred loop strategy', {
-          loopStrategy: prefs.loopStrategy,
+          mode: prefs.mode,
           err: err instanceof Error ? err.message : String(err),
         });
       }

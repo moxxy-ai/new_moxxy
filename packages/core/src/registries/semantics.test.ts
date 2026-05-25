@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { CompactorDef, LoopStrategyDef, ProviderDef } from '@moxxy/sdk';
+import type { CompactorDef, ModeDef, ProviderDef } from '@moxxy/sdk';
 import { ProviderRegistry } from './providers.js';
-import { LoopRegistry } from './loops.js';
+import { ModeRegistry } from './modes.js';
 import { CompactorRegistry } from './compactors.js';
 import { SkillRegistryImpl } from './skills.js';
 
@@ -16,7 +16,7 @@ const fakeProvider = (name: string): ProviderDef => ({
   models: [],
   createClient: () => ({ name, models: [], stream: async function* () {}, countTokens: async () => 0 }),
 });
-const fakeLoop = (name: string): LoopStrategyDef => ({ name, run: async function* () {} });
+const fakeLoop = (name: string): ModeDef => ({ name, run: async function* () {} });
 const fakeCompactor = (name: string): CompactorDef => ({
   name,
   shouldCompact: () => false,
@@ -53,8 +53,8 @@ describe('Registry consistency (PR3-1)', () => {
     expect(r.getActiveName()).toBeNull();
   });
 
-  it('LoopRegistry: throws on duplicate, auto-activates first, unregister clears active', () => {
-    const r = new LoopRegistry();
+  it('ModeRegistry: throws on duplicate, auto-activates first, unregister clears active', () => {
+    const r = new ModeRegistry();
     r.register(fakeLoop('first'));
     r.register(fakeLoop('second'));
     expect(() => r.register(fakeLoop('first'))).toThrow(/already registered/);

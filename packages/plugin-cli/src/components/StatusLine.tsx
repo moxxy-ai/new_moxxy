@@ -2,12 +2,18 @@ import React, { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
 import { Colors, Glyphs, contextColor } from '../theme.js';
 import { Spinner } from './Spinner.js';
+import { ModeFooter } from './ModeFooter.js';
 
 export interface StatusLineProps {
   /** Turn-in-flight marker. When set, shows the spinner + elapsed time. */
   readonly busyStartedAt?: number | null;
   /** Number of queued user messages (typed during a busy turn). */
   readonly queueCount?: number;
+  /**
+   * Active mode name. Shown on the left while idle (with the shift+tab
+   * hint); replaced by the "Thinking" marker while a turn is in flight.
+   */
+  readonly modeName: string;
   /** Active provider name — rendered as a badge on the right. */
   readonly provider: string;
   /** Active model id — dim, after the badge. */
@@ -30,6 +36,7 @@ export interface StatusLineProps {
 export const StatusLine: React.FC<StatusLineProps> = ({
   busyStartedAt,
   queueCount,
+  modeName,
   provider,
   model,
   mcp,
@@ -43,13 +50,19 @@ export const StatusLine: React.FC<StatusLineProps> = ({
   return (
     <Box justifyContent="space-between" marginTop={1}>
       <Box>
-        {busy ? <BusyMarker startedAt={busyStartedAt!} /> : null}
-        {showQueue ? (
+        {busy ? (
           <>
-            {busy ? <Text dimColor>{'  '}</Text> : null}
-            <Text dimColor>{`${Glyphs.contextUp} ${queueCount} queued`}</Text>
+            <BusyMarker startedAt={busyStartedAt!} />
+            {showQueue ? (
+              <>
+                <Text dimColor>{'  '}</Text>
+                <Text dimColor>{`${Glyphs.contextUp} ${queueCount} queued`}</Text>
+              </>
+            ) : null}
           </>
-        ) : null}
+        ) : (
+          <ModeFooter modeName={modeName} />
+        )}
       </Box>
       <Box>
         <ProviderBadge name={provider} />

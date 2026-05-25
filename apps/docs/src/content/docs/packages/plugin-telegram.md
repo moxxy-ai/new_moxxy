@@ -60,7 +60,7 @@ prompt to call it.
 ## Slash commands
 
 In addition to the shared registry commands (`/info`, `/clear`, `/new`,
-`/exit`, `/help`), the channel adds `/model`, `/loop`, `/yolo`,
+`/exit`, `/help`), the channel adds `/model`, `/mode`, `/yolo`,
 `/tools`, `/skills`, `/cancel`. Both groups are published to Telegram's
 `/`-picker on startup.
 

@@ -1,6 +1,6 @@
 /**
  * Subagent runtime — turns the SDK's `SubagentSpawner` interface into a
- * working factory that spawns child loops sharing the parent Session's
+ * working factory that spawns child modes sharing the parent Session's
  * registries.
  *
  * Each child gets:
@@ -19,7 +19,7 @@
 import type {
   EmittedEvent,
   EventLogReader,
-  LoopContext,
+  ModeContext,
   MoxxyEvent,
   StopReason,
   SubagentResult,
@@ -62,7 +62,7 @@ async function runOne(rt: SubagentRuntime, spec: SubagentSpec): Promise<Subagent
   const childSessionId = newSessionId();
   const childTurnId = newTurnId();
   const label = spec.label ?? `subagent-${String(childSessionId).slice(-6)}`;
-  const requestedStrategy = spec.loopStrategy ?? 'tool-use';
+  const requestedStrategy = spec.mode ?? 'tool-use';
 
   const resolved = await resolveStrategy(parentSession, parentTurnId, label, childSessionId, spec, requestedStrategy);
   if ('failure' in resolved) return resolved.failure;
@@ -141,7 +141,7 @@ async function runOne(rt: SubagentRuntime, spec: SubagentSpec): Promise<Subagent
 }
 
 type ResolvedStrategy =
-  | { strategy: ReturnType<Session['loops']['list']>[number]; strategyName: string }
+  | { strategy: ReturnType<Session['modes']['list']>[number]; strategyName: string }
   | { failure: SubagentResult };
 
 async function resolveStrategy(
@@ -154,28 +154,28 @@ async function resolveStrategy(
 ): Promise<ResolvedStrategy> {
   // Look up the requested strategy in the parent's loop registry. The
   // registry only exposes list() / getActive(), so we scan.
-  const exact = parentSession.loops.list().find((s) => s.name === requestedStrategy);
+  const exact = parentSession.modes.list().find((s) => s.name === requestedStrategy);
   if (exact) return { strategy: exact, strategyName: requestedStrategy };
 
-  // Fall back to the default tool-use loop if the model invented a name
+  // Fall back to the default tool-use mode if the model invented a name
   // (e.g. "react"). Failing the child outright wastes the user's turn —
   // any reasonable agent task can run on tool-use. We surface the
   // fallback as a non-fatal warning event so the operator sees it.
-  const fallback = parentSession.loops.list().find((s) => s.name === 'tool-use');
+  const fallback = parentSession.modes.list().find((s) => s.name === 'tool-use');
   if (fallback) {
     await emitSubagentWarning(
       parentSession,
       parentTurnId,
       label,
       childSessionId,
-      `unknown loop strategy "${requestedStrategy}" — falling back to "tool-use"`,
+      `unknown mode "${requestedStrategy}" — falling back to "tool-use"`,
     );
     return { strategy: fallback, strategyName: 'tool-use' };
   }
 
   // No tool-use either — that's a config error, not a model mistake.
   await emitSubagentStart(parentSession, parentTurnId, label, childSessionId, spec, requestedStrategy);
-  const errorMsg = `Subagent failed: unknown loop strategy "${requestedStrategy}" and no fallback available`;
+  const errorMsg = `Subagent failed: unknown mode "${requestedStrategy}" and no fallback available`;
   await emitSubagentCompleted(parentSession, parentTurnId, label, childSessionId, '', 'error', errorMsg);
   return {
     failure: {
@@ -195,7 +195,7 @@ function buildChildContext(
   childTurnId: TurnId,
   toolRegistry: ToolRegistry,
   childLog: EventLog,
-): LoopContext {
+): ModeContext {
   const { parentSession, parentSignal, parentModel } = rt;
   return {
     sessionId: childSessionId,

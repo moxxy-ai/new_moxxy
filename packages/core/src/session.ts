@@ -4,7 +4,7 @@ import { EventLog } from './events/log.js';
 import { HookDispatcherImpl } from './plugins/lifecycle.js';
 import { PluginHost, type PluginLoader } from './plugins/host.js';
 import { ProviderRegistry } from './registries/providers.js';
-import { LoopRegistry } from './registries/loops.js';
+import { ModeRegistry } from './registries/modes.js';
 import { CompactorRegistry } from './registries/compactors.js';
 import { ChannelRegistryImpl } from './registries/channels.js';
 import { SkillRegistryImpl } from './registries/skills.js';
@@ -53,7 +53,7 @@ export class Session {
   readonly logger: Logger;
   readonly tools: ToolRegistry;
   readonly providers: ProviderRegistry;
-  readonly loops: LoopRegistry;
+  readonly modes: ModeRegistry;
   readonly compactors: CompactorRegistry;
   readonly channels: ChannelRegistryImpl;
   readonly skills: SkillRegistryImpl;
@@ -83,7 +83,7 @@ export class Session {
     this.log = opts.log ?? new EventLog();
     this.tools = new ToolRegistryImpl({ logger: this.logger, cwd: this.cwd });
     this.providers = new ProviderRegistry();
-    this.loops = new LoopRegistry();
+    this.modes = new ModeRegistry();
     this.compactors = new CompactorRegistry();
     this.channels = new ChannelRegistryImpl();
     this.skills = new SkillRegistryImpl();
@@ -93,7 +93,7 @@ export class Session {
     this.requirements = new RequirementRegistry({
       tools: this.tools,
       providers: this.providers,
-      loops: this.loops,
+      modes: this.modes,
       compactors: this.compactors,
       channels: this.channels,
       agents: this.agents,
@@ -120,7 +120,7 @@ export class Session {
       logger: this.logger,
       tools: this.tools,
       providers: this.providers,
-      loops: this.loops,
+      modes: this.modes,
       compactors: this.compactors,
       channels: this.channels,
       agents: this.agents,

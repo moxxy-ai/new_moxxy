@@ -39,6 +39,12 @@ export interface PromptInputProps {
    * (a/c/e/h/j/k/u/w/y) silently no-op.
    */
   readonly commandHotkeys?: Record<string, () => void>;
+  /**
+   * Shift+Tab handler. Wired to mode-cycling by the session — pressing
+   * Shift+Tab in the input advances to the next registered mode. Routed
+   * through the raw-stdin parser for the same reason as `commandHotkeys`.
+   */
+  readonly onShiftTab?: () => void;
   readonly externalInsert?: ExternalInsert;
 }
 
@@ -77,6 +83,7 @@ export const PromptInput: React.FC<PromptInputProps> = ({
   slashCommands = BUILTIN_SLASH_COMMANDS,
   onPasteText,
   commandHotkeys,
+  onShiftTab,
   externalInsert,
 }) => {
   const [state, dispatch] = useReducer(reducer, INITIAL);
@@ -128,6 +135,8 @@ export const PromptInput: React.FC<PromptInputProps> = ({
   onPasteTextRef.current = onPasteText;
   const commandHotkeysRef = useRef(commandHotkeys);
   commandHotkeysRef.current = commandHotkeys;
+  const onShiftTabRef = useRef(onShiftTab);
+  onShiftTabRef.current = onShiftTab;
   const lastExternalInsertIdRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -163,6 +172,7 @@ export const PromptInput: React.FC<PromptInputProps> = ({
       onSlashUp: () => setSlashCursor((c) => Math.max(0, c - 1)),
       onSlashDown: () => setSlashCursor((c) => Math.min(slashMatchesRef.current.length - 1, c + 1)),
       onSlashAccept: handleSlashAccept,
+      onShiftTab: () => onShiftTabRef.current?.(),
       onPasteText: (text: string) => onPasteTextRef.current?.(text) ?? text,
       slashOpen: false,
       bufferRef: { current: { buffer: '', cursor: 0 } },

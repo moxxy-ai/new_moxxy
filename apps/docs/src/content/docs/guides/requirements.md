@@ -56,7 +56,7 @@ Fields:
 `registered` means the target exists in the relevant registry.
 
 `active` means the target exists and is currently selected. This matters for
-providers, loop strategies, compactors, and transcribers.
+providers, modes, compactors, and transcribers.
 
 `ready` means active for registry-backed blocks, or an explicitly set runtime
 fact for `kind: 'runtime'`.
@@ -147,7 +147,7 @@ Enforcement points:
 |---|---|
 | Plugin | Before registration. Missing hard requirements skip the plugin. |
 | Provider | Before `session.providers.setActive(name)`. |
-| Loop strategy | Before `session.loops.setActive(name)`. |
+| Mode | Before `session.modes.setActive(name)`. |
 | Compactor | Before `session.compactors.setActive(name)`. |
 | Transcriber | Before `session.transcribers.setActive(name)`. |
 | Tool | Before `session.tools.execute(...)` calls the handler. |

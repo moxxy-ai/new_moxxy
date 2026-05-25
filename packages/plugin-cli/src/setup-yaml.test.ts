@@ -5,7 +5,7 @@ const base = {
   apiKeys: {},
   primary: 'anthropic',
   model: 'claude-sonnet-4-6',
-  loop: 'tool-use',
+  mode: 'tool-use',
   embedder: 'tfidf',
 };
 
@@ -16,7 +16,7 @@ describe('renderYaml', () => {
     expect(yaml).toContain('name: anthropic');
     expect(yaml).toContain('model: claude-sonnet-4-6');
     expect(yaml).toContain('apiKey: ${vault:ANTHROPIC_API_KEY}');
-    expect(yaml).toContain('loop: tool-use');
+    expect(yaml).toContain('mode: tool-use');
     // TF-IDF is the default — no embeddings block emitted.
     expect(yaml).not.toContain('embeddings:');
     // No fallbacks for single-provider setup.
@@ -59,9 +59,9 @@ describe('renderYaml', () => {
     expect(yaml).toContain('name: anthropic');
   });
 
-  it('honors the chosen loop strategy', () => {
-    const yaml = renderYaml({ ...base, providers: ['anthropic'], loop: 'plan-execute' });
-    expect(yaml).toContain('loop: plan-execute');
+  it('honors the chosen mode strategy', () => {
+    const yaml = renderYaml({ ...base, providers: ['anthropic'], mode: 'plan-execute' });
+    expect(yaml).toContain('mode: plan-execute');
   });
 
   it('output starts with a generator comment', () => {
@@ -85,7 +85,7 @@ describe('renderYaml', () => {
     expect(parsed.provider.name).toBe('anthropic');
     expect(parsed.provider.fallbacks).toEqual(['openai']);
     expect(parsed.embeddings.provider).toBe('transformers');
-    expect(parsed.loop).toBe('tool-use');
+    expect(parsed.mode).toBe('tool-use');
   });
 
   it('omits the apiKey vault line when the primary provider authenticates via OAuth', () => {

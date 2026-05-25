@@ -91,7 +91,7 @@ export const embeddingsConfigSchema = z.object({
 
 export const moxxyConfigSchema = z.object({
   provider: providerSettingsSchema.optional(),
-  loop: z.string().optional(),
+  mode: z.string().optional(),
   compactor: z.string().optional(),
   systemPrompt: z.string().optional(),
   maxIterations: z.number().int().positive().optional(),

@@ -7,9 +7,9 @@ import { openaiCodexPlugin } from '@moxxy/plugin-provider-openai-codex';
 import { buildWhisperPlugin } from '@moxxy/plugin-stt-whisper';
 import { buildWhisperCodexPlugin } from '@moxxy/plugin-stt-whisper-codex';
 import { builtinToolsPlugin } from '@moxxy/tools-builtin';
-import { toolUseLoopPlugin } from '@moxxy/loop-tool-use';
-import { planExecuteLoopPlugin } from '@moxxy/loop-plan-execute';
-import { bmadLoopPlugin } from '@moxxy/loop-bmad';
+import { toolUseModePlugin } from '@moxxy/mode-tool-use';
+import { planExecuteModePlugin } from '@moxxy/mode-plan-execute';
+import { bmadModePlugin } from '@moxxy/mode-bmad';
 import { summarizeCompactorPlugin } from '@moxxy/compactor-summarize';
 import { BUILTIN_SKILLS_DIR } from '@moxxy/skills-builtin';
 import {
@@ -64,9 +64,9 @@ export const BUILTIN_REQUIREMENT_DECISIONS: Readonly<Record<string, BuiltinRequi
   '@moxxy/plugin-provider-openai-codex': { hardRequirements: false, reason: 'provider owns its OAuth flow' },
   '@moxxy/plugin-provider-admin': { hardRequirements: false, reason: 'provider registry access is injected by bootstrap closure' },
   '@moxxy/tools-builtin': { hardRequirements: false, reason: 'core tool pack has no plugin dependency' },
-  '@moxxy/loop-tool-use': { hardRequirements: false, reason: 'loop strategy has no plugin dependency' },
-  '@moxxy/loop-plan-execute': { hardRequirements: false, reason: 'loop strategy has no plugin dependency' },
-  '@moxxy/loop-bmad': { hardRequirements: false, reason: 'loop strategy has no plugin dependency' },
+  '@moxxy/mode-tool-use': { hardRequirements: false, reason: 'mode has no plugin dependency' },
+  '@moxxy/mode-plan-execute': { hardRequirements: false, reason: 'mode has no plugin dependency' },
+  '@moxxy/mode-bmad': { hardRequirements: false, reason: 'mode has no plugin dependency' },
   '@moxxy/compactor-summarize': { hardRequirements: false, reason: 'compactor has no plugin dependency' },
   '@moxxy/plugin-vault': { hardRequirements: false, reason: 'vault is the base secret store' },
   '@moxxy/plugin-stt-whisper': { hardRequirements: false, reason: 'generic Whisper backend; harmless without a configured provider' },
@@ -127,9 +127,9 @@ export function buildBuiltinsCore(args: BuildBuiltinsArgs): BuiltBuiltinsCore {
     { name: '@moxxy/plugin-provider-openai', plugin: openaiPlugin },
     { name: '@moxxy/plugin-provider-openai-codex', plugin: openaiCodexPlugin },
     { name: '@moxxy/tools-builtin', plugin: builtinToolsPlugin },
-    { name: '@moxxy/loop-tool-use', plugin: toolUseLoopPlugin },
-    { name: '@moxxy/loop-plan-execute', plugin: planExecuteLoopPlugin },
-    { name: '@moxxy/loop-bmad', plugin: bmadLoopPlugin },
+    { name: '@moxxy/mode-tool-use', plugin: toolUseModePlugin },
+    { name: '@moxxy/mode-plan-execute', plugin: planExecuteModePlugin },
+    { name: '@moxxy/mode-bmad', plugin: bmadModePlugin },
     { name: '@moxxy/compactor-summarize', plugin: summarizeCompactorPlugin },
     { name: '@moxxy/plugin-vault', plugin: vaultPlugin },
     { name: '@moxxy/plugin-stt-whisper', plugin: buildWhisperPlugin() },
@@ -183,7 +183,7 @@ export function buildBuiltinsCore(args: BuildBuiltinsArgs): BuiltBuiltinsCore {
           tools: session.tools.list().map((t) => t.name),
           agents: session.agents.list().map((a) => a.name),
           providers: session.providers.list().map((p) => p.name),
-          loops: session.loops.list().map((l) => l.name),
+          modes: session.modes.list().map((l) => l.name),
           compactors: session.compactors.list().map((c) => c.name),
           channels: session.channels.list().map((c) => c.name),
         }),

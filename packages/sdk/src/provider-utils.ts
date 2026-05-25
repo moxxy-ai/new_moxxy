@@ -10,7 +10,7 @@ export type StopReason = 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence
 
 /**
  * Heuristic: should a provider request retry on this error? Used by stream
- * loops to attach a `retryable: boolean` flag to the `error` event so callers
+ * modes to attach a `retryable: boolean` flag to the `error` event so callers
  * (or the loop strategy) can decide whether to back off and try again.
  *
  * Identical implementation across plugin-provider-anthropic and -openai;

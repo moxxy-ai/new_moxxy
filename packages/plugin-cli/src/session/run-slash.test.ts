@@ -45,7 +45,7 @@ function baseDeps(): SlashDeps {
     },
     providerName: 'openai',
     activeModel: 'gpt-test',
-    loopName: 'tool-use',
+    modeName: 'tool-use',
     setSystemNotice: () => undefined,
     setOverlay: () => undefined,
     setYolo: () => undefined,

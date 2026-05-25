@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
   defineCompactor,
-  defineLoopStrategy,
+  defineMode,
   definePermission,
   definePlugin,
   defineProvider,
@@ -44,10 +44,10 @@ describe('define* factories', () => {
     expect(out).toBe('HI');
   });
 
-  it('defineProvider, defineLoopStrategy, defineCompactor, definePermission, defineSkill, defineTranscriber all freeze', () => {
+  it('defineProvider, defineMode, defineCompactor, definePermission, defineSkill, defineTranscriber all freeze', () => {
     const items = [
       defineProvider({ name: 'p', models: [], createClient: () => ({}) as never }),
-      defineLoopStrategy({ name: 'l', run: async function* () {} }),
+      defineMode({ name: 'l', run: async function* () {} }),
       defineCompactor({ name: 'c', shouldCompact: () => false, compact: async () => ({}) as never }),
       definePermission({ action: 'allow' }),
       defineSkill({ frontmatter: { name: 'foo', description: 'd' }, body: '' }),

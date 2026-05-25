@@ -20,7 +20,7 @@ interface BuiltinPluginRecord {
  * changes onto the session immediately where it can.
  *
  * Live (applied):
- *   loop, compactor, plugins[X].enabled (toggle register/unload).
+ *   mode, compactor, plugins[X].enabled (toggle register/unload).
  * Pending (next boot):
  *   provider.* (key rotation needs vault unlock + setActive)
  *   embeddings.* (memory plugin is built once)
@@ -46,12 +46,12 @@ export function buildSessionConfigApplier(
     const applied: string[] = [];
     const pending: string[] = [];
 
-    if (next.loop !== last.loop) {
+    if (next.mode !== last.mode) {
       try {
-        if (next.loop) session.loops.setActive(next.loop);
-        applied.push('loop');
+        if (next.mode) session.modes.setActive(next.mode);
+        applied.push('mode');
       } catch (err) {
-        pending.push(`loop (${err instanceof Error ? err.message : String(err)})`);
+        pending.push(`mode (${err instanceof Error ? err.message : String(err)})`);
       }
     }
 

@@ -22,7 +22,7 @@ export async function emitSubagentStart(
   label: string,
   childSessionId: SessionId,
   spec: SubagentSpec,
-  loopStrategy: string,
+  mode: string,
 ): Promise<void> {
   await parentSession.log.append({
     type: 'plugin_event',
@@ -35,7 +35,7 @@ export async function emitSubagentStart(
       label,
       childSessionId: String(childSessionId),
       prompt: spec.prompt,
-      loopStrategy,
+      mode,
       ...(spec.model ? { model: spec.model } : {}),
     },
   });
@@ -92,7 +92,7 @@ export async function emitSubagentWarning(
 /**
  * Map each interesting child event to a parent `plugin_event` so the TUI
  * can render the subagent's progress in real time. Noisy / book-keeping
- * events (loop_iteration, provider_request, provider_response,
+ * events (mode_iteration, provider_request, provider_response,
  * assistant_message — covered by the explicit `subagent_completed`) are
  * filtered out to keep the parent log lean.
  */

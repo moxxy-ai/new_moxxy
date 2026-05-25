@@ -65,8 +65,8 @@ export async function runInitCommand(argv: ParsedArgv): Promise<number> {
     providerDefs.map((p) => [p.name, providerAuthKind(p)]),
   );
 
-  const loops = [
-    { id: 'tool-use', label: 'tool-use', description: 'Default Claude Code-style loop (recommended)' },
+  const modes = [
+    { id: 'tool-use', label: 'tool-use', description: 'Default Claude Code-style mode (recommended)' },
     { id: 'plan-execute', label: 'plan-execute', description: 'Plan-then-execute strategy' },
     {
       id: 'bmad',
@@ -121,7 +121,7 @@ export async function runInitCommand(argv: ParsedArgv): Promise<number> {
   await runSetupWizard({
     providers,
     models,
-    loops,
+    modes,
     embedders,
     controller,
     authKinds,

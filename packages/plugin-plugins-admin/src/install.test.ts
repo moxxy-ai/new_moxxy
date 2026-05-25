@@ -8,7 +8,7 @@ describe('install_plugin tool', () => {
       tools: [],
       agents: [],
       providers: [],
-      loops: [],
+      modes: [],
       compactors: [],
       channels: [],
     }),

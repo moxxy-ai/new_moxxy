@@ -15,7 +15,7 @@ export type Overlay =
 
 export type Picker =
   | null
-  | { kind: 'model' | 'loop'; title: string; options: ReadonlyArray<ListPickerOption> }
+  | { kind: 'model' | 'mode'; title: string; options: ReadonlyArray<ListPickerOption> }
   | { kind: 'mcp-server'; title: string; options: ReadonlyArray<ListPickerOption> }
   | {
       kind: 'mcp-action';

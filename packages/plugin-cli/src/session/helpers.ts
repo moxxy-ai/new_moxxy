@@ -54,9 +54,9 @@ export function resolveActiveDescriptor(
   }
 }
 
-export function getLoopName(session: Session): string {
+export function getModeName(session: Session): string {
   try {
-    return session.loops.getActive().name;
+    return session.modes.getActive().name;
   } catch {
     return '(none)';
   }

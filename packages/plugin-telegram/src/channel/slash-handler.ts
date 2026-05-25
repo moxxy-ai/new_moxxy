@@ -73,8 +73,8 @@ export async function runSlash(
     case '/model':
       await renderModelPicker(ctx, session, state);
       return;
-    case '/loop':
-      await renderLoopPicker(ctx, session);
+    case '/mode':
+      await renderModePicker(ctx, session);
       return;
     case '/yolo': {
       const enabled = cb.toggleYolo();
@@ -150,25 +150,25 @@ async function renderModelPicker(
   await ctx.reply('Pick a model:', { reply_markup: keyboard });
 }
 
-async function renderLoopPicker(ctx: Context, session: Session): Promise<void> {
-  const strategies = session.loops.list();
-  if (strategies.length === 0) {
-    await ctx.reply('no loop strategies registered');
+async function renderModePicker(ctx: Context, session: Session): Promise<void> {
+  const modes = session.modes.list();
+  if (modes.length === 0) {
+    await ctx.reply('no modes registered');
     return;
   }
   const keyboard = new InlineKeyboard();
-  const activeLoopName = (() => {
+  const activeModeName = (() => {
     try {
-      return session.loops.getActive().name;
+      return session.modes.getActive().name;
     } catch {
       return '';
     }
   })();
-  for (const s of strategies) {
-    const isCurrent = s.name === activeLoopName;
-    keyboard.text(`${isCurrent ? '• ' : ''}${s.name}`, `loop:${s.name}`).row();
+  for (const s of modes) {
+    const isCurrent = s.name === activeModeName;
+    keyboard.text(`${isCurrent ? '• ' : ''}${s.name}`, `mode:${s.name}`).row();
   }
-  await ctx.reply('Pick a loop strategy:', { reply_markup: keyboard });
+  await ctx.reply('Pick a mode:', { reply_markup: keyboard });
 }
 
 /**
@@ -185,7 +185,7 @@ export async function publishBotCommands(
   if (!session || !bot) return;
   const LOCAL: Array<{ command: string; description: string }> = [
     { command: 'model', description: 'Switch provider + model (inline keyboard)' },
-    { command: 'loop', description: 'Switch loop strategy' },
+    { command: 'mode', description: 'Switch mode' },
     { command: 'yolo', description: 'Toggle auto-approve mode' },
     { command: 'tools', description: 'List the tools the active session can call' },
     { command: 'skills', description: 'List the discovered skills' },

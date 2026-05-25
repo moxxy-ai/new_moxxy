@@ -1,5 +1,5 @@
 /**
- * Shared polling primitive for OAuth-style "ask again later" loops. Handles
+ * Shared polling primitive for OAuth-style "ask again later" modes. Handles
  * the gnarly bits — deadline math, abort-responsive sleep, interval bumps
  * for `slow_down`-style backpressure — so each device-flow dialect only has
  * to encode its HTTP shape, not the timing harness.

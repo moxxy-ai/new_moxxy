@@ -23,7 +23,7 @@ dispatch_agent({
   label?,         // short label for progress events
   systemPrompt?,  // override the kind's system prompt
   model?,         // model id override
-  loopStrategy?,  // "tool-use" (default), "plan-execute", "bmad"
+  mode?,  // "tool-use" (default), "plan-execute", "bmad"
   allowedTools?,  // restrict the child to these tool names
 })
 ```
@@ -52,7 +52,7 @@ definePlugin({
       systemPrompt: '...',
       allowedTools: ['Read', 'Grep', 'Glob', 'web_fetch'],
       maxIterations: 30,
-      loopStrategy: 'tool-use',
+      mode: 'tool-use',
     }),
   ],
 });
@@ -68,7 +68,7 @@ single-loop pass.
 ## Registry
 
 The live registry is visible via `/agents` in the TUI / Telegram chat.
-Each entry shows its name, description, and the loop strategy it
+Each entry shows its name, description, and the mode it
 defaults to. Unknown `agentType` arguments fall back to the built-in
 default kind — `dispatch_agent` never fails over a missing kind.
 
@@ -77,5 +77,5 @@ default kind — `dispatch_agent` never fails over a missing kind.
 - Fan-out: "review every file in src/auth/" → one child per file.
 - Isolation: a probe that shouldn't leak its mistakes back into the
   parent's context window.
-- Specialized loops: research with `bmad`, planning with `plan-execute`,
+- Specialized modes: research with `bmad`, planning with `plan-execute`,
   while the parent stays on `tool-use`.

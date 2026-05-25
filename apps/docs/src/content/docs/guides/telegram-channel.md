@@ -63,7 +63,7 @@ ones. Both groups are published to Telegram's `/`-picker on startup.
 | Command | Effect |
 |---|---|
 | `/model` | Inline keyboard to switch provider + model for this chat. |
-| `/loop` | Switch loop strategy (`tool-use` / `plan-execute` / `bmad`). |
+| `/mode` | Switch mode (`tool-use` / `plan-execute` / `bmad`). |
 | `/yolo` | Toggle auto-approve mode for this session. |
 | `/tools` | List the tools the active session can call. |
 | `/skills` | List discovered skills. |

@@ -27,7 +27,7 @@ export type {
   SkillCreatedEvent,
   PluginRegisteredEvent,
   PluginUnregisteredEvent,
-  LoopIterationEvent,
+  ModeIterationEvent,
   CompactionEvent,
   ProviderRequestEvent,
   ProviderResponseEvent,
@@ -111,7 +111,7 @@ export {
   type CollectedToolUse,
   type StreamResult,
   type ProjectMessagesOptions,
-} from './loop-helpers.js';
+} from './mode-helpers.js';
 
 export type { TokenBudget, CompactContext, CompactorDef } from './compactor.js';
 
@@ -130,13 +130,13 @@ export type {
   ToolRegistry,
   SkillRegistry,
   PluginHostHandle,
-  LoopContext,
-  LoopStrategyDef,
+  ModeContext,
+  ModeDef,
   ApprovalResolver,
   ApprovalRequest,
   ApprovalDecision,
   ApprovalOption,
-} from './loop.js';
+} from './mode.js';
 
 export type {
   AppContext,
@@ -196,7 +196,7 @@ export {
   definePlugin,
   defineTool,
   defineProvider,
-  defineLoopStrategy,
+  defineMode,
   defineCompactor,
   defineChannel,
   definePermission,

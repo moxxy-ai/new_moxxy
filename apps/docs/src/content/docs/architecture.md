@@ -9,8 +9,8 @@ description: The shape of moxxy — sdk, core, plugins, channels.
 @moxxy/sdk             <— typed public surface (zero runtime deps)
 @moxxy/core            <— runtime: event log, registries, plugin host, permissions
 @moxxy/tools-builtin   <— Read/Edit/Write/Bash/Grep/Glob
-@moxxy/loop-tool-use   <— default Claude Code-style loop strategy
-@moxxy/loop-plan-execute  <— alternate plan-then-execute strategy
+@moxxy/mode-tool-use   <— default Claude Code-style mode
+@moxxy/mode-plan-execute  <— alternate plan-then-execute strategy
 @moxxy/plugin-provider-anthropic  <— LLM provider
 @moxxy/plugin-mcp                 <— MCP servers as tool sources
 @moxxy/plugin-vault    <— AES-256-GCM encrypted secrets
@@ -36,7 +36,7 @@ Plugins are TypeScript code, distributed as `@moxxy/*` (or `@anyone/*`) npm pack
 
 - **Tools** (`defineTool`) — actions the model can invoke
 - **Providers** (`defineProvider`) — LLM backends
-- **Loop strategies** (`defineLoopStrategy`) — how a turn unfolds
+- **Modes** (`defineMode`) — how a turn unfolds
 - **Compactors** (`defineCompactor`) — context-window management
 - **Lifecycle hooks** — `onInit`, `onToolCall`, `onBeforeProviderCall`, …
 - **Bundled skills** — Markdown files shipped with the plugin

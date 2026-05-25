@@ -11,7 +11,7 @@ import {
 } from '@moxxy/core';
 import { defineProvider, definePlugin, defineTranscriber } from '@moxxy/sdk';
 import { FakeProvider, textReply } from '@moxxy/testing';
-import { toolUseLoopPlugin } from '@moxxy/loop-tool-use';
+import { toolUseModePlugin } from '@moxxy/mode-tool-use';
 import { builtinToolsPlugin } from '@moxxy/tools-builtin';
 import { HttpChannel } from './channel.js';
 import type { ChannelHandle } from '@moxxy/sdk';
@@ -56,7 +56,7 @@ function buildSession(opts: { withTranscriber?: string } = {}): Session {
   session.providers.setActive(provider.name);
   if (opts.withTranscriber !== undefined) session.transcribers.setActive('fake-stt');
   session.pluginHost.registerStatic(builtinToolsPlugin);
-  session.pluginHost.registerStatic(toolUseLoopPlugin);
+  session.pluginHost.registerStatic(toolUseModePlugin);
   return session;
 }
 

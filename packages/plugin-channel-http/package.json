@@ -25,7 +25,7 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
-    "@moxxy/loop-tool-use": "workspace:*",
+    "@moxxy/mode-tool-use": "workspace:*",
     "@moxxy/testing": "workspace:*",
     "@moxxy/tools-builtin": "workspace:*",
     "@moxxy/tsconfig": "workspace:*",

@@ -6,7 +6,7 @@ const fakeSession = {
   id: 'sess-1',
   cwd: '/tmp',
   providers: { getActiveName: () => 'anthropic' },
-  loops: { getActive: () => ({ name: 'tool-use' }) },
+  modes: { getActive: () => ({ name: 'tool-use' }) },
   tools: { list: () => [{}, {}, {}] },
   skills: { list: () => [{}] },
   agents: { list: () => [{ name: 'researcher', description: 'web' }] },
@@ -36,7 +36,7 @@ describe('@moxxy/plugin-commands', () => {
     expect(out.kind).toBe('text');
     if (out.kind === 'text') {
       expect(out.text).toContain('provider:');
-      expect(out.text).toContain('loop:');
+      expect(out.text).toContain('mode:');
       expect(out.text).toContain('agents:');
     }
   });

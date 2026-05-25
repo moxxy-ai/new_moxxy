@@ -29,7 +29,7 @@ import {
 } from '@moxxy/core';
 import { AnthropicProvider, anthropicModels } from '@moxxy/plugin-provider-anthropic';
 import { builtinToolsPlugin } from '@moxxy/tools-builtin';
-import { toolUseLoopPlugin } from '@moxxy/loop-tool-use';
+import { toolUseModePlugin } from '@moxxy/mode-tool-use';
 import { RecordedProvider } from '@moxxy/testing';
 import { definePlugin, defineProvider } from '@moxxy/sdk';
 
@@ -92,7 +92,7 @@ export async function record(flags: Flags): Promise<{ fixtureFiles: string[]; ev
   );
   session.providers.setActive('anthropic-recording');
   session.pluginHost.registerStatic(builtinToolsPlugin);
-  session.pluginHost.registerStatic(toolUseLoopPlugin);
+  session.pluginHost.registerStatic(toolUseModePlugin);
 
   const events = await collectTurn(session, flags.prompt, {
     model: flags.model,

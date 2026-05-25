@@ -3,7 +3,7 @@ import { defineProvider, defineTranscriber } from '@moxxy/sdk';
 import { RequirementRegistry } from './requirements.js';
 import { ToolRegistryImpl } from './registries/tools.js';
 import { ProviderRegistry } from './registries/providers.js';
-import { LoopRegistry } from './registries/loops.js';
+import { ModeRegistry } from './registries/modes.js';
 import { CompactorRegistry } from './registries/compactors.js';
 import { ChannelRegistryImpl } from './registries/channels.js';
 import { AgentRegistry } from './registries/agents.js';
@@ -14,7 +14,7 @@ import { silentLogger } from './logger.js';
 const makeRequirements = () => {
   const tools = new ToolRegistryImpl({ logger: silentLogger, cwd: '/tmp' });
   const providers = new ProviderRegistry();
-  const loops = new LoopRegistry();
+  const modes = new ModeRegistry();
   const compactors = new CompactorRegistry();
   const channels = new ChannelRegistryImpl();
   const agents = new AgentRegistry();
@@ -23,14 +23,14 @@ const makeRequirements = () => {
   const requirements = new RequirementRegistry({
     tools,
     providers,
-    loops,
+    modes,
     compactors,
     channels,
     agents,
     commands,
     transcribers,
   });
-  return { requirements, tools, providers, loops, compactors, transcribers };
+  return { requirements, tools, providers, modes, compactors, transcribers };
 };
 
 describe('RequirementRegistry', () => {

@@ -19,7 +19,7 @@ import {
   collectTurn,
   silentLogger,
 } from '@moxxy/core';
-import { toolUseLoopPlugin } from '@moxxy/loop-tool-use';
+import { toolUseModePlugin } from '@moxxy/mode-tool-use';
 import { builtinToolsPlugin } from '@moxxy/tools-builtin';
 import { summarizeCompactorPlugin } from '@moxxy/compactor-summarize';
 import { buildVaultPlugin, deriveKey, generateSalt, createStaticKeySource } from '@moxxy/plugin-vault';
@@ -84,7 +84,7 @@ export async function runExample(opts: { homeDir?: string } = {}): Promise<Examp
   );
   session.providers.setActive(provider.name);
   session.pluginHost.registerStatic(builtinToolsPlugin);
-  session.pluginHost.registerStatic(toolUseLoopPlugin);
+  session.pluginHost.registerStatic(toolUseModePlugin);
   session.pluginHost.registerStatic(summarizeCompactorPlugin);
   session.pluginHost.registerStatic(vaultPlugin);
   session.pluginHost.registerStatic(memoryPlugin);

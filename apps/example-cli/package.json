@@ -15,7 +15,7 @@
   "dependencies": {
     "@moxxy/compactor-summarize": "workspace:*",
     "@moxxy/core": "workspace:*",
-    "@moxxy/loop-tool-use": "workspace:*",
+    "@moxxy/mode-tool-use": "workspace:*",
     "@moxxy/plugin-memory": "workspace:*",
     "@moxxy/plugin-vault": "workspace:*",
     "@moxxy/sdk": "workspace:*",

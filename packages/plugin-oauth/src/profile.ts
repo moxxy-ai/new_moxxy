@@ -75,7 +75,7 @@ export interface OAuthProviderProfile {
 /**
  * Pluggable device-flow contract. Implementations encode a single dialect
  * (RFC 8628, OpenAI's flavor, ...). The framework calls `start()` once,
- * surfaces the returned prompt to the user, then loops on `poll()` via
+ * surfaces the returned prompt to the user, then modes on `poll()` via
  * the shared `pollUntil` primitive.
  */
 export interface DeviceFlowAdapter {

@@ -21,7 +21,7 @@ export interface SetupSelections {
   readonly apiKeys: Record<string, string>;
   readonly primary: string;
   readonly model: string | null;
-  readonly loop: string;
+  readonly mode: string;
   readonly embedder: string;
   /** Optional per-provider auth kind. Missing entries default to `'apiKey'`. */
   readonly authKinds?: Record<string, ProviderAuthKind>;
@@ -56,7 +56,7 @@ export function renderYaml(sel: SetupSelections): string {
     for (const f of fallbacks) lines.push(`    - ${f}`);
   }
   lines.push('');
-  lines.push(`loop: ${sel.loop}`);
+  lines.push(`mode: ${sel.mode}`);
   if (sel.embedder !== 'tfidf') {
     lines.push('embeddings:');
     lines.push(`  provider: ${sel.embedder}`);

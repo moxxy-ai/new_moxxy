@@ -1,6 +1,6 @@
 import type { ChannelDef } from './channel.js';
 import type { CompactorDef } from './compactor.js';
-import type { LoopStrategyDef } from './loop.js';
+import type { ModeDef } from './mode.js';
 import type { PermissionRule } from './permission.js';
 import type { Plugin, PluginSpec } from './plugin.js';
 import type { ProviderDef } from './provider.js';
@@ -61,7 +61,7 @@ export function defineProvider(spec: ProviderDef): ProviderDef {
   return Object.freeze(spec);
 }
 
-export function defineLoopStrategy(spec: LoopStrategyDef): LoopStrategyDef {
+export function defineMode(spec: ModeDef): ModeDef {
   return Object.freeze(spec);
 }
 

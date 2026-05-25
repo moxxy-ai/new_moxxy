@@ -81,7 +81,7 @@ that the host didn't supply — so unused ops cost nothing.
 ## What it does NOT enforce
 
 - **Infinite-loop protection** — V8 can't interrupt running wasm
-  mid-execution. A handler that loops forever hangs until the wall-clock
+  mid-execution. A handler that modes forever hangs until the wall-clock
   timer fires, then the wasm instance is discarded. The hanging call
   consumes thread time until it returns; this is a known wasm runtime
   limitation, not specific to moxxy.

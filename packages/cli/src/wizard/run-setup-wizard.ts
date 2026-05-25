@@ -33,7 +33,7 @@ export interface SetupWizardController {
 export interface RunSetupWizardOptions {
   readonly providers: ReadonlyArray<SetupChoice>;
   readonly models: Record<string, ReadonlyArray<SetupChoice>>;
-  readonly loops: ReadonlyArray<SetupChoice>;
+  readonly modes: ReadonlyArray<SetupChoice>;
   readonly embedders: ReadonlyArray<SetupChoice>;
   readonly controller: SetupWizardController;
   readonly version?: string;
@@ -47,7 +47,7 @@ interface Selections {
   readonly oauthCompleted: ReadonlyArray<string>;
   readonly primary: string;
   readonly model: string | null;
-  readonly loop: string;
+  readonly mode: string;
   readonly embedder: string;
   readonly authKinds?: Record<string, ProviderAuthKind>;
   readonly security?: { readonly enabled: boolean; readonly isolator?: string };
@@ -89,7 +89,7 @@ export async function runSetupWizard(opts: RunSetupWizardOptions): Promise<strin
     [
       `${colors.bold('1.')} Pick one or more LLM providers`,
       `${colors.bold('2.')} Paste each API key (stored encrypted in the vault)`,
-      `${colors.bold('3.')} Choose a default model, loop strategy, and memory embedder`,
+      `${colors.bold('3.')} Choose a default model, mode, and memory embedder`,
       `${colors.bold('4.')} Review and write ${colors.bold('moxxy.config.yaml')} into the project`,
     ].join('\n'),
     'What this will do',
@@ -160,13 +160,13 @@ export async function runSetupWizard(opts: RunSetupWizardOptions): Promise<strin
     model = guard(modelRaw) as string;
   }
 
-  // Step 5 — loop
-  const loopRaw = await select({
-    message: 'Step 5 — Loop strategy',
-    options: toOptions(opts.loops),
-    initialValue: opts.loops[0]?.id ?? 'tool-use',
+  // Step 5 — mode
+  const modeRaw = await select({
+    message: 'Step 5 — Mode',
+    options: toOptions(opts.modes),
+    initialValue: opts.modes[0]?.id ?? 'tool-use',
   });
-  const loop = guard(loopRaw) as string;
+  const mode = guard(modeRaw) as string;
 
   // Step 6 — embedder
   const embedderRaw = await select({
@@ -193,7 +193,7 @@ export async function runSetupWizard(opts: RunSetupWizardOptions): Promise<strin
     oauthCompleted,
     primary,
     model,
-    loop,
+    mode,
     embedder,
     ...(opts.authKinds ? { authKinds: opts.authKinds } : {}),
     ...(securityEnabled ? { security: { enabled: true, isolator: 'inproc' } } : {}),

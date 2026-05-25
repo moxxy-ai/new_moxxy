@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@moxxy/core": "workspace:*",
-    "@moxxy/loop-tool-use": "workspace:*",
+    "@moxxy/mode-tool-use": "workspace:*",
     "@moxxy/sdk": "workspace:*",
     "@moxxy/testing": "workspace:*",
     "@moxxy/tools-builtin": "workspace:*",

@@ -8,7 +8,7 @@ import type {
   ChannelDef,
   CommandDef,
   CompactorDef,
-  LoopStrategyDef,
+  ModeDef,
   ProviderDef,
   ToolDef,
   TranscriberDef,
@@ -26,9 +26,9 @@ export interface RequirementRegistryOptions {
     list(): ReadonlyArray<ProviderDef>;
     getActiveName(): string | null;
   };
-  readonly loops: {
-    list(): ReadonlyArray<LoopStrategyDef>;
-    getActive(): LoopStrategyDef;
+  readonly modes: {
+    list(): ReadonlyArray<ModeDef>;
+    getActive(): ModeDef;
   };
   readonly compactors: {
     list(): ReadonlyArray<CompactorDef>;
@@ -164,9 +164,9 @@ export class RequirementRegistry {
           ? { kind, name, active: this.opts.transcribers.getActiveName() === name }
           : null;
       }
-      case 'loop': {
-        const def = this.opts.loops.list().find((l) => l.name === name);
-        return def ? { kind, name, active: activeLoopName(this.opts.loops) === name } : null;
+      case 'mode': {
+        const def = this.opts.modes.list().find((l) => l.name === name);
+        return def ? { kind, name, active: activeModeName(this.opts.modes) === name } : null;
       }
       case 'compactor': {
         const def = this.opts.compactors.list().find((c) => c.name === name);
@@ -207,9 +207,9 @@ function label(kind: RequirementKind): string {
   return kind;
 }
 
-function activeLoopName(loops: RequirementRegistryOptions['loops']): string | null {
+function activeModeName(modes: RequirementRegistryOptions['modes']): string | null {
   try {
-    return loops.getActive().name;
+    return modes.getActive().name;
   } catch {
     return null;
   }

@@ -35,7 +35,7 @@ export interface PluginSnapshot {
   readonly tools: ReadonlyArray<string>;
   readonly agents: ReadonlyArray<string>;
   readonly providers: ReadonlyArray<string>;
-  readonly loops: ReadonlyArray<string>;
+  readonly modes: ReadonlyArray<string>;
   readonly compactors: ReadonlyArray<string>;
   readonly channels: ReadonlyArray<string>;
 }
@@ -46,7 +46,7 @@ export function buildInstallPluginTool(deps: InstallPluginDeps) {
     description:
       'Install a moxxy plugin from the npm registry into the user plugin ' +
       'directory (~/.moxxy/plugins/), then hot-reload the plugin host so the ' +
-      'new tools / agents / providers / loops / channels become available in ' +
+      'new tools / agents / providers / modes / channels become available in ' +
       'the current session. Requires `npm` on PATH. Returns the diff of what ' +
       "got registered. Use this when the user asks to install a moxxy plugin " +
       'they\'ve named (e.g. "install @moxxy/agent-researcher").',
@@ -138,7 +138,7 @@ function runNpmInstall(
 
 function diffSnapshot(before: PluginSnapshot, after: PluginSnapshot): Record<string, ReadonlyArray<string>> {
   const out: Record<string, ReadonlyArray<string>> = {};
-  for (const key of ['tools', 'agents', 'providers', 'loops', 'compactors', 'channels'] as const) {
+  for (const key of ['tools', 'agents', 'providers', 'modes', 'compactors', 'channels'] as const) {
     const b = new Set(before[key]);
     const added = after[key].filter((n) => !b.has(n));
     if (added.length > 0) out[key] = added;

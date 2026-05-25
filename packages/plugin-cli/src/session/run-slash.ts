@@ -9,7 +9,7 @@ export interface SlashDeps {
   session: Session;
   providerName: string;
   activeModel: string;
-  loopName: string;
+  modeName: string;
   setSystemNotice: (msg: string | null) => void;
   setOverlay: React.Dispatch<React.SetStateAction<Overlay>>;
   setYolo: React.Dispatch<React.SetStateAction<boolean>>;
@@ -77,8 +77,9 @@ export function runSlash(cmd: string, deps: SlashDeps): void {
       return openModelPicker(deps);
     case '/mcp':
       return openMcpPicker(deps);
+    case '/mode':
     case '/loop':
-      return openLoopPicker(deps);
+      return openModePicker(deps);
     case '/yolo':
     case '/auto-approve':
       deps.setYolo((y) => {
@@ -186,16 +187,16 @@ function openMcpPicker(deps: SlashDeps): void {
   })();
 }
 
-function openLoopPicker(deps: SlashDeps): void {
-  const strategies = deps.session.loops.list();
-  const options: ListPickerOption[] = strategies.map((s) => ({
+function openModePicker(deps: SlashDeps): void {
+  const modes = deps.session.modes.list();
+  const options: ListPickerOption[] = modes.map((s) => ({
     id: s.name,
     label: s.name,
-    current: s.name === deps.loopName,
+    current: s.name === deps.modeName,
   }));
   if (options.length === 0) {
-    deps.setSystemNotice('no loop strategies registered');
+    deps.setSystemNotice('no modes registered');
     return;
   }
-  deps.setPicker({ kind: 'loop', title: 'Switch loop strategy', options });
+  deps.setPicker({ kind: 'mode', title: 'Switch mode', options });
 }

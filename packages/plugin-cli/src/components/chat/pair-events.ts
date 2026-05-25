@@ -88,7 +88,7 @@ export function pairToolEvents(
   // UI safety net: when a new user_prompt arrives, any tool-call block
   // still showing `outcome: null` is an orphan — its result event never
   // landed. Mark it as a synthetic error so the dot stops pulsing forever
-  // and the user can see *something* went wrong. The upstream loops should
+  // and the user can see *something* went wrong. The upstream modes should
   // synthesize tool_result events for these cases (and now do), but this
   // guard means a future regression can't leave a permanent stuck dot.
   const markOrphansAtTurnBoundary = (): void => {

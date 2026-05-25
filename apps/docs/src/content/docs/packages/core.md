@@ -9,7 +9,7 @@ description: The runtime — event log, plugin host, skill loader, permission en
 
 ### Session
 
-`Session` is the top-level container. Holds the event log, the registries (tools, providers, loops, compactors, skills), the permission engine and resolver, the hook dispatcher, and the plugin host.
+`Session` is the top-level container. Holds the event log, the registries (tools, providers, modes, compactors, skills), the permission engine and resolver, the hook dispatcher, and the plugin host.
 
 ```ts
 import { Session, autoAllowResolver } from '@moxxy/core';

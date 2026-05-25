@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { LoopContext, LoopStrategyDef, MoxxyEvent, ProviderDef } from '@moxxy/sdk';
-import { defineLoopStrategy, defineProvider, definePlugin } from '@moxxy/sdk';
+import type { ModeContext, ModeDef, MoxxyEvent, ProviderDef } from '@moxxy/sdk';
+import { defineMode, defineProvider, definePlugin } from '@moxxy/sdk';
 import { Session } from './session.js';
 import { runTurn, collectTurn } from './run-turn.js';
 
@@ -8,10 +8,10 @@ import { runTurn, collectTurn } from './run-turn.js';
 // text, then returns. It does NOT touch the provider, so concurrency is
 // dominated by the awaits inside the loop body (deterministic interleave via
 // the microtask queue).
-function makeMarkerLoop(name: string, n: number): LoopStrategyDef {
-  return defineLoopStrategy({
+function makeMarkerLoop(name: string, n: number): ModeDef {
+  return defineMode({
     name,
-    run: async function* (ctx: LoopContext): AsyncIterable<MoxxyEvent> {
+    run: async function* (ctx: ModeContext): AsyncIterable<MoxxyEvent> {
       for (let i = 0; i < n; i++) {
         // Yield to the microtask queue so two concurrent runs interleave.
         await Promise.resolve();
@@ -50,11 +50,11 @@ function buildSession(): Session {
       name: 'test-loop-and-provider',
       version: '0.0.0',
       providers: [makeNoopProvider()],
-      loopStrategies: [makeMarkerLoop('marker', 3)],
+      modes: [makeMarkerLoop('marker', 3)],
     }),
   );
   session.providers.setActive('noop');
-  session.loops.setActive('marker');
+  session.modes.setActive('marker');
   return session;
 }
 
@@ -95,7 +95,7 @@ describe('runTurn turnId filtering', () => {
     const session = buildSession();
     // Force startTurn to throw by removing the active loop strategy after
     // creating the session — getActive() will throw before we touch the log.
-    session.loops.unregister('marker');
+    session.modes.unregister('marker');
 
     let listenerCountBefore = 0;
     let listenerCountAfter = 0;

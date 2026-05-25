@@ -97,7 +97,7 @@ export interface PluginRegisteredEvent extends EventBase {
   readonly pluginId: PluginId;
   readonly name: string;
   readonly version: string;
-  readonly kind: ReadonlyArray<'tools' | 'provider' | 'loop' | 'compactor' | 'mcp' | 'cli' | 'hooks'>;
+  readonly kind: ReadonlyArray<'tools' | 'provider' | 'mode' | 'compactor' | 'mcp' | 'cli' | 'hooks'>;
 }
 
 export interface PluginUnregisteredEvent extends EventBase {
@@ -107,8 +107,8 @@ export interface PluginUnregisteredEvent extends EventBase {
   readonly reason: 'reload' | 'shutdown' | 'disabled';
 }
 
-export interface LoopIterationEvent extends EventBase {
-  readonly type: 'loop_iteration';
+export interface ModeIterationEvent extends EventBase {
+  readonly type: 'mode_iteration';
   readonly strategy: string;
   readonly iteration: number;
   readonly routing?: 'resolved' | 'unresolved' | 'synthesized';
@@ -171,7 +171,7 @@ export type MoxxyEvent =
   | SkillCreatedEvent
   | PluginRegisteredEvent
   | PluginUnregisteredEvent
-  | LoopIterationEvent
+  | ModeIterationEvent
   | CompactionEvent
   | ProviderRequestEvent
   | ProviderResponseEvent

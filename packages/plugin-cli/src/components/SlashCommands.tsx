@@ -27,7 +27,7 @@ export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<SlashCommand> = [
   { name: 'skills', description: 'List the discovered skills' },
   { name: 'agents', description: 'Inspect spawned subagents and their activity' },
   { name: 'model', description: 'Switch provider + model — opens a picker' },
-  { name: 'loop', description: 'Switch loop strategy (tool-use / plan-execute / …)' },
+  { name: 'mode', description: 'Switch mode (tool-use / plan-execute / bmad)', aliases: ['loop'] },
   { name: 'mcp', description: 'Enable / disable / remove MCP servers' },
   {
     name: 'yolo',

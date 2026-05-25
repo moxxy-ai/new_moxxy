@@ -31,7 +31,7 @@ const agentSpecSchema = z.object({
     .string()
     .optional()
     .describe('Model id override; defaults to the kind\'s model, then the parent\'s.'),
-  loopStrategy: z
+  mode: z
     .string()
     .optional()
     .describe(
@@ -125,9 +125,9 @@ function resolveSpec(input: AgentSpecInput, deps: DispatchAgentDeps): SubagentSp
   if (systemPrompt !== undefined) (merged as { systemPrompt?: string }).systemPrompt = systemPrompt;
   const model = input.model ?? def.model;
   if (model !== undefined) (merged as { model?: string }).model = model;
-  const loopStrategy = input.loopStrategy ?? def.loopStrategy;
-  if (loopStrategy !== undefined)
-    (merged as { loopStrategy?: string }).loopStrategy = loopStrategy;
+  const mode = input.mode ?? def.mode;
+  if (mode !== undefined)
+    (merged as { mode?: string }).mode = mode;
   // maxIterations only comes from the AgentDef now (the input schema
   // doesn't expose it — see comment in agentSpecSchema above).
   if (def.maxIterations !== undefined)

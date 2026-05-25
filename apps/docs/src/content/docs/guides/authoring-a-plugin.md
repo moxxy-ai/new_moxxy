@@ -102,7 +102,7 @@ export default definePlugin({
 
 Plugin-level requirements are checked before registration; missing hard
 requirements skip the whole plugin. Tool requirements are checked before the
-handler runs. Providers, loop strategies, compactors, and transcribers check
+handler runs. Providers, modes, compactors, and transcribers check
 requirements before activation.
 
 See [Requirements](./requirements) for the full contract, runtime facts, and

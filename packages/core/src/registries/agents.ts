@@ -3,10 +3,10 @@ import type { AgentDef } from '@moxxy/sdk';
 /**
  * Registry of named subagent kinds contributed by plugins. The
  * `dispatch_agent` tool looks definitions up here by `agentType` and
- * uses them as templates (systemPrompt, allowedTools, loopStrategy, …)
+ * uses them as templates (systemPrompt, allowedTools, mode, …)
  * for the spawned child.
  *
- * Mirrors the LoopRegistry / CompactorRegistry shape so plugin
+ * Mirrors the ModeRegistry / CompactorRegistry shape so plugin
  * registration and hot-reload follow the same pattern.
  */
 export class AgentRegistry {

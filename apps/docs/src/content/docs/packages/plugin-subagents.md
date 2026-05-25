@@ -39,7 +39,7 @@ dispatch_agent({
   label?,           // short label for progress events
   systemPrompt?,    // override the kind's system prompt
   model?,           // model id override
-  loopStrategy?,    // "tool-use" | "plan-execute" | "bmad"
+  mode?,    // "tool-use" | "plan-execute" | "bmad"
   allowedTools?,    // restrict the child to these tool names
 })
 ```
@@ -62,4 +62,4 @@ nudges the agent to use the tool instead of a single oversized loop.
 ## See also
 
 - [Sub-agents guide](../guides/subagents) — when to spawn, registry, AgentDef.
-- [Loop strategies](../guides/loop-strategies) — pairing a child with `plan-execute` or `bmad`.
+- [Modes](../guides/modes) — pairing a child with `plan-execute` or `bmad`.

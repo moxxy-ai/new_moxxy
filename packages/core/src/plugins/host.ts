@@ -3,7 +3,7 @@ import type {
   ChannelDef,
   CommandDef,
   CompactorDef,
-  LoopStrategyDef,
+  ModeDef,
   MoxxyRequirement,
   Plugin,
   PluginHostHandle,
@@ -19,7 +19,7 @@ import type { AgentRegistry } from '../registries/agents.js';
 import type { CommandRegistry } from '../registries/commands.js';
 import type { ChannelRegistryImpl } from '../registries/channels.js';
 import type { CompactorRegistry } from '../registries/compactors.js';
-import type { LoopRegistry } from '../registries/loops.js';
+import type { ModeRegistry } from '../registries/modes.js';
 import type { ProviderRegistry } from '../registries/providers.js';
 import type { ToolRegistry } from '../registries/tools.js';
 import type { TranscriberRegistry } from '../registries/transcribers.js';
@@ -33,7 +33,7 @@ export interface PluginHostOptions {
   readonly logger: Logger;
   readonly tools: ToolRegistry;
   readonly providers: ProviderRegistry;
-  readonly loops: LoopRegistry;
+  readonly modes: ModeRegistry;
   readonly compactors: CompactorRegistry;
   readonly channels: ChannelRegistryImpl;
   readonly agents: AgentRegistry;
@@ -91,7 +91,7 @@ interface LoadedRecord {
   readonly manifest?: ResolvedPluginManifest;
   readonly toolNames: ReadonlyArray<string>;
   readonly providerNames: ReadonlyArray<string>;
-  readonly loopNames: ReadonlyArray<string>;
+  readonly modeNames: ReadonlyArray<string>;
   readonly compactorNames: ReadonlyArray<string>;
   readonly channelNames: ReadonlyArray<string>;
   readonly agentNames: ReadonlyArray<string>;
@@ -200,7 +200,7 @@ export class PluginHost implements PluginHostHandle {
     if (!record) return;
     for (const toolName of record.toolNames) this.opts.tools.unregister(toolName);
     for (const provName of record.providerNames) this.opts.providers.unregister(provName);
-    for (const loopName of record.loopNames) this.opts.loops.unregister(loopName);
+    for (const modeName of record.modeNames) this.opts.modes.unregister(modeName);
     for (const compName of record.compactorNames) this.opts.compactors.unregister(compName);
     for (const channelName of record.channelNames) this.opts.channels.unregister(channelName);
     for (const agentName of record.agentNames) this.opts.agents.unregister(agentName);
@@ -227,7 +227,7 @@ export class PluginHost implements PluginHostHandle {
   private applyPlugin(plugin: Plugin, manifest?: ResolvedPluginManifest): LoadedRecord {
     const toolNames = (plugin.tools ?? []).map((t: ToolDef) => t.name);
     const providerNames = (plugin.providers ?? []).map((p: ProviderDef) => p.name);
-    const loopNames = (plugin.loopStrategies ?? []).map((l: LoopStrategyDef) => l.name);
+    const modeNames = (plugin.modes ?? []).map((l: ModeDef) => l.name);
     const compactorNames = (plugin.compactors ?? []).map((c: CompactorDef) => c.name);
     const channelNames = (plugin.channels ?? []).map((c: ChannelDef) => c.name);
     const agentNames = (plugin.agents ?? []).map((a: AgentDef) => a.name);
@@ -236,7 +236,7 @@ export class PluginHost implements PluginHostHandle {
 
     for (const tool of plugin.tools ?? []) this.opts.tools.register(tool);
     for (const provider of plugin.providers ?? []) this.opts.providers.register(provider);
-    for (const loop of plugin.loopStrategies ?? []) this.opts.loops.register(loop);
+    for (const loop of plugin.modes ?? []) this.opts.modes.register(loop);
     for (const compactor of plugin.compactors ?? []) this.opts.compactors.register(compactor);
     for (const channel of plugin.channels ?? []) this.opts.channels.register(channel);
     for (const agent of plugin.agents ?? []) this.opts.agents.register(agent);
@@ -248,7 +248,7 @@ export class PluginHost implements PluginHostHandle {
       manifest,
       toolNames,
       providerNames,
-      loopNames,
+      modeNames,
       compactorNames,
       channelNames,
       agentNames,

@@ -42,6 +42,8 @@ export const Colors = {
   danger: 'red',
   /** Green — accepted state (e.g. active prompt cursor). */
   active: 'green',
+  /** Magenta — the active-mode footer below the input. */
+  mode: 'magenta',
 } as const;
 
 /** Shared border style used by InputBox, ListPicker, dialog panels. */

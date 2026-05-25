@@ -13,6 +13,8 @@ export interface ParseCtx {
   onSlashUp: () => void;
   onSlashDown: () => void;
   onSlashAccept: () => void;
+  /** Shift+Tab — cycles the active mode. No-op when unset. */
+  onShiftTab?: () => void;
   onPasteText?: (text: string) => string;
   slashOpen: boolean;
   bufferRef: { current: { buffer: string; cursor: number } };
@@ -181,6 +183,8 @@ export function parseInputChunk(chunk: string, ctx: ParseCtx): string {
         ctx.dispatch({ type: 'delete-word-back' });
       } else if (action === 'alt-enter') {
         ctx.dispatch({ type: 'insert-newline', stripBackslashAtEnd: false });
+      } else if (action === 'shift-tab') {
+        ctx.onShiftTab?.();
       } else if (action === 'command-hotkey' && matched.letter) {
         ctx.commandHotkeys?.[matched.letter]?.();
       }
