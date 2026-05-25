@@ -267,12 +267,13 @@ export type {
 } from './hooks.js';
 
 export type {
-  PluginKind,
   PluginSpec,
   Plugin,
   PluginManifest,
   ResolvedPluginManifest,
 } from './plugin.js';
+export type { PluginKind, PluginKindCarrier } from './plugin-kind.js';
+export { PLUGIN_KINDS, pluginKindList, isPureUiPluginManifest } from './plugin-kind.js';
 
 export type {
   Channel,

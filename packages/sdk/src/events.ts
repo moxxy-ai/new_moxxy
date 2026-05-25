@@ -1,4 +1,5 @@
 import type { EventId, PluginId, SessionId, SkillId, ToolCallId, TurnId } from './ids.js';
+import type { PluginKind } from './plugin-kind.js';
 
 export type EventSource = 'user' | 'model' | 'tool' | 'plugin' | 'system' | 'compactor';
 
@@ -97,24 +98,7 @@ export interface PluginRegisteredEvent extends EventBase {
   readonly pluginId: PluginId;
   readonly name: string;
   readonly version: string;
-  // Keep in sync with PluginKind (plugin.ts). Inlined rather than imported to
-  // avoid an events↔plugin type cycle (dep-cruiser flags circular deps).
-  readonly kind: ReadonlyArray<
-    | 'tools'
-    | 'provider'
-    | 'mode'
-    | 'compactor'
-    | 'cache-strategy'
-    | 'view-renderer'
-    | 'tunnel-provider'
-    | 'mcp'
-    | 'cli'
-    | 'channel'
-    | 'hooks'
-    | 'agent'
-    | 'command'
-    | 'transcriber'
-  >;
+  readonly kind: ReadonlyArray<PluginKind>;
 }
 
 export interface PluginUnregisteredEvent extends EventBase {

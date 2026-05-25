@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { MoxxyEvent, ClientSession as Session } from '@moxxy/sdk';
+import type { ClientSession as Session, EventLogReader, MoxxyEvent } from '@moxxy/sdk';
 
 export interface EventStreamHandle {
   events: ReadonlyArray<MoxxyEvent>;
@@ -11,6 +11,12 @@ export interface EventStreamHandle {
   cancelStreamFlush: () => void;
 }
 
+export function snapshotDisplayEvents(
+  log: Pick<EventLogReader, 'slice'>,
+): ReadonlyArray<MoxxyEvent> {
+  return log.slice().filter((event) => event.type !== 'assistant_chunk');
+}
+
 /**
  * Subscribes to the session event log + throttles assistant_chunk
  * deltas. Some providers ship chunks 100×/s; without throttling each
@@ -19,7 +25,9 @@ export interface EventStreamHandle {
  * pipeline calm.
  */
 export function useEventStream(session: Session): EventStreamHandle {
-  const [events, setEvents] = useState<ReadonlyArray<MoxxyEvent>>([]);
+  const [events, setEvents] = useState<ReadonlyArray<MoxxyEvent>>(() =>
+    snapshotDisplayEvents(session.log),
+  );
   const [streamingDelta, setStreamingDelta] = useState('');
   const streamingBufferRef = useRef('');
   const streamFlushRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -48,6 +56,11 @@ export function useEventStream(session: Session): EventStreamHandle {
   }, [cancelStreamFlush]);
 
   useEffect(() => {
+    setEvents(snapshotDisplayEvents(session.log));
+    cancelStreamFlush();
+    streamingBufferRef.current = '';
+    setStreamingDelta('');
+
     const unsub = session.log.subscribe((event) => {
       // assistant_chunk events fire at provider-stream cadence (often
       // hundreds per turn). Don't push them into `events` — they render

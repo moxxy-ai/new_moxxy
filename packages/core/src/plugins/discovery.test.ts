@@ -19,7 +19,15 @@ afterEach(async () => {
   await fs.rm(tmp, { recursive: true, force: true });
 });
 
-async function makePkg(pkgRoot: string, opts: { name: string; entry: string; entryContent: string }) {
+async function makePkg(
+  pkgRoot: string,
+  opts: {
+    name: string;
+    entry: string;
+    entryContent: string;
+    plugin?: Record<string, unknown>;
+  },
+) {
   await fs.writeFile(
     path.join(pkgRoot, 'package.json'),
     JSON.stringify(
@@ -27,7 +35,7 @@ async function makePkg(pkgRoot: string, opts: { name: string; entry: string; ent
         name: opts.name,
         version: '1.2.3',
         type: 'module',
-        moxxy: { plugin: { entry: opts.entry } },
+        moxxy: { plugin: { entry: opts.entry, ...(opts.plugin ?? {}) } },
       },
       null,
       2,
@@ -111,5 +119,25 @@ describe('discoverPlugins + createPluginLoader (end-to-end)', () => {
 
     const manifests = await discoverPlugins({ cwd: nested, logger: silentLogger });
     expect(manifests.find((m) => m.packageName === '@acme/mox-thing')).toBeDefined();
+  });
+
+  it('preserves ui manifest metadata including the launch port', async () => {
+    const pkgRoot = path.join(cwd, 'node_modules', '@acme', 'mox-thing');
+    await makePkg(pkgRoot, {
+      name: '@acme/mox-thing',
+      entry: 'serve.js',
+      plugin: { kind: 'ui', port: 17901 },
+      entryContent: `throw new Error('pure UI entries are not runtime plugins');\n`,
+    });
+
+    const manifests = await discoverPlugins({ cwd, logger: silentLogger });
+    const ours = manifests.find((m) => m.packageName === '@acme/mox-thing');
+
+    expect(ours).toMatchObject({
+      packageName: '@acme/mox-thing',
+      entry: 'serve.js',
+      kind: 'ui',
+      port: 17901,
+    });
   });
 });

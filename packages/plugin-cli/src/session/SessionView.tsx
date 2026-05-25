@@ -77,7 +77,7 @@ export const SessionView: React.FC<SessionViewProps> = ({
 
   const turn = useTurnRunner({
     session,
-    resolveModel: () => activeModelOverride ?? model,
+    resolveModel: () => resolveActiveModel(session, activeModelOverride, model),
     stream,
   });
 

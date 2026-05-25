@@ -2,7 +2,8 @@ import React, { useMemo, useRef } from 'react';
 import { Box, Static } from 'ink';
 import type { MoxxyEvent } from '@moxxy/sdk';
 import { BlockLine } from './chat/BlockLine.js';
-import { isSettled, pairToolEvents, type CompactToolMap } from './chat/pair-events.js';
+import { pairToolEvents, type CompactToolMap } from './chat/pair-events.js';
+import { advanceStaticScrollback } from './chat/static-window.js';
 import { StreamingPreview, tailForViewport } from './chat/StreamingPreview.js';
 import type { Block } from './chat/types.js';
 
@@ -50,41 +51,20 @@ export const ChatView: React.FC<ChatViewProps> = ({
     () => pairToolEvents(events, compactTools),
     [events, compactTools],
   );
-  // The longest leading prefix of blocks whose contents will never
-  // change again gets handed to <Static>. Ink renders each Static item
-  // ONCE, appends it to the terminal scrollback, then skips it on every
-  // subsequent frame — so the "live" area below stays small. That
-  // matters because Ink's renderer takes a `clearTerminal` shortcut
-  // whenever `outputHeight >= terminal rows`, and clearing+repainting
-  // the whole screen at spinner/streaming-chunk rate is exactly the
-  // multi-times-per-second "flashing" the user sees during tool calls.
-  //
-  // settledRef is append-only on purpose: Static caches by index, so
-  // any previously-handed item is frozen. We only push blocks once
-  // they're truly settled (tool call has an outcome, skill scope is
-  // closed with all children settled, subagent has completed, etc.).
+  // Keep a small settled tail in the live layout. Static is excellent
+  // for old scrollback, but freezing every fresh message immediately
+  // lets Ink append it at the current terminal cursor position, which
+  // creates large blank gaps in the active viewport.
   const settledRef = useRef<Block[]>([]);
   const clearGenerationRef = useRef(0);
-  // /clear and /new drop events back to []. settledRef still holds old
-  // captures — detect the shrink, drop them, and bump a key so the
-  // Static node fully remounts (its internal `index` resets).
-  if (blocks.length < settledRef.current.length) {
-    settledRef.current = [];
-    clearGenerationRef.current += 1;
-  }
-  let settledCount = 0;
-  for (const b of blocks) {
-    if (isSettled(b)) settledCount += 1;
-    else break;
-  }
-  if (settledCount > settledRef.current.length) {
-    const next = settledRef.current.slice();
-    for (let i = settledRef.current.length; i < settledCount; i += 1) {
-      next.push(blocks[i]!);
-    }
-    settledRef.current = next;
-  }
-  const liveBlocks = blocks.slice(settledRef.current.length);
+  const nextScrollback = advanceStaticScrollback({
+    blocks,
+    staticBlocks: settledRef.current,
+    generation: clearGenerationRef.current,
+  });
+  settledRef.current = nextScrollback.staticBlocks;
+  clearGenerationRef.current = nextScrollback.generation;
+  const liveBlocks = nextScrollback.liveBlocks;
   return (
     <>
       <Static key={clearGenerationRef.current} items={settledRef.current}>

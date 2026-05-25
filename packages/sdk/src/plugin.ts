@@ -14,8 +14,8 @@ import type { TranscriberDef } from './transcriber.js';
 import type { ViewRendererDef } from './view-renderer.js';
 import type { TunnelProviderDef } from './tunnel.js';
 import type { WorkflowExecutorDef } from './workflow.js';
-
-export type PluginKind = 'tools' | 'provider' | 'mode' | 'compactor' | 'cache-strategy' | 'view-renderer' | 'tunnel-provider' | 'mcp' | 'cli' | 'channel' | 'hooks' | 'agent' | 'command' | 'transcriber' | 'embedder' | 'isolator' | 'workflow-executor';
+import type { PluginKind } from './plugin-kind.js';
+export type { PluginKind } from './plugin-kind.js';
 
 export interface PluginSpec {
   readonly name: string;
@@ -102,6 +102,7 @@ export interface Plugin extends PluginSpec {
 export interface PluginManifest {
   readonly entry: string;
   readonly kind?: PluginKind | ReadonlyArray<PluginKind>;
+  readonly port?: number;
   readonly skills?: string;
 }
 

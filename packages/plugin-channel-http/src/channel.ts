@@ -1,5 +1,6 @@
 import { createServer, type Server } from 'node:http';
 import { createAllowListResolver, denyByDefaultResolver } from '@moxxy/sdk';
+import type { Session as CoreSession } from '@moxxy/core';
 import type { ClientSession as Session } from '@moxxy/sdk';
 import type {
   Channel,
@@ -8,6 +9,7 @@ import type {
   PermissionResolver,
 } from '@moxxy/sdk';
 import { routeRequest, type RouterContext } from './router.js';
+import { OfficeAgentRuntime } from './office-agent-runtime.js';
 
 export interface HttpChannelOptions {
   readonly port?: number;
@@ -51,9 +53,14 @@ export class HttpChannel implements Channel<HttpStartOpts> {
   }
 
   async start(startOpts: HttpStartOpts): Promise<ChannelHandle> {
+    const officeAgents = new OfficeAgentRuntime(
+      startOpts.session as unknown as CoreSession,
+      this.logger as RouterContext['logger'],
+    );
     const ctx: RouterContext = {
       session: startOpts.session,
       authToken: this.authToken,
+      officeAgents,
       logger: this.logger as RouterContext['logger'],
     };
 
@@ -100,6 +107,7 @@ export class HttpChannel implements Channel<HttpStartOpts> {
     return {
       running,
       stop: async () => {
+        await officeAgents.archiveLiveAgents('session_closed');
         await new Promise<void>((resolve) => {
           if (!this.server) return resolve();
           this.server.close(() => resolve());

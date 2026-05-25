@@ -6,6 +6,13 @@ describe('parseArgv', () => {
     expect(parseArgv([])).toMatchObject({ command: 'tui' });
   });
 
+  it('--office maps to office shortcut command', () => {
+    expect(parseArgv(['--office'])).toMatchObject({
+      command: 'office',
+      flags: { office: true },
+    });
+  });
+
   it('-p alone maps to prompt command', () => {
     expect(parseArgv(['-p', 'hello'])).toMatchObject({
       command: 'prompt',

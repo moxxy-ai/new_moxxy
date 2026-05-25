@@ -1,7 +1,11 @@
 import { definePlugin, type Plugin } from '@moxxy/sdk';
 import {
   buildInstallPluginTool,
+  installPluginPackage,
+  userPluginsDir,
   type InstallPluginDeps,
+  type InstallPluginPackageOptions,
+  type InstallPluginPackageResult,
   type PluginSnapshot,
 } from './install.js';
 

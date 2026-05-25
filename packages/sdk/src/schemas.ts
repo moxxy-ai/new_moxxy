@@ -1,21 +1,7 @@
 import { z } from 'zod';
+import { PLUGIN_KINDS } from './plugin-kind.js';
 
-const pluginKindSchema = z.enum([
-  'tools',
-  'provider',
-  'mode',
-  'compactor',
-  'cache-strategy',
-  'view-renderer',
-  'tunnel-provider',
-  'mcp',
-  'cli',
-  'channel',
-  'hooks',
-  'agent',
-  'command',
-  'transcriber',
-]);
+const pluginKindSchema = z.enum(PLUGIN_KINDS);
 
 export const requirementSchema = z.object({
   kind: z.enum([
@@ -74,6 +60,7 @@ export const pluginManifestSchema = z.object({
   kind: z
     .union([pluginKindSchema, z.array(pluginKindSchema)])
     .optional(),
+  port: z.number().int().min(1).max(65535).optional(),
   skills: z.string().optional(),
 });
 

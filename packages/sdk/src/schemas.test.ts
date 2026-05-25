@@ -56,14 +56,31 @@ describe('pluginManifestSchema', () => {
     ]);
   });
 
-  it('accepts every public plugin kind, including transcriber/agent/command', () => {
+  it('accepts every public plugin kind, including transcriber/agent/command/ui', () => {
     expect(pluginManifestSchema.parse({ entry: 'a', kind: 'transcriber' }).kind).toBe(
       'transcriber',
     );
+    expect(pluginManifestSchema.parse({ entry: 'a', kind: 'ui' }).kind).toBe('ui');
     expect(pluginManifestSchema.parse({ entry: 'a', kind: ['agent', 'command'] }).kind).toEqual([
       'agent',
       'command',
     ]);
+  });
+
+  it('accepts a ui plugin port', () => {
+    const parsed = pluginManifestSchema.parse({
+      entry: './serve.js',
+      kind: 'ui',
+      port: 17901,
+    });
+
+    expect(parsed.port).toBe(17901);
+  });
+
+  it('rejects invalid ui plugin ports', () => {
+    for (const port of [0, 65536, 17901.5, '17901']) {
+      expect(() => pluginManifestSchema.parse({ entry: 'a', kind: 'ui', port })).toThrow();
+    }
   });
 
   it('rejects unknown kind', () => {

@@ -10,7 +10,7 @@ import {
   type Session,
 } from '@moxxy/core';
 import type { MoxxyConfig } from '@moxxy/config';
-import type { MoxxyRequirement } from '@moxxy/sdk';
+import { isPureUiPluginManifest, type MoxxyRequirement } from '@moxxy/sdk';
 import type { BuiltinEntry } from './builtins.js';
 import { BUILTIN_REQUIREMENTS } from './builtin-requirements.generated.js';
 
@@ -83,6 +83,14 @@ export async function registerPlugins(
       extraPaths: [userPluginsDir, userPluginsNodeModules],
     });
     for (const manifest of manifests) {
+      if (isPureUiPluginManifest(manifest)) {
+        logger.info('auto-discovery: registered UI plugin metadata', {
+          package: manifest.packageName,
+          port: manifest.port,
+          from: manifest.packagePath,
+        });
+        continue;
+      }
       if (registered.has(manifest.packageName)) continue;
       if (config.plugins?.[manifest.packageName]?.enabled === false) {
         logger.info('skipping disabled plugin', { plugin: manifest.packageName });

@@ -5,14 +5,37 @@ export { HttpChannel, type HttpChannelOptions, type HttpStartOpts } from './chan
 export {
   routeRequest,
   handleHealth,
+  handleSessionSelection,
   handleTurn,
   handleTurnStream,
   handleTurnAudio,
+  handleProviders,
+  handleProviderModels,
+  handleAgents,
+  handleCreateAgent,
+  handleGetAgent,
+  handleDeleteAgent,
+  handleAgentRun,
+  handleStopAgent,
+  handleAgentHistory,
+  handleResetAgent,
+  handleVirtualOfficeEvents,
   turnRequestSchema,
   type TurnRequest,
   type RouterContext,
   type RouteHandler,
 } from './router.js';
+export {
+  OfficeAgentRuntime,
+  type OfficeAgentCreateInput,
+  type OfficeAgentHistory,
+  type OfficeRunStart,
+  type VirtualOfficeAgent,
+} from './office-agent-runtime.js';
+export {
+  eventToVirtualOfficeEnvelope,
+  type VirtualOfficeEnvelope,
+} from './virtual-office-events.js';
 
 export const httpChannelDef = defineChannel({
   name: 'http',

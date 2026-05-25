@@ -89,4 +89,50 @@ describe('registerPlugins', () => {
 
     expect([...result.registered]).toEqual(['base', 'dependent']);
   });
+
+  it('discovers pure ui plugins without importing their entry as a runtime plugin', async () => {
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'moxxy-register-ui-plugin-'));
+    tempDirs.push(cwd);
+    const pkgDir = path.join(cwd, 'node_modules', '@moxxy', 'virtual-office-plugin');
+    await fs.mkdir(pkgDir, { recursive: true });
+    await fs.writeFile(
+      path.join(pkgDir, 'package.json'),
+      JSON.stringify({
+        name: '@moxxy/virtual-office-plugin',
+        version: '0.0.7',
+        type: 'module',
+        moxxy: {
+          plugin: {
+            entry: './serve.js',
+            kind: 'ui',
+            port: 17901,
+          },
+        },
+      }),
+    );
+    await fs.writeFile(
+      path.join(pkgDir, 'serve.js'),
+      "throw new Error('serve.js must not be imported by the runtime plugin loader');\n",
+    );
+    const warnings: string[] = [];
+    const logger = {
+      ...silentLogger,
+      warn: (msg: string): void => {
+        warnings.push(msg);
+      },
+    };
+    const session = new Session({ cwd, logger });
+
+    const result = await registerPlugins(
+      session,
+      {} as MoxxyConfig,
+      [],
+      cwd,
+      logger,
+    );
+
+    expect([...result.registered]).toEqual([]);
+    expect(session.pluginHost.list()).toEqual([]);
+    expect(warnings.join('\n')).not.toContain('failed to load plugin');
+  });
 });

@@ -50,6 +50,7 @@ export function parseArgv(argv: ReadonlyArray<string>): ParsedArgv {
 
   if (!result.command) {
     if ('p' in result.flags || 'prompt' in result.flags) result.command = 'prompt';
+    else if ('office' in result.flags) result.command = 'office';
     else if ('help' in result.flags || 'h' in result.flags) result.command = 'help';
     else if ('version' in result.flags || 'v' in result.flags) result.command = 'version';
     else result.command = 'tui';

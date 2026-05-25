@@ -8,6 +8,11 @@ import { SessionView } from './SessionView.js';
 import { SystemNotice } from './OverlayOrNotice.js';
 import { useVoiceInput } from './use-voice-input.js';
 import type { InteractiveSessionProps } from './props.js';
+import {
+  hasConversationStarted,
+  isConversationStartEvent,
+  shouldShowBootScreen,
+} from './boot-gate.js';
 
 /**
  * Outer shell: mounts the BootScreen first, runs `bootstrap()` in an
@@ -32,6 +37,7 @@ export const InteractiveSession: React.FC<InteractiveSessionProps> = ({
   // then do we swap to the chat view — prevents the splash from
   // flashing past on fast boots.
   const [initialPrompt, setInitialPrompt] = useState<string | null>(null);
+  const [externalConversationStarted, setExternalConversationStarted] = useState(false);
   const startedAt = React.useMemo(() => Date.now(), []);
 
   useEffect(() => {
@@ -73,12 +79,31 @@ export const InteractiveSession: React.FC<InteractiveSessionProps> = ({
     };
   }, [eagerSession, bootstrap]);
 
+  useEffect(() => {
+    if (!session || initialPrompt != null || resumed) return;
+    if (hasConversationStarted(session.log)) {
+      setExternalConversationStarted(true);
+      return;
+    }
+    setExternalConversationStarted(false);
+    return session.log.subscribe((event) => {
+      if (isConversationStartEvent(event)) setExternalConversationStarted(true);
+    });
+  }, [session, initialPrompt, resumed]);
+
   // Splash phase: render the BootScreen until the user submits the
   // first prompt. The input unlocks the moment a session resolves; the
   // submission flips us into the chat view AND becomes the first turn.
   // Resumed sessions skip the splash entirely — the user wants to land
   // back in their conversation without re-typing anything.
-  if (!session || (initialPrompt == null && !resumed)) {
+  if (
+    shouldShowBootScreen({
+      hasSession: session != null,
+      initialPrompt,
+      resumed,
+      externalConversationStarted,
+    })
+  ) {
     return (
       <Box flexDirection="column">
         <BootScreen
@@ -106,9 +131,12 @@ export const InteractiveSession: React.FC<InteractiveSessionProps> = ({
     );
   }
 
+  const activeSession = session;
+  if (!activeSession) return null;
+
   return (
     <SessionView
-      session={session}
+      session={activeSession}
       registerInteractiveResolver={registerInteractiveResolver}
       {...(initialPrompt ? { initialPrompt } : {})}
       {...(model ? { model } : {})}
