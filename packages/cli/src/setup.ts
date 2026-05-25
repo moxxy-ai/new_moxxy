@@ -141,7 +141,13 @@ export async function setupSessionWithConfig(opts: SetupOptions): Promise<SetupR
   // and can do session-level setup (e.g. the MCP admin plugin registers
   // lazy stubs for saved servers here). Failures are non-fatal — the
   // dispatcher records them as ErrorEvents but startup proceeds.
-  await session.dispatcher.dispatchInit(session.appContext());
+  //
+  // `skipInitHooks` suppresses this: an attach client wants the populated
+  // registries (channel factories) but not the init side effects (daemons),
+  // which the runner it attaches to already owns.
+  if (!opts.skipInitHooks) {
+    await session.dispatcher.dispatchInit(session.appContext());
+  }
   progress({ kind: 'init-hooks-done' });
   progress({ kind: 'ready' });
 

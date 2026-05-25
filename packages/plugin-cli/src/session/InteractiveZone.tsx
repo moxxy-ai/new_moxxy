@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box } from 'ink';
-import type { Session } from '@moxxy/core';
+import type { ClientSession as Session } from '@moxxy/sdk';
 import { PermissionDialog } from '../components/PermissionDialog.js';
 import { ApprovalDialog } from '../components/ApprovalDialog.js';
 import { InputBox } from '../components/InputBox.js';

@@ -1,6 +1,6 @@
 import { Bot, GrammyError, HttpError } from 'grammy';
 import type { Context } from 'grammy';
-import { type Session } from '@moxxy/core';
+import type { ClientSession as Session } from '@moxxy/sdk';
 import type {
   ApprovalRequest,
   Channel,

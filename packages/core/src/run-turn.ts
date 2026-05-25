@@ -1,25 +1,11 @@
-import type { EmittedEvent, ModeContext, MoxxyEvent, UserPromptAttachment } from '@moxxy/sdk';
+import type { EmittedEvent, ModeContext, MoxxyEvent, RunTurnOptions } from '@moxxy/sdk';
 import type { Session } from './session.js';
 import { createSubagentSpawner } from './subagents.js';
 
-export interface RunTurnOptions {
-  readonly model?: string;
-  readonly systemPrompt?: string;
-  readonly maxIterations?: number;
-  /**
-   * Per-turn abort signal. Aborting it cancels this turn without
-   * tainting the session's own controller — useful for "the user hit
-   * Esc on a runaway loop." If both this and `session.signal` are
-   * passed, either firing cancels the turn.
-   */
-  readonly signal?: AbortSignal;
-  /**
-   * Inline attachments to ship alongside the prompt — images dropped
-   * into the TUI, piped stdin payloads, file refs. Persisted onto the
-   * user_prompt event so replay sees the same context.
-   */
-  readonly attachments?: ReadonlyArray<UserPromptAttachment>;
-}
+// `RunTurnOptions` now lives in `@moxxy/sdk` so the runner client (which has
+// no `Session`) can reference it. Re-exported here to keep the historical
+// `@moxxy/core` import path working.
+export type { RunTurnOptions } from '@moxxy/sdk';
 
 export async function* runTurn(
   session: Session,
@@ -31,7 +17,9 @@ export async function* runTurn(
   // observe every event from every other turn (the EventLog has one global
   // listener set), causing cross-talk for hosts like the HTTP channel that
   // serve multiple turns in parallel.
-  const { turnId } = session.startTurn();
+  // Use a caller-supplied turnId when present (the runner mints it up front so
+  // it can return the id before the turn runs); otherwise mint one here.
+  const turnId = opts.turnId ?? session.startTurn().turnId;
   const provider = session.providers.getActive();
   const model = opts.model ?? provider.models[0]?.id ?? 'default';
 

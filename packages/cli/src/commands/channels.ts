@@ -2,6 +2,7 @@ import type { ChannelDef, ChannelSubcommand } from '@moxxy/sdk';
 import { bootSessionWithConfig, helpRequested } from '../argv-helpers.js';
 import { printError } from '../errors.js';
 import type { ParsedArgv } from '../argv.js';
+import type { SetupResult } from '../setup.js';
 import { runChannelByName } from './run-channel.js';
 import { colors } from '../colors.js';
 
@@ -74,7 +75,49 @@ export async function runChannelsCommand(argv: ParsedArgv): Promise<number> {
     return 0;
   }
 
-  const configOpts = (config.channels?.[name] ?? {}) as Record<string, unknown>;
+  return await runChannelSubcommand(def, sub, {
+    session,
+    vault,
+    config,
+    argv: { ...argv, positional: rest },
+  });
+}
+
+/**
+ * Build the full {@link ChannelSubcommandContext} (deps + args + startChannel +
+ * session) for a channel subcommand and run it. Shared by the
+ * `moxxy channels <name> <sub>` dispatcher and the bare `moxxy <name>`
+ * interactive-command path, so the ctx is constructed identically in both.
+ *
+ * `argv.positional` carries the subcommand's positional args (callers strip the
+ * `<name> <sub>` prefix); `argv.flags` are forwarded as both the subcommand
+ * flags and the channel options overrides.
+ */
+export async function runChannelSubcommand(
+  def: ChannelDef,
+  subName: string,
+  ctx: {
+    session: SetupResult['session'];
+    vault: SetupResult['vault'];
+    config: SetupResult['config'];
+    argv: ParsedArgv;
+  },
+): Promise<number> {
+  const { session, vault, config, argv } = ctx;
+  const subcommand = def.subcommands?.[subName];
+  if (!subcommand) {
+    const available = def.subcommands
+      ? Object.entries(def.subcommands)
+          .map(([n, c]) => `    ${def.name} ${n}  — ${c.description}\n`)
+          .join('')
+      : '    (none)\n';
+    printError(
+      `unknown '${def.name}' subcommand: ${subName}\n  Available subcommands:\n${available}`,
+    );
+    return 2;
+  }
+
+  const configOpts = (config.channels?.[def.name] ?? {}) as Record<string, unknown>;
   const deps = {
     cwd: process.cwd(),
     vault,
@@ -85,9 +128,10 @@ export async function runChannelsCommand(argv: ParsedArgv): Promise<number> {
   return await subcommand.run({
     deps,
     args: {
-      positional: rest,
+      positional: argv.positional,
       flags: argv.flags,
     },
+    session,
     startChannel: (extra) => {
       // Coerce extra opts into the ParsedArgv.flags shape (string | boolean).
       // ChannelSubcommand.startChannel accepts arbitrary unknown values for
@@ -102,7 +146,7 @@ export async function runChannelsCommand(argv: ParsedArgv): Promise<number> {
         flags: { ...argv.flags, ...extraFlags },
         positional: [],
       };
-      return runChannelByName(name, merged);
+      return runChannelByName(def.name, merged);
     },
   });
 }

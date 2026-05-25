@@ -1,4 +1,5 @@
 import type { PermissionResolver } from './permission.js';
+import type { ClientSession } from './client-session.js';
 
 /**
  * A Channel is a bidirectional surface that drives a Session: it feeds user
@@ -90,6 +91,12 @@ export interface ChannelDef<TStartOpts = unknown> {
    * a flag (e.g., `pair` -> start with options.pair=true).
    */
   readonly subcommands?: Readonly<Record<string, ChannelSubcommand>>;
+  /**
+   * Name of a subcommand to run for a bare `moxxy <name>` invocation on a TTY -
+   * e.g. an interactive setup wizard. When absent, a bare invocation just
+   * starts the channel.
+   */
+  readonly interactiveCommand?: string;
 }
 
 export interface ChannelAvailability {
@@ -120,6 +127,11 @@ export interface ChannelSubcommandContext {
    * this with overrides instead of duplicating the start-loop themselves.
    */
   startChannel(options?: Readonly<Record<string, unknown>>): Promise<number>;
+  /**
+   * The booted session, so a subcommand can do channel-instance work like
+   * pairing.
+   */
+  readonly session: ClientSession;
 }
 
 export interface ChannelSubcommand {

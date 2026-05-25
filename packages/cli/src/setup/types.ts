@@ -52,6 +52,14 @@ export interface SetupOptions {
   readonly resumeSessionId?: string;
   /** Disable session persistence (default: persistence is on). */
   readonly disableSessionPersistence?: boolean;
+  /**
+   * Skip the `onInit` lifecycle dispatch. Plugins are still discovered and
+   * registered (so registries — including channel factories — are populated),
+   * but their init-time side effects (scheduler poller, webhooks listener, MCP
+   * lazy stubs) don't fire. Used by `moxxy <channel> --attach`: the runner
+   * already owns those daemons, so a thin client must not start a second copy.
+   */
+  readonly skipInitHooks?: boolean;
 }
 
 /**

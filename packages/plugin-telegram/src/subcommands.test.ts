@@ -42,12 +42,18 @@ afterEach(async () => {
   process.stderr.write = origStderrWrite;
 });
 
-function ctx(overrides: { startChannel?: () => Promise<number> } = {}) {
+function ctx(
+  overrides: {
+    startChannel?: () => Promise<number>;
+    session?: { setPermissionResolver: (r: unknown) => void };
+  } = {},
+) {
   return {
     deps: { cwd: tmp, vault, logger: undefined, options: {} },
     args: { positional: [], flags: {} },
     startChannel: overrides.startChannel ?? (async () => 0),
-  };
+    session: overrides.session ?? { setPermissionResolver: () => {} },
+  } as never;
 }
 
 describe('telegram channel subcommands (registered on ChannelDef)', () => {
@@ -88,13 +94,22 @@ describe('telegram channel subcommands (registered on ChannelDef)', () => {
     expect(writeOut.join('')).toContain('no pairing was active');
   });
 
-  it('`pair` delegates to startChannel with pair=true in an interactive TTY', async () => {
+  it('`pair` drives the pairing flow on the session in an interactive TTY', async () => {
     const originalIsTTY = process.stdin.isTTY;
     Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
     try {
       const startChannel = vi.fn(async () => 0);
-      await telegramDef.subcommands!.pair!.run(ctx({ startChannel }));
-      expect(startChannel).toHaveBeenCalledWith({ pair: true });
+      const setPermissionResolver = vi.fn();
+      // No token in the vault -> the channel throws before it can open
+      // a real polling connection, so the flow fails fast (no network).
+      // We only assert that `pair` now drives the in-process pairing
+      // flow (wires the session's permission resolver) instead of
+      // delegating to `startChannel`.
+      await expect(
+        telegramDef.subcommands!.pair!.run(ctx({ startChannel, session: { setPermissionResolver } })),
+      ).rejects.toThrow(/token/i);
+      expect(setPermissionResolver).toHaveBeenCalledTimes(1);
+      expect(startChannel).not.toHaveBeenCalled();
     } finally {
       Object.defineProperty(process.stdin, 'isTTY', { value: originalIsTTY, configurable: true });
     }

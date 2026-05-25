@@ -1,5 +1,5 @@
 import type React from 'react';
-import type { Session } from '@moxxy/core';
+import type { ClientSession as Session } from '@moxxy/sdk';
 import type { UserPromptAttachment } from '@moxxy/sdk';
 import type { ListPickerOption } from '../components/ListPicker.js';
 import type { Overlay, Picker } from './types.js';

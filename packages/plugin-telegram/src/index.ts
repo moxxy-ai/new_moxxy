@@ -2,6 +2,9 @@ import { defineChannel, defineTool, definePlugin, z, type Plugin } from '@moxxy/
 import type { VaultStore } from '@moxxy/plugin-vault';
 import { Bot } from 'grammy';
 import { TelegramChannel } from './channel.js';
+import { TELEGRAM_AUTHORIZED_CHAT_KEY, TELEGRAM_TOKEN_KEY } from './keys.js';
+import { runTelegramWizard } from './setup-wizard.js';
+import { runPairFlow } from './pair-flow.js';
 
 export {
   TelegramChannel,
@@ -29,13 +32,7 @@ export interface BuildTelegramPluginOptions {
   readonly vault: VaultStore;
 }
 
-/** Vault key the plugin uses for the Bot API token. Exported so the
- *  CLI's interactive setup wizard can read/write the same slot. */
-export const TELEGRAM_TOKEN_KEY = 'telegram_bot_token';
-/** Vault key the plugin uses for the paired chat id. */
-export const TELEGRAM_AUTHORIZED_CHAT_KEY = 'telegram_authorized_chat_id';
-/** Regex validating a Telegram bot token (`<digits>:<22+ url-safe>`). */
-export const TELEGRAM_TOKEN_RE = /^\d+:[A-Za-z0-9_-]{20,}$/;
+export { TELEGRAM_TOKEN_KEY, TELEGRAM_AUTHORIZED_CHAT_KEY, TELEGRAM_TOKEN_RE } from './keys.js';
 
 // Backwards-compat aliases for the existing call sites in this file.
 const TOKEN_KEY = TELEGRAM_TOKEN_KEY;
@@ -76,12 +73,26 @@ export function buildTelegramPlugin(opts: BuildTelegramPluginOptions): Plugin {
             };
           }
         },
+        interactiveCommand: 'setup',
         subcommands: {
+          setup: {
+            description:
+              'Interactive setup: store a bot token, pair a chat, then start the bot. Shown by default for `moxxy telegram` on a TTY.',
+            run: async (ctx) => {
+              // The wizard drives token entry + pairing through clack
+              // prompts, so it needs an interactive terminal. In a
+              // headless invocation we just start the bot directly.
+              if (process.stdin.isTTY !== true) {
+                return ctx.startChannel();
+              }
+              return runTelegramWizard(ctx);
+            },
+          },
           pair: {
             description:
               'Open a pairing window. Send /start to your bot in Telegram; it will DM a 6-digit code to paste back in the terminal.',
             run: async (ctx) => {
-              // Pairing requires an interactive terminal — the user
+              // Pairing requires an interactive terminal - the user
               // must paste the bot-issued code into a prompt. In a
               // headless invocation we bail with a clear message
               // instead of silently starting a bot that nobody can
@@ -92,7 +103,7 @@ export function buildTelegramPlugin(opts: BuildTelegramPluginOptions): Plugin {
                 );
                 return 1;
               }
-              return ctx.startChannel({ pair: true });
+              return runPairFlow(ctx);
             },
           },
           unpair: {

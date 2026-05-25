@@ -3,11 +3,11 @@ import type React from 'react';
 import type {
   ApprovalDecision,
   ApprovalRequest,
+  ClientSession as Session,
   PendingToolCall,
   PermissionContext,
   PermissionDecision,
 } from '@moxxy/sdk';
-import type { Session } from '@moxxy/core';
 import type { PendingApproval, PendingPermission } from './types.js';
 
 export interface PermissionQueueHandle {

@@ -282,6 +282,9 @@ importers:
       '@moxxy/plugin-webhooks':
         specifier: workspace:*
         version: link:../plugin-webhooks
+      '@moxxy/runner':
+        specifier: workspace:*
+        version: link:../runner
       '@moxxy/sdk':
         specifier: workspace:*
         version: link:../sdk
@@ -609,6 +612,9 @@ importers:
       '@moxxy/mode-tool-use':
         specifier: workspace:*
         version: link:../mode-tool-use
+      '@moxxy/runner':
+        specifier: workspace:*
+        version: link:../runner
       '@moxxy/testing':
         specifier: workspace:*
         version: link:../testing
@@ -1168,6 +1174,9 @@ importers:
 
   packages/plugin-telegram:
     dependencies:
+      '@clack/prompts':
+        specifier: ^1.4.0
+        version: 1.4.0
       '@moxxy/core':
         specifier: workspace:*
         version: link:../core
@@ -1244,6 +1253,40 @@ importers:
         specifier: ^3.24.0
         version: 3.25.76
     devDependencies:
+      '@moxxy/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/tsconfig
+      '@moxxy/vitest-preset':
+        specifier: workspace:*
+        version: link:../../tooling/vitest-preset
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.19.18
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.18)
+
+  packages/runner:
+    dependencies:
+      '@moxxy/core':
+        specifier: workspace:*
+        version: link:../core
+      '@moxxy/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+      zod:
+        specifier: ^3.24.0
+        version: 3.25.76
+    devDependencies:
+      '@moxxy/mode-tool-use':
+        specifier: workspace:*
+        version: link:../mode-tool-use
+      '@moxxy/testing':
+        specifier: workspace:*
+        version: link:../testing
       '@moxxy/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig

@@ -42,7 +42,7 @@ const SECTIONS: ReadonlyArray<{ readonly title: string; readonly rows: ReadonlyA
     title: 'USAGE',
     rows: [
       ['moxxy', 'start the interactive TUI (default channel)'],
-      ['moxxy <channel>', 'start a registered channel by name (e.g. `moxxy telegram`)'],
+      ['moxxy <channel>', 'start a registered channel by name (see `moxxy channels`)'],
       ['moxxy -p "…"', 'one-shot prompt to stdout'],
       ['moxxy <command> …', 'run a built-in subcommand (see below)'],
     ],
@@ -223,7 +223,7 @@ async function main(): Promise<number> {
   // API-key prompt so a typo doesn't accidentally boot the provider.
   //
   // CRITICAL: the try/catch wraps ONLY the channel-existence probe. A
-  // failure in `runChannelByName` (e.g. the telegram wizard's
+  // failure in `runChannelByName` (e.g. a channel's interactive setup
   // hand-off recursing into itself, the bot throwing on startup) must
   // bubble out as a real error — silently swallowing it and falling
   // through to "unknown command" misled users into thinking the

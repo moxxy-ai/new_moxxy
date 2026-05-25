@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import type { Session } from '@moxxy/core';
+import type { ClientSession as Session } from '@moxxy/sdk';
 
 export interface McpStatus {
   connected: number;

@@ -1,14 +1,17 @@
 import { cancel, isCancel, log, outro, spinner, text } from '@clack/prompts';
-import { TelegramChannel, type PairingIssuedEvent } from '@moxxy/plugin-telegram';
-import { bootSessionWithConfig } from '../../argv-helpers.js';
-import type { ParsedArgv } from '../../argv.js';
-import { colors } from '../../colors.js';
+import type { ChannelSubcommandContext } from '@moxxy/sdk';
+import type { VaultStore } from '@moxxy/plugin-vault';
+import { TelegramChannel, type PairingIssuedEvent } from './channel.js';
+
+// Tiny zero-dep ANSI dim helper, so this flow stays inside the plugin.
+const ANSI = process.stdout.isTTY && !process.env.NO_COLOR;
+const dim = (s: string): string => (ANSI ? `\x1b[2m${s}\x1b[22m` : s);
 
 /**
  * Drive the bot-issued pairing flow end-to-end.
  *
  * Steps:
- *   1. Boot session, build a TelegramChannel directly, wire the
+ *   1. Build a TelegramChannel directly from the subcommand ctx and wire the
  *      session's permission resolver.
  *   2. Subscribe to pairing-issued events BEFORE starting the bot so
  *      we can't race past the first /start.
@@ -20,18 +23,12 @@ import { colors } from '../../colors.js';
  *      vault and DMs a confirmation; we then hand off SIGINT to keep
  *      the bot running until the user Ctrl-Cs.
  */
-export async function actionPair(argv: ParsedArgv): Promise<number> {
-  const { session, vault, config } = await bootSessionWithConfig(argv, {
-    skipKeyPrompt: true,
-    tolerateNoProvider: true,
-    skipProviderActivation: true,
-  });
-
-  const configOpts = (config.channels?.['telegram'] ?? {}) as Record<string, unknown>;
+export async function runPairFlow(ctx: ChannelSubcommandContext): Promise<number> {
+  const session = ctx.session;
   const channel = new TelegramChannel({
-    vault,
-    token: (configOpts['token'] as string | undefined) ?? undefined,
-    logger: session.logger as never,
+    vault: ctx.deps.vault as VaultStore,
+    token: (ctx.deps.options?.['token'] as string | undefined) ?? undefined,
+    logger: ctx.deps.logger as never,
   });
   session.setPermissionResolver(channel.permissionResolver);
 
@@ -45,7 +42,7 @@ export async function actionPair(argv: ParsedArgv): Promise<number> {
     issuedResolve = null;
   });
 
-  outro(colors.dim('opening pairing window…'));
+  outro(dim('opening pairing window...'));
 
   const handle = await channel.start({ session, pair: true });
 
@@ -61,7 +58,7 @@ export async function actionPair(argv: ParsedArgv): Promise<number> {
   };
 
   const spin = spinner();
-  spin.start('Waiting for /start from a Telegram chat…');
+  spin.start('Waiting for /start from a Telegram chat...');
 
   let event: PairingIssuedEvent;
   try {
@@ -96,7 +93,7 @@ export async function actionPair(argv: ParsedArgv): Promise<number> {
     }
     const result = await channel.confirmPairingCode(String(entered));
     if (result.ok) {
-      log.success(`Paired ✓ — chat ${result.chatId} is authorized.`);
+      log.success(`Paired ✓ - chat ${result.chatId} is authorized.`);
       confirmed = true;
       break;
     }

@@ -26,6 +26,7 @@
   },
   "devDependencies": {
     "@moxxy/mode-tool-use": "workspace:*",
+    "@moxxy/runner": "workspace:*",
     "@moxxy/testing": "workspace:*",
     "@moxxy/tools-builtin": "workspace:*",
     "@moxxy/tsconfig": "workspace:*",

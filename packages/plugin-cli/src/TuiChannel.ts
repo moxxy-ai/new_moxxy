@@ -4,11 +4,11 @@ import type {
   Channel,
   ChannelHandle,
   ChannelStartOptsBase,
+  ClientSession as Session,
   PendingToolCall,
   PermissionContext,
   PermissionDecision,
 } from '@moxxy/sdk';
-import type { Session } from '@moxxy/core';
 import {
   createInteractivePermissionResolver,
   type PermissionPromptHandler,

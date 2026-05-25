@@ -1,6 +1,6 @@
 import { type Bot, InlineKeyboard } from 'grammy';
 import type { PendingToolCall, PermissionContext } from '@moxxy/sdk';
-import type { Session } from '@moxxy/core';
+import type { ClientSession as Session } from '@moxxy/sdk';
 import type { TelegramPermissionResolver } from '../permission.js';
 import { truncate } from './html.js';
 

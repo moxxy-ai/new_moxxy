@@ -1,4 +1,5 @@
 import type { Channel, ChannelDef, ChannelHandle } from '@moxxy/sdk';
+import { startRunnerServer, runnerSocketPath, type RunnerServer } from '@moxxy/runner';
 import type { ParsedArgv } from '../argv.js';
 import { bootSessionWithConfig, hasBoolFlag, helpRequested, stringFlag } from '../argv-helpers.js';
 import { colors } from '../colors.js';
@@ -13,21 +14,22 @@ import {
 } from './service/index.js';
 
 /**
- * `moxxy serve` — run every registered channel plus every background
- * daemon (scheduler, webhooks) in ONE process sharing a single Session.
- * The advantage over `moxxy service install <one-at-a-time>` is that
- * the inbound Telegram chat sees the same event log as scheduled fires
- * and webhook deliveries, so the user can ask "what happened at 8 AM?"
- * and the bot has the context.
+ * `moxxy serve` - the runner. Owns one Session + the agentic loop, runs the
+ * background daemons (scheduler, webhooks), and exposes the session over a
+ * local socket so thin clients (`moxxy tui`, `moxxy telegram`, ...) can attach.
  *
- * The set of channels is discovered at runtime from the session's
- * channel registry — adding a new channel plugin needs no change here.
- * Background daemons are enumerated by `BACKGROUND_UNITS` below; that
- * list is short and stable (just scheduler + webhooks today), so
- * keeping it here is honest scope rather than premature abstraction.
+ * By default serve starts **bare**: no channels in-process - you launch each
+ * channel as its own command and it attaches over the socket. `--all` instead
+ * starts every registered channel in-process up front (the pre-split
+ * behavior), sharing the one event log.
  *
- * `--except <name1,name2,...>` skips named units. Names match the
- * channel's `name` field or one of the background-unit ids.
+ * The set of channels is discovered at runtime from the session's channel
+ * registry - adding a new channel plugin needs no change here. Background
+ * daemons are enumerated by `BACKGROUND_UNITS` below; that list is short and
+ * stable (just scheduler + webhooks today).
+ *
+ * `--except <name1,name2,...>` skips named units (only meaningful with
+ * `--all`). Names match the channel's `name` field or a background-unit id.
  */
 
 interface BackgroundUnit {
@@ -58,14 +60,15 @@ const BACKGROUND_UNITS: ReadonlyArray<BackgroundUnit> = [
 const HELP = formatHelp({
   title: 'moxxy serve',
   tagline:
-    'run every registered channel and background daemon in one process, sharing a session',
+    'the runner: owns one session + the agentic loop, exposes it over a socket for clients to attach',
   sections: [
     {
       title: 'FLAGS',
       rows: [
+        ['--all', 'also start every registered channel in-process (default: bare runner)'],
         [
           '--except <list>',
-          'comma-separated unit names to skip (channel name OR background unit id)',
+          'with --all: comma-separated unit names to skip (channel name OR background unit id)',
         ],
         ['--background', 'install + start as a launchd / systemd --user unit and exit'],
         ['--stop', 'stop + uninstall the background unit'],
@@ -78,10 +81,11 @@ const HELP = formatHelp({
     {
       title: 'EXAMPLES',
       rows: [
-        ['moxxy serve', 'start everything available, foreground (^C to stop)'],
-        ['moxxy serve --except http', 'foreground, skip the HTTP channel'],
+        ['moxxy serve', 'bare runner: session + daemons + socket, no channels (^C to stop)'],
+        ['moxxy tui', 'in another terminal, attaches to the running runner'],
+        ['moxxy serve --all', 'also start every channel in-process up front'],
+        ['moxxy serve --all --except http', 'foreground, all channels except HTTP'],
         ['moxxy serve --background', 'install + start as an OS unit, exit'],
-        ['moxxy serve --background --except http', 'background unit that skips HTTP'],
         ['moxxy serve --stop', 'tear down the background unit'],
         ['moxxy serve --status', 'show whether the background unit is running'],
       ],
@@ -89,6 +93,12 @@ const HELP = formatHelp({
     {
       title: 'NOTES',
       rows: [
+        [
+          'Clients',
+          'Once serve is up, `moxxy tui` / `moxxy telegram` / `moxxy http` attach to it over ' +
+            'the socket instead of booting their own session. Without a runner they self-host ' +
+            'one (and open the socket); pass --standalone to stay fully isolated.',
+        ],
         [
           'Channel discovery',
           'Channels are read from the live session registry — newly installed channel ' +
@@ -117,16 +127,18 @@ export async function runServeCommand(argv: ParsedArgv): Promise<number> {
   }
 
   const except = parseExcept(stringFlag(argv, 'except'));
+  const all = hasBoolFlag(argv, 'all');
 
   if (hasBoolFlag(argv, 'stop')) return await runServeStop();
-  if (hasBoolFlag(argv, 'status')) return await runServeStatus(except);
-  if (hasBoolFlag(argv, 'background')) return await runServeBackground(except);
-  return await runServeForeground(argv, except);
+  if (hasBoolFlag(argv, 'status')) return await runServeStatus(except, all);
+  if (hasBoolFlag(argv, 'background')) return await runServeBackground(except, all);
+  return await runServeForeground(argv, except, all);
 }
 
-function serveSpec(except: Set<string>): ServiceSpec {
+function serveSpec(except: Set<string>, all = false): ServiceSpec {
   const args = ['serve'];
-  if (except.size > 0) {
+  if (all) args.push('--all');
+  if (all && except.size > 0) {
     args.push('--except', [...except].join(','));
   }
   return {
@@ -137,7 +149,7 @@ function serveSpec(except: Set<string>): ServiceSpec {
   };
 }
 
-async function runServeBackground(except: Set<string>): Promise<number> {
+async function runServeBackground(except: Set<string>, all: boolean): Promise<number> {
   if (servicePlatform() === 'unsupported') {
     process.stderr.write(
       colors.red(`background mode is unsupported on this platform (${process.platform})`) +
@@ -147,7 +159,7 @@ async function runServeBackground(except: Set<string>): Promise<number> {
     );
     return 1;
   }
-  const spec = serveSpec(except);
+  const spec = serveSpec(except, all);
   const result = await installAndStartService(spec);
   if (!result.ok) {
     process.stderr.write(`${colors.red('failed')}  ${colors.dim(result.message)}\n`);
@@ -179,13 +191,13 @@ async function runServeStop(): Promise<number> {
   return result.ok ? 0 : 1;
 }
 
-async function runServeStatus(except: Set<string>): Promise<number> {
+async function runServeStatus(except: Set<string>, all: boolean): Promise<number> {
   const platform = servicePlatform();
   if (platform === 'unsupported') {
     process.stdout.write(colors.red(`background mode is unsupported on this platform`) + '\n');
     return 1;
   }
-  const spec = serveSpec(except);
+  const spec = serveSpec(except, all);
   const status = await getServiceStatus(spec);
   const rows: Array<[string, string]> = [
     ['platform', platform],
@@ -201,16 +213,39 @@ async function runServeStatus(except: Set<string>): Promise<number> {
   return 0;
 }
 
-async function runServeForeground(argv: ParsedArgv, except: Set<string>): Promise<number> {
+async function runServeForeground(
+  argv: ParsedArgv,
+  except: Set<string>,
+  all: boolean,
+): Promise<number> {
   const setup = await bootSessionWithConfig(argv, { skipKeyPrompt: true });
   const { session, vault, config, scheduler, webhooks } = setup;
   const setupHandle: SetupHandle = { scheduler, webhooks };
+
+  // Expose the session over the socket FIRST - this is what makes serve a
+  // runner. If the bind fails, another runner already owns the socket, and
+  // there's no point continuing (we'd be a second, unreachable session).
+  let runnerServer: RunnerServer;
+  try {
+    runnerServer = await startRunnerServer(session);
+  } catch (err) {
+    process.stderr.write(
+      colors.red(`failed to open the runner socket at ${runnerSocketPath()}: ${errMsg(err)}\n`),
+    );
+    process.stderr.write(
+      colors.dim(
+        '  Another runner may already be running (a `moxxy serve` or a self-hosting `moxxy tui`).\n' +
+          '  Stop it first, or just attach with `moxxy tui`.\n',
+      ),
+    );
+    return 1;
+  }
 
   const allBackgroundIds = new Set(BACKGROUND_UNITS.map((u) => u.id));
   const allChannelDefs = session.channels.list();
   const allChannelNames = new Set(allChannelDefs.map((d) => d.name));
   const allKnown = new Set([...allBackgroundIds, ...allChannelNames]);
-  const unknownExcept = [...except].filter((n) => !allKnown.has(n));
+  const unknownExcept = all ? [...except].filter((n) => !allKnown.has(n)) : [];
 
   // Stop excluded background units BEFORE starting channels so the user
   // never sees a brief listener flap.
@@ -228,21 +263,22 @@ async function runServeForeground(argv: ParsedArgv, except: Set<string>): Promis
     }
   }
 
-  // Start each non-excluded channel. Failures (e.g. no Telegram token
-  // paired yet) are collected and surfaced; serve keeps going so a
-  // missing channel doesn't kill the whole serve.
+  // Start each non-excluded channel, only with --all. Bare runner (default)
+  // starts none; clients attach over the socket instead. Failures (e.g. no
+  // Telegram token) are collected and surfaced; serve keeps going.
   const started: Array<{ name: string; handle: ChannelHandle }> = [];
   const failed: Array<{ name: string; error: string }> = [];
-  let resolverSetByChannel = false;
-
-  for (const def of allChannelDefs) {
-    if (except.has(def.name)) continue;
-    try {
-      const handle = await startChannel(def, setup, !resolverSetByChannel);
-      started.push({ name: def.name, handle });
-      resolverSetByChannel = true;
-    } catch (err) {
-      failed.push({ name: def.name, error: errMsg(err) });
+  if (all) {
+    let resolverSetByChannel = false;
+    for (const def of allChannelDefs) {
+      if (except.has(def.name)) continue;
+      try {
+        const handle = await startChannel(def, setup, !resolverSetByChannel);
+        started.push({ name: def.name, handle });
+        resolverSetByChannel = true;
+      } catch (err) {
+        failed.push({ name: def.name, error: errMsg(err) });
+      }
     }
   }
   void vault;
@@ -255,21 +291,15 @@ async function runServeForeground(argv: ParsedArgv, except: Set<string>): Promis
     failed,
     stoppedBackground,
     runningBackground,
-    excluded: [...except],
+    excluded: all ? [...except] : [],
     unknownExcept,
+    runnerAddress: runnerServer.address,
+    bare: !all,
   });
 
-  // The only "nothing to do" case is: no channels alive AND no background
-  // units alive. Failed channels alone don't justify exiting — background
-  // daemons keep working and the user can fix the channel and restart.
-  if (started.length === 0 && runningBackground.length === 0) {
-    process.stderr.write(
-      colors.red('nothing to run: every channel and background unit is excluded or failed.\n'),
-    );
-    return 1;
-  }
-
-  await runUntilSignal(started, setup);
+  // A bare runner is always "doing something" - it's listening for clients
+  // and running daemons. There's no nothing-to-run exit anymore.
+  await runUntilSignal(started, setup, runnerServer);
   return 0;
 }
 
@@ -313,24 +343,19 @@ interface StartupSummary {
   readonly runningBackground: ReadonlyArray<string>;
   readonly excluded: ReadonlyArray<string>;
   readonly unknownExcept: ReadonlyArray<string>;
+  readonly runnerAddress: string;
+  readonly bare: boolean;
 }
 
 /**
  * Best-effort hint for a channel that failed to start. Pattern-matches
- * common messages (Telegram token missing, port in use, …) into a one-line
+ * common, channel-agnostic messages (port in use, …) into a one-line
  * fix-suggestion. Defensive: anything unrecognized falls back to the raw
- * error so we never hide what actually broke.
+ * error so we never hide what actually broke. Channel-specific failures
+ * surface the channel's own error message.
  */
-function failureHint(name: string, error: string): string | null {
+function failureHint(_name: string, error: string): string | null {
   const e = error.toLowerCase();
-  if (name === 'telegram') {
-    if (e.includes('token')) {
-      return 'no bot token in the vault — run `moxxy telegram` to set one and pair a chat.';
-    }
-    if (e.includes('paired') || e.includes('pairing')) {
-      return 'bot is not paired yet — run `moxxy channels telegram pair`.';
-    }
-  }
   if (e.includes('eaddrinuse') || e.includes('address already in use')) {
     return 'port is already in use — stop the conflicting process or pick another port in moxxy.config.ts.';
   }
@@ -342,8 +367,13 @@ function failureHint(name: string, error: string): string | null {
 
 function printStartupSummary(s: StartupSummary): void {
   const out = process.stdout;
-  out.write(`${colors.bold('moxxy serve')}\n`);
-  if (s.started.length > 0) {
+  out.write(`${colors.bold('moxxy serve')} ${colors.dim(s.bare ? '(bare runner)' : '(--all)')}\n`);
+  out.write(`  ${colors.bold('runner      ')} ${colors.dim(s.runnerAddress)}\n`);
+  if (s.bare) {
+    out.write(
+      `  ${colors.bold('channels    ')} ${colors.dim('(none; attach with `moxxy tui`, `moxxy telegram`, ...)')}\n`,
+    );
+  } else if (s.started.length > 0) {
     out.write(`  ${colors.bold('channels    ')} ${s.started.join(', ')}\n`);
   } else {
     out.write(
@@ -393,12 +423,16 @@ function printStartupSummary(s: StartupSummary): void {
 async function runUntilSignal(
   started: ReadonlyArray<{ name: string; handle: ChannelHandle }>,
   setup: Awaited<ReturnType<typeof bootSessionWithConfig>>,
+  runnerServer: RunnerServer,
 ): Promise<void> {
   let stopRequested = false;
   const shutdown = async (signal: string): Promise<void> => {
     if (stopRequested) return;
     stopRequested = true;
     process.stderr.write(`\nstopping (${signal})…\n`);
+    // Close the socket first so attached clients see the disconnect and stop
+    // sending before the session tears down.
+    await runnerServer.close().catch(() => undefined);
     for (const { name, handle } of started) {
       try {
         await handle.stop(signal);

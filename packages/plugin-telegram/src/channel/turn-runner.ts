@@ -1,5 +1,5 @@
 import type { Bot, Context } from 'grammy';
-import { runTurn, type Session } from '@moxxy/core';
+import type { ClientSession as Session } from '@moxxy/sdk';
 import type { FramePump } from './frame-pump.js';
 import type { TypingIndicator } from './typing-indicator.js';
 
@@ -52,7 +52,7 @@ export async function runUserTurn(
   });
 
   try {
-    for await (const _event of runTurn(session, text, {
+    for await (const _event of session.runTurn(text, {
       ...(model ? { model } : {}),
       signal: controller.signal,
     })) {

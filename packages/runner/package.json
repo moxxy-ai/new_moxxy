@@ -1,0 +1,35 @@
+{
+  "name": "@moxxy/runner",
+  "version": "0.0.0",
+  "description": "Runner/thin-client transport for moxxy. A unix-socket + bidirectional JSON-RPC layer that lets `moxxy serve` own the Session while channels (tui, telegram, http) attach as thin clients via a RemoteSession.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf dist .turbo"
+  },
+  "dependencies": {
+    "@moxxy/core": "workspace:*",
+    "@moxxy/sdk": "workspace:*",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@moxxy/mode-tool-use": "workspace:*",
+    "@moxxy/testing": "workspace:*",
+    "@moxxy/tsconfig": "workspace:*",
+    "@moxxy/vitest-preset": "workspace:*",
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}

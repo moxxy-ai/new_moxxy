@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import type { MoxxyEvent } from '@moxxy/sdk';
-import type { Session } from '@moxxy/core';
+import type { ClientSession as Session } from '@moxxy/sdk';
 import { SkillsPanel } from '../components/SkillsPanel.js';
 import { ToolsPanel } from '../components/ToolsPanel.js';
 import { AgentsPanel } from '../components/AgentsPanel.js';

@@ -1,4 +1,4 @@
-import type { Session } from '@moxxy/core';
+import type { ClientSession as Session } from '@moxxy/sdk';
 import {
   BUILTIN_SLASH_COMMANDS,
   type SlashCommand,

@@ -1,5 +1,5 @@
 import { type Bot, type Context, InlineKeyboard } from 'grammy';
-import type { Session } from '@moxxy/core';
+import type { ClientSession as Session } from '@moxxy/sdk';
 
 export interface SlashState {
   readonly session: Session | null;

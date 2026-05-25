@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { MoxxyEvent } from '@moxxy/sdk';
-import type { Session } from '@moxxy/core';
+import type { MoxxyEvent, ClientSession as Session } from '@moxxy/sdk';
 
 export interface EventStreamHandle {
   events: ReadonlyArray<MoxxyEvent>;

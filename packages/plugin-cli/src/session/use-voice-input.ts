@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Session } from '@moxxy/core';
+import type { ClientSession as Session } from '@moxxy/sdk';
 import { getInstallHint, type RequirementCheck, type RequirementIssue, type Transcriber } from '@moxxy/sdk';
 import type { ExternalInsert } from '../components/prompt/external-insert.js';
 import {

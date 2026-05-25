@@ -39,6 +39,30 @@ export type {
 export type { EventLogReader } from './log.js';
 
 export type {
+  RunTurnOptions,
+  SessionLogReader,
+  SessionLike,
+  SessionInfo,
+  ProviderInfo,
+  ToolInfo,
+  SkillInfo,
+  CommandInfo,
+} from './session-like.js';
+
+export type {
+  ClientSession,
+  ProvidersClientView,
+  ModesClientView,
+  ToolsClientView,
+  CommandsClientView,
+  SkillsClientView,
+  AgentsClientView,
+  TranscribersClientView,
+  RequirementsClientView,
+  PermissionsClientView,
+} from './client-session.js';
+
+export type {
   PermissionMode,
   PermissionDecision,
   PermissionRule,

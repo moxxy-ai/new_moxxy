@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react';
 import type React from 'react';
-import { runTurn, type Session } from '@moxxy/core';
-import type { UserPromptAttachment } from '@moxxy/sdk';
+import type { ClientSession as Session, UserPromptAttachment } from '@moxxy/sdk';
 import type { EventStreamHandle } from './use-event-stream.js';
 
 export interface QueuedMessage {
@@ -67,7 +66,7 @@ export function useTurnRunner(opts: TurnRunnerOptions): TurnRunnerHandle {
     const controller = new AbortController();
     turnControllerRef.current = controller;
     try {
-      for await (const _event of runTurn(opts.session, text, {
+      for await (const _event of opts.session.runTurn(text, {
         ...(effectiveModel ? { model: effectiveModel } : {}),
         signal: controller.signal,
         ...(attachments.length > 0 ? { attachments } : {}),

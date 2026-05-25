@@ -3,7 +3,7 @@ import type {
   PermissionContext,
   PermissionDecision,
 } from '@moxxy/sdk';
-import type { Session } from '@moxxy/core';
+import type { ClientSession as Session } from '@moxxy/sdk';
 
 /**
  * Generic shape of a boot-progress step. We keep this loose so the

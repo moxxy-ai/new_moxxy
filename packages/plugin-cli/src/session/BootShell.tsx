@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Box } from 'ink';
-import type { Session } from '@moxxy/core';
+import type { ClientSession as Session } from '@moxxy/sdk';
 import { BootScreen, type BootEvent, type BootEventId } from '../components/BootScreen.js';
 import { InputBox } from '../components/InputBox.js';
 import { FooterHints } from '../components/FooterHints.js';

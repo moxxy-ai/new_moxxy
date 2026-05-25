@@ -1,4 +1,4 @@
-import type { Session } from '@moxxy/core';
+import type { ClientSession as Session } from '@moxxy/sdk';
 import { savePreferences } from '@moxxy/core';
 import type { Picker } from './types.js';
 

@@ -76,4 +76,28 @@ describe('Session', () => {
     await s.close();
     expect(onShutdown).toHaveBeenCalledTimes(1);
   });
+
+  it('getInfo returns a serializable snapshot of the registries', () => {
+    const s = new Session({ cwd: '/tmp', silent: true });
+    const info = s.getInfo();
+    expect(info.sessionId).toBe(s.id);
+    expect(info.cwd).toBe('/tmp');
+    // Bare session: nothing active yet, all lists empty, no transcriber.
+    expect(info.activeProvider).toBeNull();
+    expect(info.activeMode).toBeNull();
+    expect(info.providers).toEqual([]);
+    expect(info.modes).toEqual([]);
+    expect(info.tools).toEqual([]);
+    expect(info.commands).toEqual([]);
+    expect(info.readyProviders).toEqual([]);
+    expect(info.hasTranscriber).toBe(false);
+    // The snapshot must survive a JSON round-trip (it crosses the wire).
+    expect(JSON.parse(JSON.stringify(info))).toEqual(info);
+  });
+
+  it('exposes runTurn as a method (SessionLike conformance)', () => {
+    const s = new Session({ cwd: '/tmp', silent: true });
+    expect(typeof s.runTurn).toBe('function');
+    expect(typeof s.getInfo).toBe('function');
+  });
 });

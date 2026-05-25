@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { runTurn, type Session } from '@moxxy/core';
+import type { ClientSession as Session } from '@moxxy/sdk';
 import type { MoxxyEvent } from '@moxxy/sdk';
 
 export const turnRequestSchema = z.object({
@@ -100,7 +100,7 @@ export async function handleTurn(
 
   const events: MoxxyEvent[] = [];
   try {
-    for await (const event of runTurn(ctx.session, body.prompt, {
+    for await (const event of ctx.session.runTurn(body.prompt, {
       ...(body.model ? { model: body.model } : {}),
       ...(body.systemPrompt ? { systemPrompt: body.systemPrompt } : {}),
     })) {
@@ -195,7 +195,7 @@ export async function handleTurnAudio(
 
   const events: MoxxyEvent[] = [];
   try {
-    for await (const event of runTurn(ctx.session, transcript, {
+    for await (const event of ctx.session.runTurn(transcript, {
       ...(model ? { model } : {}),
       ...(systemPrompt ? { systemPrompt } : {}),
     })) {
@@ -242,7 +242,7 @@ export async function handleTurnStream(
   };
 
   try {
-    for await (const event of runTurn(ctx.session, body.prompt, {
+    for await (const event of ctx.session.runTurn(body.prompt, {
       ...(body.model ? { model: body.model } : {}),
       ...(body.systemPrompt ? { systemPrompt: body.systemPrompt } : {}),
     })) {

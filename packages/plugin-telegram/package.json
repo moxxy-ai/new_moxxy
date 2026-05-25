@@ -20,6 +20,7 @@
   },
   "moxxy": { "plugin": { "entry": "./dist/index.js", "kind": "cli" } },
   "dependencies": {
+    "@clack/prompts": "^1.4.0",
     "@moxxy/core": "workspace:*",
     "@moxxy/plugin-vault": "workspace:*",
     "@moxxy/sdk": "workspace:*",

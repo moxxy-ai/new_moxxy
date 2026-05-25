@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Box } from 'ink';
 import { useApp } from 'ink';
 import type { UserPromptAttachment } from '@moxxy/sdk';
-import type { Session } from '@moxxy/core';
+import type { ClientSession as Session } from '@moxxy/sdk';
 import { savePreferences } from '@moxxy/core';
 import { ChatView } from '../components/ChatView.js';
 import { StatusLine } from '../components/StatusLine.js';

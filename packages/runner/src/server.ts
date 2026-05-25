@@ -1,0 +1,386 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+import type { Session } from '@moxxy/core';
+import { newTurnId } from '@moxxy/core';
+import type {
+  ApprovalDecision,
+  ApprovalRequest,
+  ApprovalResolver,
+  MoxxyEvent,
+  PendingToolCall,
+  PermissionContext,
+  PermissionDecision,
+  PermissionResolver,
+  TurnId,
+  UserPromptAttachment,
+} from '@moxxy/sdk';
+import { JsonRpcPeer } from './jsonrpc.js';
+import type { Transport, TransportServer } from './transport.js';
+import { createUnixSocketServer } from './unix-socket.js';
+import { runnerSocketPath } from './socket-path.js';
+import {
+  RUNNER_PROTOCOL_VERSION,
+  RunnerMethod,
+  RunnerNotification,
+  abortParamsSchema,
+  attachParamsSchema,
+  commandRunParamsSchema,
+  modeSetActiveParamsSchema,
+  permissionAddAllowParamsSchema,
+  providerSetActiveParamsSchema,
+  runTurnParamsSchema,
+  setResolverParamsSchema,
+  transcribeParamsSchema,
+  type AttachResult,
+  type CommandRunResult,
+  type RunTurnResult,
+  type TranscribeResult,
+} from './protocol.js';
+
+/** One attached client and what it has opted into answering. */
+interface ConnectedClient {
+  readonly peer: JsonRpcPeer;
+  role: string;
+  attached: boolean;
+  handlesPermission: boolean;
+  handlesApproval: boolean;
+  /** Turns this client started - aborted if it disconnects. */
+  readonly turns: Set<TurnId>;
+}
+
+/** Carried through the turn's async context so resolvers can find the owner. */
+interface TurnScope {
+  readonly client: ConnectedClient;
+  readonly turnId: TurnId;
+}
+
+/**
+ * Exposes a {@link Session} over a transport so thin clients can attach.
+ *
+ * The server owns the Session and the agentic loop. Clients drive turns via
+ * `runTurn`, observe everything through a broadcast event stream, and answer
+ * `permission.check` / `approval.confirm` for the turns they started. Per-turn
+ * routing rides on an `AsyncLocalStorage` scope established around each turn -
+ * so a permission prompt raised deep inside a strategy is delivered back to
+ * exactly the client that asked for the turn. Turns run *outside* any scope
+ * (e.g. a self-hosting TUI calling `session.runTurn` directly) fall through to
+ * the resolvers that were installed before the server wrapped the session.
+ */
+export class RunnerServer {
+  private readonly clients = new Set<ConnectedClient>();
+  private readonly turnControllers = new Map<TurnId, AbortController>();
+  private readonly scope = new AsyncLocalStorage<TurnScope>();
+  private readonly logUnsub: () => void;
+  /**
+   * Resolvers for unscoped (local) turns - the fall-through path. Seeded from
+   * whatever was installed before we wrapped the session, then kept current by
+   * intercepting later `setPermissionResolver` / `setApprovalResolver` calls
+   * (e.g. a self-hosting TUI mounting) so those don't clobber routing.
+   */
+  private fallbackPermission: PermissionResolver;
+  private fallbackApproval: ApprovalResolver | null;
+  private closed = false;
+
+  constructor(
+    private readonly session: Session,
+    private readonly transport: TransportServer,
+  ) {
+    this.fallbackPermission = session.resolver;
+    this.fallbackApproval = session.approvalResolver;
+    this.installRoutingResolvers();
+    this.transport.onConnection((t) => this.onConnection(t));
+    this.logUnsub = session.log.subscribe((event) => this.broadcastEvent(event));
+  }
+
+  get address(): string {
+    return this.transport.address;
+  }
+
+  async close(): Promise<void> {
+    if (this.closed) return;
+    this.closed = true;
+    this.logUnsub();
+    for (const client of this.clients) client.peer.close();
+    this.clients.clear();
+    await this.transport.close();
+  }
+
+  // --- connection lifecycle ------------------------------------------------
+
+  private onConnection(transport: Transport): void {
+    const peer = new JsonRpcPeer(transport);
+    const client: ConnectedClient = {
+      peer,
+      role: 'unknown',
+      attached: false,
+      handlesPermission: false,
+      handlesApproval: false,
+      turns: new Set(),
+    };
+    this.clients.add(client);
+
+    peer.handle(RunnerMethod.Attach, (raw) => this.handleAttach(client, raw));
+    peer.handle(RunnerMethod.GetInfo, () => this.session.getInfo());
+    peer.handle(RunnerMethod.RunTurn, (raw) => this.handleRunTurn(client, raw));
+    peer.handle(RunnerMethod.Abort, (raw) => this.handleAbort(raw));
+    peer.handle(RunnerMethod.SetResolver, (raw) => this.handleSetResolver(client, raw));
+    peer.handle(RunnerMethod.ModeSetActive, (raw) => this.handleModeSetActive(raw));
+    peer.handle(RunnerMethod.ProviderSetActive, (raw) => this.handleProviderSetActive(raw));
+    peer.handle(RunnerMethod.PermissionAddAllow, (raw) => this.handlePermissionAddAllow(raw));
+    peer.handle(RunnerMethod.CommandRun, (raw) => this.handleCommandRun(client, raw));
+    peer.handle(RunnerMethod.Transcribe, (raw) => this.handleTranscribe(raw));
+
+    peer.onClose(() => this.onDisconnect(client));
+  }
+
+  private onDisconnect(client: ConnectedClient): void {
+    this.clients.delete(client);
+    // Tear down any turns this client was driving - there's no one left to
+    // answer their prompts or consume their output.
+    for (const turnId of client.turns) {
+      this.turnControllers.get(turnId)?.abort('owning client disconnected');
+    }
+  }
+
+  // --- request handlers ----------------------------------------------------
+
+  private handleAttach(client: ConnectedClient, raw: unknown): AttachResult {
+    const params = attachParamsSchema.parse(raw);
+    if (params.protocolVersion !== RUNNER_PROTOCOL_VERSION) {
+      throw new Error(
+        `runner protocol mismatch: server v${RUNNER_PROTOCOL_VERSION}, client v${params.protocolVersion}`,
+      );
+    }
+    client.role = params.role;
+    client.attached = true;
+    // Replay history so the client's mirror catches up. This loop is fully
+    // synchronous, so no live event can interleave before it finishes - every
+    // later event arrives exactly once via broadcast.
+    const since = params.sinceSeq ?? 0;
+    for (const event of this.session.log.slice(since)) {
+      client.peer.notify(RunnerNotification.Event, { event });
+    }
+    return {
+      sessionId: this.session.id,
+      protocolVersion: RUNNER_PROTOCOL_VERSION,
+      info: this.session.getInfo(),
+    };
+  }
+
+  private handleRunTurn(client: ConnectedClient, raw: unknown): RunTurnResult {
+    const params = runTurnParamsSchema.parse(raw);
+    const turnId = newTurnId();
+    const controller = new AbortController();
+    this.turnControllers.set(turnId, controller);
+    client.turns.add(turnId);
+
+    const opts = {
+      turnId,
+      signal: controller.signal,
+      ...(params.model ? { model: params.model } : {}),
+      ...(params.systemPrompt ? { systemPrompt: params.systemPrompt } : {}),
+      ...(params.maxIterations ? { maxIterations: params.maxIterations } : {}),
+      ...(params.attachments
+        ? { attachments: params.attachments as ReadonlyArray<UserPromptAttachment> }
+        : {}),
+    };
+
+    // Drive the turn in the background inside the per-turn scope. Events reach
+    // clients via the log broadcast, so we only consume the iterable to run it
+    // to completion and learn when it's done.
+    void this.scope.run({ client, turnId }, async () => {
+      let error: string | undefined;
+      try {
+        for await (const _event of this.session.runTurn(params.prompt, opts)) {
+          void _event;
+        }
+      } catch (err) {
+        error = err instanceof Error ? err.message : String(err);
+      } finally {
+        this.turnControllers.delete(turnId);
+        client.turns.delete(turnId);
+        this.broadcast(RunnerNotification.TurnComplete, {
+          turnId,
+          ...(error ? { error } : {}),
+        });
+      }
+    });
+
+    return { turnId };
+  }
+
+  private handleAbort(raw: unknown): Record<string, never> {
+    const params = abortParamsSchema.parse(raw);
+    this.turnControllers.get(params.turnId as TurnId)?.abort('client requested abort');
+    return {};
+  }
+
+  private handleSetResolver(client: ConnectedClient, raw: unknown): Record<string, never> {
+    const params = setResolverParamsSchema.parse(raw);
+    if (params.permission !== undefined) client.handlesPermission = params.permission;
+    if (params.approval !== undefined) client.handlesApproval = params.approval;
+    return {};
+  }
+
+  private handleModeSetActive(raw: unknown): Record<string, never> {
+    const { name } = modeSetActiveParamsSchema.parse(raw);
+    this.session.modes.setActive(name);
+    this.broadcastInfo();
+    return {};
+  }
+
+  private async handleProviderSetActive(raw: unknown): Promise<Record<string, never>> {
+    const { name, config } = providerSetActiveParamsSchema.parse(raw);
+    // Mirror the in-process picker: resolve credentials (the CLI stashes a
+    // resolver on the session at boot), drop any cached instance, re-activate.
+    const resolver = (
+      this.session as unknown as {
+        credentialResolver?: (n: string) => Promise<Record<string, unknown>>;
+      }
+    ).credentialResolver;
+    const cfg = config ?? (resolver ? await resolver(name) : {});
+    const def = this.session.providers.list().find((p) => p.name === name);
+    if (def) this.session.providers.replace(def);
+    this.session.providers.setActive(name, cfg);
+    this.broadcastInfo();
+    return {};
+  }
+
+  private async handlePermissionAddAllow(raw: unknown): Promise<Record<string, never>> {
+    const { name, reason } = permissionAddAllowParamsSchema.parse(raw);
+    await this.session.permissions.addAllow({ name, ...(reason ? { reason } : {}) });
+    return {};
+  }
+
+  private async handleCommandRun(
+    client: ConnectedClient,
+    raw: unknown,
+  ): Promise<CommandRunResult> {
+    const { name, args, channel } = commandRunParamsSchema.parse(raw);
+    const cmd = this.session.commands.get(name);
+    if (!cmd) return { kind: 'error', message: `unknown command: /${name}` };
+    void client;
+    const result = await cmd.handler({
+      channel,
+      sessionId: this.session.id,
+      args,
+      session: this.session,
+    });
+    // A command may have changed registries (e.g. /model-ish plugins).
+    this.broadcastInfo();
+    return result;
+  }
+
+  private async handleTranscribe(raw: unknown): Promise<TranscribeResult> {
+    const params = transcribeParamsSchema.parse(raw);
+    const transcriber = this.session.transcribers.tryGetActive();
+    if (!transcriber) throw new Error('no active transcriber on the runner');
+    const audio = new Uint8Array(Buffer.from(params.audio, 'base64'));
+    return transcriber.transcribe(audio, {
+      ...(params.mimeType ? { mimeType: params.mimeType } : {}),
+      ...(params.language ? { language: params.language } : {}),
+      ...(params.prompt ? { prompt: params.prompt } : {}),
+    });
+  }
+
+  private broadcastInfo(): void {
+    this.broadcast(RunnerNotification.InfoChanged, { info: this.session.getInfo() });
+  }
+
+  // --- resolver routing ----------------------------------------------------
+
+  private installRoutingResolvers(): void {
+    const permission: PermissionResolver = {
+      name: 'runner-routing',
+      check: (call, ctx) => this.resolvePermission(call, ctx),
+    };
+    this.session.setPermissionResolver(permission);
+
+    const approval: ApprovalResolver = {
+      name: 'runner-routing',
+      confirm: (req) => this.resolveApproval(req),
+    };
+    this.session.setApprovalResolver(approval);
+
+    // Redirect any later resolver installs into the fallback slots rather than
+    // letting them replace the routing resolver. Without this, a self-hosting
+    // TUI mounting after the runner started would overwrite routing, so an
+    // attached client's approval prompt would surface on the host TUI.
+    this.session.setApprovalResolver = (resolver: ApprovalResolver | null) => {
+      this.fallbackApproval = resolver;
+    };
+    this.session.setPermissionResolver = (resolver: PermissionResolver) => {
+      this.fallbackPermission = resolver;
+    };
+  }
+
+  private async resolvePermission(
+    call: PendingToolCall,
+    ctx: PermissionContext,
+  ): Promise<PermissionDecision> {
+    const scope = this.scope.getStore();
+    if (scope && scope.client.handlesPermission && !scope.client.peer.isClosed) {
+      try {
+        return await scope.client.peer.request<PermissionDecision>(RunnerMethod.PermissionCheck, {
+          turnId: scope.turnId,
+          call,
+          ctx,
+        });
+      } catch {
+        return { mode: 'deny', reason: 'permission client unavailable' };
+      }
+    }
+    return this.fallbackPermission.check(call, ctx);
+  }
+
+  private async resolveApproval(request: ApprovalRequest): Promise<ApprovalDecision> {
+    const scope = this.scope.getStore();
+    if (scope) {
+      if (scope.client.handlesApproval && !scope.client.peer.isClosed) {
+        try {
+          return await scope.client.peer.request<ApprovalDecision>(RunnerMethod.ApprovalConfirm, {
+            turnId: scope.turnId,
+            request,
+          });
+        } catch {
+          return defaultApproval(request);
+        }
+      }
+      // A scoped turn whose client doesn't handle approvals: don't pester an
+      // unrelated fallback; take the default option (headless semantics).
+      return defaultApproval(request);
+    }
+    // Unscoped turn (e.g. self-hosting TUI driving the session directly):
+    // honour whatever resolver was installed before we wrapped the session.
+    if (this.fallbackApproval) return this.fallbackApproval.confirm(request);
+    return defaultApproval(request);
+  }
+
+  // --- fan-out -------------------------------------------------------------
+
+  private broadcastEvent(event: MoxxyEvent): void {
+    this.broadcast(RunnerNotification.Event, { event });
+  }
+
+  private broadcast(method: string, params: unknown): void {
+    for (const client of this.clients) {
+      if (client.attached && !client.peer.isClosed) client.peer.notify(method, params);
+    }
+  }
+}
+
+function defaultApproval(request: ApprovalRequest): ApprovalDecision {
+  return { optionId: request.defaultOptionId ?? request.options[0]?.id ?? '' };
+}
+
+/**
+ * Start a {@link RunnerServer} for `session`. Binds a unix-socket transport by
+ * default (override with `socketPath`, or inject a `transport` for tests).
+ */
+export async function startRunnerServer(
+  session: Session,
+  opts: { readonly socketPath?: string; readonly transport?: TransportServer } = {},
+): Promise<RunnerServer> {
+  const transport =
+    opts.transport ?? (await createUnixSocketServer(opts.socketPath ?? runnerSocketPath()));
+  return new RunnerServer(session, transport);
+}

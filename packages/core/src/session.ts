@@ -1,5 +1,14 @@
-import type { AppContext, LifecycleHooks, MoxxyEvent, SessionId } from '@moxxy/sdk';
+import type {
+  AppContext,
+  ClientSession,
+  LifecycleHooks,
+  MoxxyEvent,
+  RunTurnOptions,
+  SessionId,
+  SessionInfo,
+} from '@moxxy/sdk';
 import { newSessionId, newTurnId } from './events/factory.js';
+import { runTurn as runTurnImpl } from './run-turn.js';
 import { EventLog } from './events/log.js';
 import { HookDispatcherImpl } from './plugins/lifecycle.js';
 import { PluginHost, type PluginLoader } from './plugins/host.js';
@@ -55,7 +64,7 @@ export interface SessionOptions {
   readonly log?: EventLog;
 }
 
-export class Session {
+export class Session implements ClientSession {
   readonly id: SessionId;
   readonly cwd: string;
   readonly log: EventLog;
@@ -208,6 +217,55 @@ export class Session {
 
   subscribe(fn: (e: MoxxyEvent) => void | Promise<void>): () => void {
     return this.log.subscribe(fn);
+  }
+
+  /**
+   * Drive one turn against this session. Method form of the `runTurn` free
+   * function so a local `Session` satisfies `SessionLike` (the channel-facing
+   * contract a `RemoteSession` proxy also implements).
+   */
+  runTurn(prompt: string, opts: RunTurnOptions = {}): AsyncIterable<MoxxyEvent> {
+    return runTurnImpl(this, prompt, opts);
+  }
+
+  /**
+   * Wire-friendly snapshot of the registries for channels to render. Mirrors
+   * what a `RemoteSession` fetches from the runner over RPC - keep the two in
+   * sync.
+   */
+  getInfo(): SessionInfo {
+    let activeMode: string | null = null;
+    try {
+      activeMode = this.modes.getActive().name;
+    } catch {
+      // No mode active yet (registry empty pre-boot) - report null.
+    }
+    const active = this.providers.getActiveName();
+    const ready = (this as unknown as { readyProviders?: ReadonlySet<string> }).readyProviders;
+    return {
+      sessionId: this.id,
+      cwd: this.cwd,
+      activeProvider: active,
+      providers: this.providers.list().map((p) => ({ name: p.name, models: p.models })),
+      activeMode,
+      modes: this.modes.list().map((m) => m.name),
+      tools: this.tools.list().map((t) => ({
+        name: t.name,
+        description: t.description,
+        ...(t.compact ? { compact: t.compact } : {}),
+      })),
+      skills: this.skills.list().map((s) => ({ id: s.id, name: s.frontmatter.name })),
+      commands: this.commands.list().map((c) => ({
+        name: c.name,
+        description: c.description,
+        ...(c.aliases ? { aliases: c.aliases } : {}),
+        ...(c.channels ? { channels: c.channels } : {}),
+        ...(c.pendingNotice ? { pendingNotice: c.pendingNotice } : {}),
+      })),
+      readyProviders: ready ? [...ready] : active ? [active] : [],
+      hasTranscriber: this.transcribers.tryGetActive() != null,
+      activeTranscriber: this.transcribers.getActiveName(),
+    };
   }
 
   registerHookOptions(_hooks: LifecycleHooks): void {

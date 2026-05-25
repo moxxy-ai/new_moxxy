@@ -8,21 +8,24 @@ import {
   password,
   select,
 } from '@clack/prompts';
+import type { ChannelSubcommandContext } from '@moxxy/sdk';
+import type { VaultStore } from '@moxxy/plugin-vault';
 import {
   TELEGRAM_AUTHORIZED_CHAT_KEY,
   TELEGRAM_TOKEN_KEY,
   TELEGRAM_TOKEN_RE,
-} from '@moxxy/plugin-telegram';
-import type { VaultStore } from '@moxxy/plugin-vault';
-import { bootSessionWithConfig } from '../argv-helpers.js';
-import type { ParsedArgv } from '../argv.js';
-import { colors } from '../colors.js';
-import { startRegisteredChannel } from './start-registered-channel.js';
-import { actionPair } from './telegram/pair.js';
+} from './keys.js';
+import { runPairFlow } from './pair-flow.js';
+
+// Tiny zero-dep ANSI helpers (bold + dim) so this wizard stays inside the
+// plugin without depending on the CLI's colors module.
+const ANSI = process.stdout.isTTY && !process.env.NO_COLOR;
+const bold = (s: string): string => (ANSI ? `\x1b[1m${s}\x1b[22m` : s);
+const dim = (s: string): string => (ANSI ? `\x1b[2m${s}\x1b[22m` : s);
 
 interface State {
   readonly hasToken: boolean;
-  /** "<prefix>…<suffix>" of the bot id for display. null when none. */
+  /** "<prefix>...<suffix>" of the bot id for display. null when none. */
   readonly tokenPreview: string | null;
   readonly authorizedChatId: number | null;
 }
@@ -32,40 +35,24 @@ type Action = 'set-token' | 'pair' | 'unpair' | 'start' | 'quit';
 /**
  * Interactive Telegram setup menu.
  *
- * Invoked by `runChannelByName` when the user runs `moxxy telegram`
- * or `moxxy channels telegram` with no subcommand in a TTY. Headless
- * invocations (or `--start`) bypass it and start the bot directly,
- * preserving the cron / systemd usage path.
+ * Invoked as the channel's `interactiveCommand` when the user runs
+ * `moxxy telegram` (or `moxxy channels telegram`) with no subcommand in a TTY.
+ * Headless invocations (or when a runner is already up) bypass it and start the
+ * bot directly, preserving the cron / systemd usage path.
  *
  * Menu offers actions appropriate to the current state:
- *   - no token            → "Set bot token" + "Quit"
- *   - token, not paired   → "Pair this terminal" + "Change token" + "Quit"
- *   - token + paired      → "Start bot" + "Unpair" + "Change token" + "Quit"
+ *   - no token            -> "Set bot token" + "Quit"
+ *   - token, not paired   -> "Pair this terminal" + "Change token" + "Quit"
+ *   - token + paired      -> "Start bot" + "Unpair" + "Change token" + "Quit"
  *
  * Pairing is driven by the wizard end-to-end: the wizard opens a pair
  * window, the bot waits for /start, on /start it DMs a 6-digit code to
  * the user, and the user pastes the code back into this wizard.
  */
-export async function runTelegramWizard(argv: ParsedArgv): Promise<number> {
-  const { vault } = await bootSessionWithConfig(argv, {
-    skipKeyPrompt: true,
-    tolerateNoProvider: true,
-    skipProviderActivation: true,
-  });
+export async function runTelegramWizard(ctx: ChannelSubcommandContext): Promise<number> {
+  const vault = ctx.deps.vault as VaultStore;
 
-  intro(colors.bold('moxxy telegram setup'));
-
-  // Short-circuit if the user invoked `moxxy channels telegram pair` —
-  // skip the menu, jump straight to the pair flow. Token-less state is
-  // surfaced with a clear error rather than the menu fallback.
-  if (argv.flags['pair'] === true) {
-    const state = await readState(vault);
-    if (!state.hasToken) {
-      log.error('No bot token configured. Run `moxxy telegram` and pick "Set the bot token" first.');
-      return 1;
-    }
-    return await actionPair(argv);
-  }
+  intro(bold('moxxy telegram setup'));
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
@@ -77,7 +64,7 @@ export async function runTelegramWizard(argv: ParsedArgv): Promise<number> {
       return 0;
     }
     if (action === 'quit') {
-      outro(colors.dim('done.'));
+      outro(dim('done.'));
       return 0;
     }
     if (action === 'set-token') {
@@ -85,7 +72,7 @@ export async function runTelegramWizard(argv: ParsedArgv): Promise<number> {
       continue;
     }
     if (action === 'pair') {
-      return await actionPair(argv);
+      return await runPairFlow(ctx);
     }
     if (action === 'unpair') {
       await vault.delete(TELEGRAM_AUTHORIZED_CHAT_KEY);
@@ -94,11 +81,8 @@ export async function runTelegramWizard(argv: ParsedArgv): Promise<number> {
     }
     if (action === 'start') {
       log.info('Starting the bot. Press Ctrl+C to stop.');
-      outro(colors.dim('handing off to bot…'));
-      return startRegisteredChannel('telegram', {
-        ...argv,
-        flags: { ...argv.flags, __skipWizard: true },
-      });
+      outro(dim('handing off to bot...'));
+      return ctx.startChannel();
     }
   }
 }
@@ -119,16 +103,16 @@ async function readState(vault: VaultStore): Promise<State> {
 
 function maskToken(token: string): string {
   const id = token.split(':')[0] ?? '';
-  return id.length > 4 ? `${id.slice(0, 3)}…${id.slice(-3)}` : id;
+  return id.length > 4 ? `${id.slice(0, 3)}...${id.slice(-3)}` : id;
 }
 
 function printStatus(state: State): void {
   const lines: string[] = [];
   lines.push(
-    `Token        ${state.hasToken ? colors.bold(state.tokenPreview ?? 'set') : colors.dim('not set')}`,
+    `Token        ${state.hasToken ? bold(state.tokenPreview ?? 'set') : dim('not set')}`,
   );
   lines.push(
-    `Paired chat  ${state.authorizedChatId != null ? colors.bold(String(state.authorizedChatId)) : colors.dim('none')}`,
+    `Paired chat  ${state.authorizedChatId != null ? bold(String(state.authorizedChatId)) : dim('none')}`,
   );
   note(lines.join('\n'), 'status');
 }
@@ -139,7 +123,7 @@ async function pickAction(state: State): Promise<Action | null> {
     options.push({
       value: 'start',
       label: 'Start the bot',
-      hint: 'runs forever — Ctrl+C to stop',
+      hint: 'runs forever - Ctrl+C to stop',
     });
     options.push({
       value: 'unpair',
@@ -168,10 +152,10 @@ async function pickAction(state: State): Promise<Action | null> {
 async function actionSetToken(vault: VaultStore): Promise<boolean> {
   note(
     'Open https://t.me/BotFather, run /newbot (or /token for an existing bot), copy the\n' +
-      'token it returns (looks like 1234567890:ABCdef…), and paste it below. It goes\n' +
+      'token it returns (looks like 1234567890:ABCdef...), and paste it below. It goes\n' +
       "straight into the moxxy vault under '" +
       TELEGRAM_TOKEN_KEY +
-      "' — no env var needed.",
+      "' - no env var needed.",
     'get a bot token',
   );
   const token = await password({
@@ -180,7 +164,7 @@ async function actionSetToken(vault: VaultStore): Promise<boolean> {
     validate: (v) => {
       if (!v || v.trim().length === 0) return 'required';
       if (!TELEGRAM_TOKEN_RE.test(v.trim())) {
-        return 'doesn\'t look like a Telegram token — expected "<digits>:<22+ url-safe chars>"';
+        return 'doesn\'t look like a Telegram token - expected "<digits>:<22+ url-safe chars>"';
       }
       return undefined;
     },

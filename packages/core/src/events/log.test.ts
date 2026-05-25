@@ -110,6 +110,30 @@ describe('EventLog', () => {
     expect(log.length).toBe(2);
   });
 
+  it('ingest preserves the original id/seq/ts and de-dupes by seq', async () => {
+    const source = new EventLog();
+    const ev = await source.append({
+      type: 'user_prompt',
+      sessionId: sid,
+      turnId: tid,
+      source: 'user',
+      text: 'mirrored',
+    });
+
+    const mirror = new EventLog();
+    const seen: number[] = [];
+    mirror.subscribe((e) => seen.push(e.seq));
+    mirror.ingest(ev);
+    // Same identity preserved (not re-materialized).
+    expect(mirror.length).toBe(1);
+    expect(mirror.at(ev.seq)).toBe(ev);
+    expect(mirror.at(ev.seq)?.id).toBe(ev.id);
+    // Re-ingesting the same seq is a no-op (idempotent replay/overlap).
+    mirror.ingest(ev);
+    expect(mirror.length).toBe(1);
+    expect(seen).toEqual([ev.seq]);
+  });
+
   // ensure unused import is exercised for typecheck stability
   void z;
   void asToolCallId;

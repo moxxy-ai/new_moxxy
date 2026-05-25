@@ -69,6 +69,31 @@ export class EventLog implements EventLogReader {
   }
 
   /**
+   * Append an already-materialized event, preserving its `id`/`seq`/`ts`
+   * rather than minting new ones. This is how a thin client mirrors the
+   * runner's log: the server is the sole authority for event identity, so the
+   * mirror must keep the originals. De-dupes by `seq` (idempotent replay) and
+   * fires listeners fire-and-forget - a mirror has no dispatcher to await.
+   *
+   * Not for normal authoring; use {@link append} for that.
+   */
+  ingest(event: MoxxyEvent): void {
+    // Contiguous, ordered delivery over a single socket means seq === index.
+    // Ignore anything we already hold (overlap between attach-replay and the
+    // live stream).
+    if (event.seq < this.events.length) return;
+    this.events.push(event);
+    const snapshot = [...this.listeners];
+    for (const fn of snapshot) {
+      try {
+        void fn(event);
+      } catch {
+        // Mirror listeners must not break ingestion.
+      }
+    }
+  }
+
+  /**
    * Drop every event from the log. Used by `/new` (TUI) to start a
    * fresh session without rebuilding the entire Session object — the
    * registries, resolvers, and active provider stay; only the
