@@ -114,6 +114,7 @@ export {
 } from './mode-helpers.js';
 
 export type { TokenBudget, CompactContext, CompactorDef } from './compactor.js';
+export { estimateContextTokens, runCompactionIfNeeded } from './compactor-helpers.js';
 
 export type { Skill, SkillDef, SkillFrontmatter, SkillScope, SkillSchedule } from './skill.js';
 

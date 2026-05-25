@@ -1,5 +1,6 @@
 import {
   buildSystemPromptWithSkills,
+  runCompactionIfNeeded,
   type ModeContext,
   type ProviderMessage,
 } from '@moxxy/sdk';
@@ -15,6 +16,7 @@ export async function collectPlan(
   ctx: ModeContext,
   redraftFeedback: string | null,
 ): Promise<string | null> {
+  await runCompactionIfNeeded(ctx);
   const messages = buildPlannerMessages(ctx, redraftFeedback);
 
   await ctx.emit({

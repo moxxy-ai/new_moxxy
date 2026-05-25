@@ -7,8 +7,8 @@ import type { ModelDescriptor } from '@moxxy/sdk';
  * routes to ChatGPT-Pro/Plus subscribers without per-token billing.
  */
 export const codexModels: ReadonlyArray<ModelDescriptor> = [
-  { id: 'gpt-5.5', contextWindow: 400_000, maxOutputTokens: 128_000, supportsTools: true, supportsStreaming: true, supportsImages: true },
-  { id: 'gpt-5.4', contextWindow: 400_000, maxOutputTokens: 128_000, supportsTools: true, supportsStreaming: true, supportsImages: true },
+  { id: 'gpt-5.5', contextWindow: 1_000_000, maxOutputTokens: 128_000, supportsTools: true, supportsStreaming: true, supportsImages: true },
+  { id: 'gpt-5.4', contextWindow: 1_000_000, maxOutputTokens: 128_000, supportsTools: true, supportsStreaming: true, supportsImages: true },
   { id: 'gpt-5.4-mini', contextWindow: 400_000, maxOutputTokens: 128_000, supportsTools: true, supportsStreaming: true, supportsImages: true },
   { id: 'gpt-5.3-codex', contextWindow: 400_000, maxOutputTokens: 128_000, supportsTools: true, supportsStreaming: true, supportsImages: true },
   { id: 'gpt-5.3-codex-spark', contextWindow: 400_000, maxOutputTokens: 128_000, supportsTools: true, supportsStreaming: true, supportsImages: true },

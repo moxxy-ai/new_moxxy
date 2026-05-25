@@ -3,6 +3,7 @@ import {
   buildSystemPromptWithSkills,
   collectProviderStream,
   projectMessagesFromLog,
+  runCompactionIfNeeded,
   type CollectedToolUse,
   type ModeContext,
   type MoxxyEvent,
@@ -42,6 +43,13 @@ export async function* runToolUseMode(ctx: ModeContext): AsyncIterable<MoxxyEven
       strategy: TOOL_USE_MODE_NAME,
       iteration,
     });
+
+    // Auto-compact before composing the next provider request. If the
+    // active compactor's `shouldCompact` returns true, this appends a
+    // compaction event onto the log — projectMessagesFromLog (called
+    // by buildMessages) honors it, so the model sees a summarized
+    // prefix instead of overflowing the window mid-loop.
+    await runCompactionIfNeeded(ctx);
 
     const messages = buildMessages(ctx);
     yield await ctx.emit({

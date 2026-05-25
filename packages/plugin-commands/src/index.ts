@@ -1,9 +1,11 @@
 import {
   definePlugin,
+  estimateContextTokens,
   type CommandDef,
   type CompactorDef,
   type EmittedEvent,
   type EventLogReader,
+  type LLMProvider,
   type MoxxyEvent,
   type Plugin,
 } from '@moxxy/sdk';
@@ -32,6 +34,7 @@ interface CompactSessionShape {
     asReader?(): EventLogReader;
   };
   readonly compactors: { getActive(): CompactorDef | null };
+  readonly providers?: { getActive(): LLMProvider };
 }
 
 const infoCmd: CommandDef = {
@@ -135,12 +138,20 @@ async function compactSession(session: unknown) {
     return { kind: 'text' as const, text: 'nothing to compact: event log is empty' };
   }
 
+  // Resolve the active model's real contextWindow. The previous
+  // hardcoded Number.MAX_SAFE_INTEGER made `shouldCompact` always see
+  // a comfortable budget — fine for `/compact` since we ignore that
+  // gate manually, but it also meant compactors that want to size
+  // their summary against the real window couldn't. When no provider
+  // is wired (rare; only in tests), fall back to MAX_SAFE_INTEGER.
+  const providerCtxWindow = resolveActiveContextWindow(s);
+
   try {
     const result = await compactor.compact(events, {
       log: s.log.asReader ? s.log.asReader() : s.log,
       budget: {
-        contextWindow: Number.MAX_SAFE_INTEGER,
-        estimatedTokens: estimateTokens(events),
+        contextWindow: providerCtxWindow,
+        estimatedTokens: estimateContextTokens(s.log.asReader ? s.log.asReader() : s.log),
         reserveForOutput: 0,
       },
       signal: s.signal ?? new AbortController().signal,
@@ -164,9 +175,18 @@ async function compactSession(session: unknown) {
   }
 }
 
-function estimateTokens(events: ReadonlyArray<MoxxyEvent>): number {
-  const chars = events.reduce((sum, event) => sum + JSON.stringify(event).length, 0);
-  return Math.max(1, Math.ceil(chars / 4));
+function resolveActiveContextWindow(s: CompactSessionShape): number {
+  try {
+    const provider = s.providers?.getActive();
+    if (!provider) return Number.MAX_SAFE_INTEGER;
+    // We don't know which model id the user picked from this surface,
+    // so use the first-listed model's window as the conventional
+    // default (matches resolveContextWindow in plugin-cli/helpers.ts).
+    const window = provider.models[0]?.contextWindow;
+    return window && window > 0 ? window : Number.MAX_SAFE_INTEGER;
+  } catch {
+    return Number.MAX_SAFE_INTEGER;
+  }
 }
 
 function formatCount(value: number): string {

@@ -1,6 +1,7 @@
 import {
   asToolCallId,
   collectProviderStream,
+  runCompactionIfNeeded,
   type ModeContext,
   type MoxxyEvent,
 } from '@moxxy/sdk';
@@ -57,6 +58,12 @@ export async function* runImplementationLoop(
       strategy: BMAD_MODE_NAME,
       iteration,
     });
+
+    // Auto-compact before each provider call — long BMAD runs
+    // (analyst + architect + dev across many stories) are the most
+    // context-heavy workflow we ship, so this is the mode that
+    // benefits from auto-compaction the most.
+    await runCompactionIfNeeded(ctx);
 
     const messages = buildImplementationMessages(
       ctx,

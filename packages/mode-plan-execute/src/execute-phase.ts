@@ -3,6 +3,7 @@ import {
   buildSystemPromptWithSkills,
   collectProviderStream,
   projectMessagesFromLog,
+  runCompactionIfNeeded,
   type ModeContext,
 } from '@moxxy/sdk';
 
@@ -49,6 +50,11 @@ export async function executeStep(
       strategy: PLAN_EXECUTE_MODE_NAME,
       iteration,
     });
+
+    // Auto-compact before each provider call so a long execution
+    // phase can't blow the context window without warning. See
+    // runCompactionIfNeeded() for the no-op fallbacks.
+    await runCompactionIfNeeded(ctx);
 
     const messages = projectMessagesFromLog(ctx, {
       systemPrompt:

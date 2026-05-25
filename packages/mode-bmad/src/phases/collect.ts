@@ -1,5 +1,6 @@
 import {
   buildSystemPromptWithSkills,
+  runCompactionIfNeeded,
   type ModeContext,
   type ProviderMessage,
 } from '@moxxy/sdk';
@@ -17,6 +18,7 @@ export async function collectPhase(
   artifactsSoFar: Artifacts,
   redraftFeedback: string | null,
 ): Promise<string | null> {
+  await runCompactionIfNeeded(ctx);
   const messages = buildPhaseMessages(ctx, phase, artifactsSoFar, redraftFeedback);
 
   await ctx.emit({
