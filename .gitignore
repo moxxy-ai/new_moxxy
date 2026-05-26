@@ -17,3 +17,6 @@ pnpm-debug.log*
 !.vscode/settings.json
 .idea
 .claude/worktrees/
+
+# transient backup written by cli prepack, restored by postpack
+package.json.prepack-backup
