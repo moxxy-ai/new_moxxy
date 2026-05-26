@@ -1,5 +1,6 @@
 {
   "name": "@moxxy/mode-developer",
+  "private": true,
   "version": "0.0.0",
   "description": "Developer-focused loop strategy for moxxy: guardrailed tool-use plus a final verify + commit-suggestion approval gate with diff preview.",
   "type": "module",
@@ -28,9 +29,9 @@
     "@moxxy/testing": "workspace:*",
     "@moxxy/tsconfig": "workspace:*",
     "@moxxy/vitest-preset": "workspace:*",
-    "@types/node": "^22.10.0",
-    "typescript": "^5.7.3",
-    "vitest": "^2.1.8",
-    "zod": "^3.24.0"
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "zod": "catalog:"
   }
 }

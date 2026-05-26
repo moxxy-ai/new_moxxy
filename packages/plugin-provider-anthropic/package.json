@@ -1,5 +1,6 @@
 {
   "name": "@moxxy/plugin-provider-anthropic",
+  "private": true,
   "version": "0.0.0",
   "description": "Anthropic LLMProvider plugin for moxxy.",
   "type": "module",
@@ -37,9 +38,9 @@
     "@moxxy/mode-tool-use": "workspace:*",
     "@moxxy/tsconfig": "workspace:*",
     "@moxxy/vitest-preset": "workspace:*",
-    "@types/node": "^22.10.0",
-    "typescript": "^5.7.3",
-    "vitest": "^2.1.8",
-    "zod": "^3.24.0"
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "zod": "catalog:"
   }
 }

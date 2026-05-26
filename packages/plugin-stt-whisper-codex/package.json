@@ -1,5 +1,6 @@
 {
   "name": "@moxxy/plugin-stt-whisper-codex",
+  "private": true,
   "version": "0.0.0",
   "description": "OpenAI Codex OAuth speech-to-text transcriber (Whisper family) for moxxy.",
   "type": "module",
@@ -44,8 +45,8 @@
     "@moxxy/plugin-vault": "workspace:*",
     "@moxxy/tsconfig": "workspace:*",
     "@moxxy/vitest-preset": "workspace:*",
-    "@types/node": "^22.10.0",
-    "typescript": "^5.7.3",
-    "vitest": "^2.1.8"
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

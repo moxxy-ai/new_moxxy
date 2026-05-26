@@ -1,5 +1,6 @@
 {
   "name": "@moxxy/plugin-oauth",
+  "private": true,
   "version": "0.0.0",
   "description": "Generic OAuth 2.0 + PKCE client. Loopback callback server, vault-backed token storage, refresh helpers. Bundled skills for Google Workspace + arbitrary providers.",
   "type": "module",
@@ -33,13 +34,13 @@
   "dependencies": {
     "@moxxy/sdk": "workspace:*",
     "@moxxy/plugin-vault": "workspace:*",
-    "zod": "^3.24.0"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@moxxy/tsconfig": "workspace:*",
     "@moxxy/vitest-preset": "workspace:*",
-    "@types/node": "^22.10.0",
-    "typescript": "^5.7.3",
-    "vitest": "^2.1.8"
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

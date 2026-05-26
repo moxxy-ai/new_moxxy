@@ -1,5 +1,6 @@
 {
   "name": "@moxxy/isolator-wasm",
+  "private": true,
   "version": "0.0.0-experimental",
   "description": "WebAssembly-based Isolator for @moxxy/plugin-security (EXPERIMENTAL). Strongest pure-JS sandbox: wasm modules can only touch what's explicitly imported. Calling convention is still TBD; this ships the runtime + skeleton.",
   "type": "module",
@@ -26,8 +27,8 @@
   "devDependencies": {
     "@moxxy/tsconfig": "workspace:*",
     "@moxxy/vitest-preset": "workspace:*",
-    "@types/node": "^22.10.0",
-    "typescript": "^5.7.3",
-    "vitest": "^2.1.8"
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

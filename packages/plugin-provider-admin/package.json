@@ -1,5 +1,6 @@
 {
   "name": "@moxxy/plugin-provider-admin",
+  "private": true,
   "version": "0.0.0",
   "description": "Model-callable provider admin: provider_add / provider_list / provider_remove / provider_test. Persists user-registered providers to ~/.moxxy/providers.json and hot-registers them in the live session by wrapping the OpenAI-compatible client with a vendor baseURL.",
   "type": "module",
@@ -31,13 +32,13 @@
     "@moxxy/plugin-provider-openai": "workspace:*",
     "@moxxy/sdk": "workspace:*",
     "openai": "^4.80.0",
-    "zod": "^3.24.0"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@moxxy/tsconfig": "workspace:*",
     "@moxxy/vitest-preset": "workspace:*",
-    "@types/node": "^22.10.0",
-    "typescript": "^5.7.3",
-    "vitest": "^2.1.8"
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

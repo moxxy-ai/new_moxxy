@@ -1,5 +1,6 @@
 {
   "name": "@moxxy/mode-plan-execute",
+  "private": true,
   "version": "0.0.0",
   "description": "Plan-and-execute loop strategy for moxxy: model produces a plan, then executes each step as a focused tool-use sub-loop.",
   "type": "module",
@@ -27,9 +28,9 @@
     "@moxxy/testing": "workspace:*",
     "@moxxy/tsconfig": "workspace:*",
     "@moxxy/vitest-preset": "workspace:*",
-    "@types/node": "^22.10.0",
-    "typescript": "^5.7.3",
-    "vitest": "^2.1.8",
-    "zod": "^3.24.0"
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "zod": "catalog:"
   }
 }

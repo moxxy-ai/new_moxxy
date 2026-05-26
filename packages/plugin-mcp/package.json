@@ -1,5 +1,6 @@
 {
   "name": "@moxxy/plugin-mcp",
+  "private": true,
   "version": "0.0.0",
   "description": "MCP (Model Context Protocol) client plugin for moxxy — connect to MCP servers and surface their tools.",
   "type": "module",
@@ -22,13 +23,13 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@moxxy/sdk": "workspace:*",
-    "zod": "^3.24.0"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@moxxy/tsconfig": "workspace:*",
     "@moxxy/vitest-preset": "workspace:*",
-    "@types/node": "^22.10.0",
-    "typescript": "^5.7.3",
-    "vitest": "^2.1.8"
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

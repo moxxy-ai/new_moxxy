@@ -11,7 +11,7 @@ import {
 } from '@moxxy/core';
 import type { Plugin } from '@moxxy/sdk';
 import { buildConfigPlugin } from '@moxxy/config';
-import { BUILTIN_SKILLS_DIR } from '@moxxy/skills-builtin';
+import { BUILTIN_SKILLS_DIR_RESOLVED } from './setup/builtin-skills-dir.js';
 import { buildVaultPlugin } from '@moxxy/plugin-vault';
 import { buildMemoryPlugin } from '@moxxy/plugin-memory';
 import { buildSessionConfigApplier } from './config-applier.js';
@@ -130,7 +130,7 @@ export async function setupSessionWithConfig(opts: SetupOptions): Promise<SetupR
     projectDir: config.skills?.projectDir ?? defaultProjectSkillsDir(opts.cwd),
     userDir: config.skills?.userDir ?? defaultUserSkillsDir(),
     pluginDirs: config.skills?.extraDirs,
-    builtinDir: BUILTIN_SKILLS_DIR,
+    builtinDir: BUILTIN_SKILLS_DIR_RESOLVED,
     logger,
   });
   for (const skill of discovered) session.skills.register(skill);

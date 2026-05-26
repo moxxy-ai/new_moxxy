@@ -1,5 +1,6 @@
 {
   "name": "@moxxy/plugin-scheduler",
+  "private": true,
   "version": "0.0.0",
   "description": "Cron/heartbeat plugin for moxxy. Time-driven prompts + auto-scheduled skills with frontmatter.schedule.",
   "type": "module",
@@ -23,13 +24,13 @@
     "@moxxy/sdk": "workspace:*",
     "@moxxy/core": "workspace:*",
     "ulid": "^2.3.0",
-    "zod": "^3.24.0"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@moxxy/tsconfig": "workspace:*",
     "@moxxy/vitest-preset": "workspace:*",
-    "@types/node": "^22.10.0",
-    "typescript": "^5.7.3",
-    "vitest": "^2.1.8"
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

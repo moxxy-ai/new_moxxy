@@ -19,13 +19,13 @@
   },
   "devDependencies": {
     "@moxxy/config": "workspace:*",
-    "@types/node": "^22.10.0",
+    "@types/node": "catalog:",
     "dependency-cruiser": "^16.0.0",
     "eslint": "^9.18.0",
-    "tsx": "^4.19.2",
+    "tsx": "catalog:",
     "turbo": "^2.5.0",
-    "typescript": "^5.7.3",
-    "vitest": "^2.1.8"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

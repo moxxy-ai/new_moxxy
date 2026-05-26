@@ -1,5 +1,6 @@
 {
   "name": "@moxxy/plugin-plugins-admin",
+  "private": true,
   "version": "0.0.0",
   "description": "Model-callable plugin admin: install_plugin shells out to npm into ~/.moxxy/plugins, then hot-reloads. Disable to lock the plugin set.",
   "type": "module",
@@ -29,13 +30,13 @@
   },
   "dependencies": {
     "@moxxy/sdk": "workspace:*",
-    "zod": "^3.24.0"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@moxxy/tsconfig": "workspace:*",
     "@moxxy/vitest-preset": "workspace:*",
-    "@types/node": "^22.10.0",
-    "typescript": "^5.7.3",
-    "vitest": "^2.1.8"
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

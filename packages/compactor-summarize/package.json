@@ -1,5 +1,6 @@
 {
   "name": "@moxxy/compactor-summarize",
+  "private": true,
   "version": "0.0.0",
   "description": "Default summarize-old-turns compactor for moxxy.",
   "type": "module",
@@ -23,8 +24,8 @@
   "devDependencies": {
     "@moxxy/tsconfig": "workspace:*",
     "@moxxy/vitest-preset": "workspace:*",
-    "@types/node": "^22.10.0",
-    "typescript": "^5.7.3",
-    "vitest": "^2.1.8"
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

@@ -1,5 +1,6 @@
 {
   "name": "@moxxy/plugin-channel-http",
+  "private": true,
   "version": "0.0.0",
   "description": "Request-response HTTP channel for moxxy. POST /v1/turn drives one turn synchronously; POST /v1/turn/stream returns Server-Sent Events. Bearer-token auth + allow-list permission flow (no human in the loop).",
   "type": "module",
@@ -22,7 +23,7 @@
   "dependencies": {
     "@moxxy/core": "workspace:*",
     "@moxxy/sdk": "workspace:*",
-    "zod": "^3.24.0"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@moxxy/mode-tool-use": "workspace:*",
@@ -31,8 +32,8 @@
     "@moxxy/tools-builtin": "workspace:*",
     "@moxxy/tsconfig": "workspace:*",
     "@moxxy/vitest-preset": "workspace:*",
-    "@types/node": "^22.10.0",
-    "typescript": "^5.7.3",
-    "vitest": "^2.1.8"
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

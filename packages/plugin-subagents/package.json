@@ -1,5 +1,6 @@
 {
   "name": "@moxxy/plugin-subagents",
+  "private": true,
   "version": "0.0.0",
   "description": "Spawn typed subagents in parallel. Plugins contribute agent kinds via the AgentDef registry; this plugin exposes the dispatch_agent tool and an auto-detection skill.",
   "type": "module",
@@ -33,7 +34,7 @@
   },
   "dependencies": {
     "@moxxy/sdk": "workspace:*",
-    "zod": "^3.24.0"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@moxxy/core": "workspace:*",
@@ -41,8 +42,8 @@
     "@moxxy/testing": "workspace:*",
     "@moxxy/tsconfig": "workspace:*",
     "@moxxy/vitest-preset": "workspace:*",
-    "@types/node": "^22.10.0",
-    "typescript": "^5.7.3",
-    "vitest": "^2.1.8"
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

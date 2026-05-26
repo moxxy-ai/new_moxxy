@@ -8,21 +8,35 @@
     "moxxy": "./dist/bin.js"
   },
   "files": [
-    "dist",
-    "src"
+    "dist"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
-    "build": "tsc -p tsconfig.json && chmod +x dist/bin.js",
+    "build": "tsx scripts/gen-requirements.mts && tsup",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "clean": "rm -rf dist .turbo",
     "start": "node ./dist/bin.js"
   },
   "dependencies": {
-    "@clack/prompts": "^1.4.0",
+    "@moxxy/sdk": "workspace:*",
+    "zod": "catalog:"
+  },
+  "optionalDependencies": {
+    "@huggingface/transformers": "^3.0.0",
+    "keytar": "^7.9.0",
+    "playwright": "^1.40.0"
+  },
+  "devDependencies": {
+    "@clack/prompts": "catalog:",
     "@moxxy/compactor-summarize": "workspace:*",
     "@moxxy/config": "workspace:*",
     "@moxxy/core": "workspace:*",
+    "@moxxy/isolator-subprocess": "workspace:*",
+    "@moxxy/isolator-wasm": "workspace:*",
+    "@moxxy/isolator-worker": "workspace:*",
     "@moxxy/mode-bmad": "workspace:*",
     "@moxxy/mode-deep-research": "workspace:*",
     "@moxxy/mode-developer": "workspace:*",
@@ -40,34 +54,30 @@
     "@moxxy/plugin-oauth": "workspace:*",
     "@moxxy/plugin-plugins-admin": "workspace:*",
     "@moxxy/plugin-provider-admin": "workspace:*",
-    "@moxxy/plugin-self-update": "workspace:*",
     "@moxxy/plugin-provider-anthropic": "workspace:*",
     "@moxxy/plugin-provider-openai": "workspace:*",
     "@moxxy/plugin-provider-openai-codex": "workspace:*",
     "@moxxy/plugin-scheduler": "workspace:*",
     "@moxxy/plugin-security": "workspace:*",
-    "@moxxy/isolator-worker": "workspace:*",
-    "@moxxy/isolator-subprocess": "workspace:*",
-    "@moxxy/isolator-wasm": "workspace:*",
-    "@moxxy/plugin-subagents": "workspace:*",
+    "@moxxy/plugin-self-update": "workspace:*",
     "@moxxy/plugin-stt-whisper": "workspace:*",
     "@moxxy/plugin-stt-whisper-codex": "workspace:*",
+    "@moxxy/plugin-subagents": "workspace:*",
     "@moxxy/plugin-telegram": "workspace:*",
     "@moxxy/plugin-vault": "workspace:*",
     "@moxxy/plugin-webhooks": "workspace:*",
     "@moxxy/runner": "workspace:*",
-    "@moxxy/sdk": "workspace:*",
     "@moxxy/skills-builtin": "workspace:*",
     "@moxxy/tools-builtin": "workspace:*",
-    "ink": "^5.0.0",
-    "react": "^18.3.0"
-  },
-  "devDependencies": {
     "@moxxy/tsconfig": "workspace:*",
     "@moxxy/vitest-preset": "workspace:*",
-    "@types/node": "^22.10.0",
-    "@types/react": "^18.3.0",
-    "typescript": "^5.7.3",
-    "vitest": "^2.1.8"
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "ink": "catalog:",
+    "react": "catalog:",
+    "tsup": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

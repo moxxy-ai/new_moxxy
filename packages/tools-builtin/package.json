@@ -1,5 +1,6 @@
 {
   "name": "@moxxy/tools-builtin",
+  "private": true,
   "version": "0.0.0",
   "description": "Built-in tools shipped with moxxy: Read, Edit, Write, Bash, Grep, Glob.",
   "type": "module",
@@ -30,7 +31,7 @@
   },
   "dependencies": {
     "@moxxy/sdk": "workspace:*",
-    "zod": "^3.24.0"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@moxxy/core": "workspace:*",
@@ -38,8 +39,8 @@
     "@moxxy/testing": "workspace:*",
     "@moxxy/tsconfig": "workspace:*",
     "@moxxy/vitest-preset": "workspace:*",
-    "@types/node": "^22.10.0",
-    "typescript": "^5.7.3",
-    "vitest": "^2.1.8"
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

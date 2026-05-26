@@ -1,5 +1,6 @@
 {
   "name": "@moxxy/plugin-embeddings-transformers",
+  "private": true,
   "version": "0.0.0",
   "description": "Local neural EmbeddingProvider for moxxy via @huggingface/transformers (Xenova/all-MiniLM-L6-v2 by default). No API key, runs offline after first model fetch.",
   "type": "module",
@@ -26,8 +27,8 @@
   "devDependencies": {
     "@moxxy/tsconfig": "workspace:*",
     "@moxxy/vitest-preset": "workspace:*",
-    "@types/node": "^22.10.0",
-    "typescript": "^5.7.3",
-    "vitest": "^2.1.8"
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

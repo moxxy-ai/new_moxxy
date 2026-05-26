@@ -1,5 +1,6 @@
 {
   "name": "@moxxy/plugin-telegram",
+  "private": true,
   "version": "0.0.0",
   "description": "Telegram channel for moxxy via grammy. Treats Telegram chats as a bidirectional channel: prompts in, assistant + tool prompts out, inline-keyboard permission flow, TOFU + code-pairing authorization.",
   "type": "module",
@@ -20,18 +21,18 @@
   },
   "moxxy": { "plugin": { "entry": "./dist/index.js", "kind": "cli" } },
   "dependencies": {
-    "@clack/prompts": "^1.4.0",
+    "@clack/prompts": "catalog:",
     "@moxxy/core": "workspace:*",
     "@moxxy/plugin-vault": "workspace:*",
     "@moxxy/sdk": "workspace:*",
     "grammy": "^1.30.0",
-    "zod": "^3.24.0"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@moxxy/tsconfig": "workspace:*",
     "@moxxy/vitest-preset": "workspace:*",
-    "@types/node": "^22.10.0",
-    "typescript": "^5.7.3",
-    "vitest": "^2.1.8"
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

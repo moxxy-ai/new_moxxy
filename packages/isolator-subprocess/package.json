@@ -1,5 +1,6 @@
 {
   "name": "@moxxy/isolator-subprocess",
+  "private": true,
   "version": "0.0.0",
   "description": "Subprocess-based Isolator for @moxxy/plugin-security. Stronger boundary than worker_threads — separate OS process, restricted env, ulimit-friendly. Same broker protocol over stdio NDJSON.",
   "type": "module",
@@ -26,8 +27,8 @@
   "devDependencies": {
     "@moxxy/tsconfig": "workspace:*",
     "@moxxy/vitest-preset": "workspace:*",
-    "@types/node": "^22.10.0",
-    "typescript": "^5.7.3",
-    "vitest": "^2.1.8"
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

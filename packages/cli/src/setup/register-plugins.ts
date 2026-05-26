@@ -12,6 +12,7 @@ import {
 import type { MoxxyConfig } from '@moxxy/config';
 import type { MoxxyRequirement } from '@moxxy/sdk';
 import type { BuiltinEntry } from './builtins.js';
+import { BUILTIN_REQUIREMENTS } from './builtin-requirements.generated.js';
 
 export interface RegistrationResult {
   readonly registered: ReadonlySet<string>;
@@ -110,13 +111,18 @@ export async function registerPlugins(
 }
 
 /**
- * For each builtin entry, look up `moxxy.requirements` in the entry's
- * own package.json (resolved from `cwd`). Returns a map keyed by
- * BuiltinEntry.name. Entries with no package on disk (e.g. virtual
- * sub-plugins built dynamically inside another package) end up with no
- * entry in the map — i.e. zero static requirements, which is the
- * correct behavior: requirements live in package.json or they don't
- * exist.
+ * For each builtin entry, resolve `moxxy.requirements`. The compiled-in
+ * manifest (`BUILTIN_REQUIREMENTS`, generated at build from each package's
+ * package.json) is consulted first so gating + toposort survive bundling —
+ * once the cli is published as a single bundle the on-disk package.json is
+ * gone and the disk lookup below would return `[]`. Packages absent from the
+ * manifest fall back to the disk lookup, which still serves from-source dev
+ * runs and any third-party plugin resolvable from `cwd`.
+ *
+ * Returns a map keyed by BuiltinEntry.name. Entries with no requirements
+ * (e.g. virtual sub-plugins built dynamically inside another package) end up
+ * with no entry — i.e. zero static requirements, which is correct:
+ * requirements live in package.json or they don't exist.
  */
 async function resolveBuiltinRequirements(
   builtins: ReadonlyArray<BuiltinEntry>,
@@ -125,6 +131,11 @@ async function resolveBuiltinRequirements(
   const out = new Map<string, ReadonlyArray<MoxxyRequirement>>();
   await Promise.all(
     builtins.map(async (entry) => {
+      const compiled = BUILTIN_REQUIREMENTS[entry.name];
+      if (compiled !== undefined) {
+        if (compiled.length > 0) out.set(entry.name, compiled);
+        return;
+      }
       const reqs = await readPackageMoxxyRequirements(entry.name, cwd);
       if (reqs.length > 0) out.set(entry.name, reqs);
     }),

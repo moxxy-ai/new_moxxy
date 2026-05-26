@@ -1,5 +1,6 @@
 {
   "name": "@moxxy/core",
+  "private": true,
   "version": "0.0.0",
   "description": "Moxxy runtime: event log, plugin host, registries, permission engine.",
   "type": "module",
@@ -26,13 +27,13 @@
     "@moxxy/sdk": "workspace:*",
     "jiti": "^2.4.2",
     "ulid": "^2.3.0",
-    "zod": "^3.24.0"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@moxxy/tsconfig": "workspace:*",
     "@moxxy/vitest-preset": "workspace:*",
-    "@types/node": "^22.10.0",
-    "typescript": "^5.7.3",
-    "vitest": "^2.1.8"
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

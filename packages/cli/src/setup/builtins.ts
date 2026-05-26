@@ -15,7 +15,6 @@ import { bmadModePlugin } from '@moxxy/mode-bmad';
 import { developerModePlugin } from '@moxxy/mode-developer';
 import { deepResearchModePlugin } from '@moxxy/mode-deep-research';
 import { summarizeCompactorPlugin } from '@moxxy/compactor-summarize';
-import { BUILTIN_SKILLS_DIR } from '@moxxy/skills-builtin';
 import {
   buildMemoryConsolidatePlugin,
   type MemoryStore,
@@ -52,6 +51,7 @@ import {
 import { workerIsolator } from '@moxxy/isolator-worker';
 import { subprocessIsolator } from '@moxxy/isolator-subprocess';
 import { wasmIsolator } from '@moxxy/isolator-wasm';
+import { BUILTIN_SKILLS_DIR_RESOLVED } from './builtin-skills-dir.js';
 
 export interface BuiltinEntry {
   readonly name: string;
@@ -286,7 +286,7 @@ export function buildBuiltinsCore(args: BuildBuiltinsArgs): BuiltBuiltinsCore {
       // Thread the SAME directory set the boot scan uses so reload_skills
       // doesn't drop builtin/plugin skills when invoked at runtime.
       plugin: buildSynthesizeSkillPlugin(session, {
-        builtinDir: BUILTIN_SKILLS_DIR,
+        builtinDir: BUILTIN_SKILLS_DIR_RESOLVED,
         ...(rawConfig.skills?.extraDirs ? { pluginDirs: rawConfig.skills.extraDirs } : {}),
         ...(rawConfig.skills?.projectDir ? { projectDir: rawConfig.skills.projectDir } : {}),
         ...(rawConfig.skills?.userDir ? { userDir: rawConfig.skills.userDir } : {}),

@@ -1,5 +1,6 @@
 {
   "name": "@moxxy/mode-tool-use",
+  "private": true,
   "version": "0.0.0",
   "description": "Default tool-use loop strategy for moxxy (Claude Code-style).",
   "type": "module",
@@ -36,9 +37,9 @@
     "@moxxy/testing": "workspace:*",
     "@moxxy/tsconfig": "workspace:*",
     "@moxxy/vitest-preset": "workspace:*",
-    "@types/node": "^22.10.0",
-    "typescript": "^5.7.3",
-    "vitest": "^2.1.8",
-    "zod": "^3.24.0"
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "zod": "catalog:"
   }
 }
