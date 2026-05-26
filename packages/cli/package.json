@@ -34,6 +34,7 @@
   "devDependencies": {
     "@clack/prompts": "catalog:",
     "@moxxy/compactor-summarize": "workspace:*",
+    "@moxxy/cache-strategy-stable-prefix": "workspace:*",
     "@moxxy/config": "workspace:*",
     "@moxxy/core": "workspace:*",
     "@moxxy/isolator-subprocess": "workspace:*",

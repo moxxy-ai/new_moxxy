@@ -5,6 +5,7 @@ import type { ClientSession as Session } from '@moxxy/sdk';
 import { SkillsPanel } from '../components/SkillsPanel.js';
 import { ToolsPanel } from '../components/ToolsPanel.js';
 import { AgentsPanel } from '../components/AgentsPanel.js';
+import { UsagePanel } from '../components/UsagePanel.js';
 import { Colors } from '../theme.js';
 import { deriveMcpServers } from './helpers.js';
 import type { Overlay } from './types.js';
@@ -14,6 +15,8 @@ interface OverlayOrNoticeProps {
   systemNotice: string | null;
   session: Session;
   events: ReadonlyArray<MoxxyEvent>;
+  contextWindow?: number | null;
+  contextTokens?: number | null;
   onClose: () => void;
 }
 
@@ -22,6 +25,8 @@ export const OverlayOrNotice: React.FC<OverlayOrNoticeProps> = ({
   systemNotice,
   session,
   events,
+  contextWindow,
+  contextTokens,
   onClose,
 }) => {
   if (overlay?.kind === 'skills') {
@@ -39,6 +44,16 @@ export const OverlayOrNotice: React.FC<OverlayOrNoticeProps> = ({
   if (overlay?.kind === 'agents') {
     return (
       <AgentsPanel events={events} availableKinds={session.agents.list()} onClose={onClose} />
+    );
+  }
+  if (overlay?.kind === 'usage') {
+    return (
+      <UsagePanel
+        events={events}
+        contextWindow={contextWindow ?? null}
+        contextTokens={contextTokens ?? null}
+        onClose={onClose}
+      />
     );
   }
   if (systemNotice) {

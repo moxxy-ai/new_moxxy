@@ -1,3 +1,4 @@
+import type { CacheStrategyDef } from './cache-strategy.js';
 import type { CompactorDef } from './compactor.js';
 import type { EmittedEvent, MoxxyEvent } from './events.js';
 import type { HookDispatcher } from './hooks.js';
@@ -35,6 +36,21 @@ export interface PluginHostHandle {
   reload(): Promise<void>;
 }
 
+/**
+ * Turn-boundary elision (context-on-demand) settings, resolved from config and
+ * carried on the ModeContext. All fields optional; {@link runElisionIfNeeded}
+ * applies defaults and floors (e.g. keepRecentTurns is floored at 2).
+ */
+export interface ElisionSettings {
+  readonly enabled?: boolean;
+  readonly keepRecentTurns?: number;
+  readonly minContextRatioToElide?: number;
+  readonly elideConversational?: boolean;
+  readonly conversationalRecallThreshold?: number;
+  readonly maxRecallBytes?: number;
+  readonly neverElideTools?: ReadonlyArray<string>;
+}
+
 export interface ModeContext {
   readonly sessionId: SessionId;
   readonly turnId: TurnId;
@@ -45,6 +61,12 @@ export interface ModeContext {
   readonly skills: SkillRegistry;
   readonly log: EventLogReader;
   readonly compactor: CompactorDef | null;
+  /** Active prompt-caching strategy (or null when none is registered). */
+  readonly cacheStrategy: CacheStrategyDef | null;
+  /** Elision (context-on-demand) settings; undefined → defaults apply. */
+  readonly elision?: ElisionSettings;
+  /** When true, send only always-on + loaded tool schemas; index the rest. */
+  readonly lazyTools?: boolean;
   readonly permissions: PermissionResolver;
   /**
    * Optional generic "ask the user a question" gate. Any loop strategy can

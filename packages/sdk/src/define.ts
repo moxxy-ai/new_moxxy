@@ -1,3 +1,4 @@
+import type { CacheStrategyDef } from './cache-strategy.js';
 import type { ChannelDef } from './channel.js';
 import type { CompactorDef } from './compactor.js';
 import type { ModeDef } from './mode.js';
@@ -66,6 +67,10 @@ export function defineMode(spec: ModeDef): ModeDef {
 }
 
 export function defineCompactor(spec: CompactorDef): CompactorDef {
+  return Object.freeze(spec);
+}
+
+export function defineCacheStrategy(spec: CacheStrategyDef): CacheStrategyDef {
   return Object.freeze(spec);
 }
 

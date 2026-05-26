@@ -64,6 +64,29 @@ export function buildSessionConfigApplier(
       }
     }
 
+    if (
+      next.context?.caching !== last.context?.caching ||
+      next.context?.cacheStrategy !== last.context?.cacheStrategy
+    ) {
+      try {
+        if (next.context?.caching === false) session.cacheStrategies.setActive('none');
+        else session.cacheStrategies.setActive(next.context?.cacheStrategy ?? 'stable-prefix');
+        applied.push('cacheStrategy');
+      } catch (err) {
+        pending.push(`cacheStrategy (${err instanceof Error ? err.message : String(err)})`);
+      }
+    }
+
+    if (next.context?.elision !== last.context?.elision) {
+      session.elisionSettings = next.context?.elision ?? null;
+      applied.push('elision');
+    }
+
+    if (next.context?.lazyTools !== last.context?.lazyTools) {
+      session.lazyTools = next.context?.lazyTools ?? false;
+      applied.push('lazyTools');
+    }
+
     if (next.hookTimeoutMs !== last.hookTimeoutMs) {
       // The dispatcher reads its timeout at construction. v0: pending.
       pending.push('hookTimeoutMs (restart required)');

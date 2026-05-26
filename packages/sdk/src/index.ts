@@ -109,6 +109,7 @@ export type {
   ProviderMessage,
   ProviderRequest,
   ProviderEvent,
+  CacheHint,
   TokenUsage,
   ModelDescriptor,
   LLMProvider,
@@ -120,6 +121,7 @@ export type {
   ProviderOAuthStatus,
   ProviderAuthDescriptor,
 } from './provider.js';
+export type { CacheStrategyDef, CacheStrategyContext } from './cache-strategy.js';
 export { isRetryableError, toFriendlyError, zodToJsonSchema, type StopReason } from './provider-utils.js';
 export {
   MoxxyError,
@@ -139,6 +141,35 @@ export {
 
 export type { TokenBudget, CompactContext, CompactorDef } from './compactor.js';
 export { estimateContextTokens, runCompactionIfNeeded } from './compactor-helpers.js';
+export {
+  runElisionIfNeeded,
+  resolveElisionSettings,
+  type ResolvedElisionSettings,
+} from './elision-helpers.js';
+export {
+  computeElisionState,
+  toolResultStub,
+  conversationalStub,
+  toolResultBytes,
+  toolResultStubbed,
+  conversationalStubbed,
+  TINY_TURN_CHARS,
+  type ElisionState,
+} from './elision-state.js';
+export {
+  applyLazyTools,
+  buildToolIndex,
+  loadedToolNames,
+  ALWAYS_ON_TOOLS,
+  type GatedTools,
+} from './tool-gating.js';
+
+export {
+  summarizeSessionTokens,
+  summarizeSessionTokensFromEvents,
+  usageEventFields,
+  type SessionTokenSummary,
+} from './token-accounting.js';
 
 export type { Skill, SkillDef, SkillFrontmatter, SkillScope, SkillSchedule } from './skill.js';
 
@@ -157,6 +188,7 @@ export type {
   PluginHostHandle,
   ModeContext,
   ModeDef,
+  ElisionSettings,
   ApprovalResolver,
   ApprovalRequest,
   ApprovalDecision,
@@ -223,6 +255,7 @@ export {
   defineProvider,
   defineMode,
   defineCompactor,
+  defineCacheStrategy,
   defineChannel,
   definePermission,
   defineSkill,

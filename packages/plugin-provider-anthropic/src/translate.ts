@@ -1,27 +1,57 @@
 import type { ContentBlock, ProviderMessage, ToolDef } from '@moxxy/sdk';
 import { zodToJsonSchema } from '@moxxy/sdk';
 
+type CacheControl = { type: 'ephemeral' };
+
 export interface AnthropicMessageInput {
   role: 'user' | 'assistant';
   content: Array<AnthropicContentBlock>;
 }
 
 export type AnthropicContentBlock =
-  | { type: 'text'; text: string }
-  | { type: 'tool_use'; id: string; name: string; input: unknown }
-  | { type: 'tool_result'; tool_use_id: string; content: string; is_error?: boolean }
-  | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } };
+  | { type: 'text'; text: string; cache_control?: CacheControl }
+  | { type: 'tool_use'; id: string; name: string; input: unknown; cache_control?: CacheControl }
+  | {
+      type: 'tool_result';
+      tool_use_id: string;
+      content: string;
+      is_error?: boolean;
+      cache_control?: CacheControl;
+    }
+  | {
+      type: 'image';
+      source: { type: 'base64'; media_type: string; data: string };
+      cache_control?: CacheControl;
+    };
 
 export interface AnthropicToolDef {
   name: string;
   description: string;
   input_schema: unknown;
+  cache_control?: CacheControl;
 }
 
-export function toAnthropicMessages(messages: ReadonlyArray<ProviderMessage>): {
+export interface ToAnthropicMessagesOptions {
+  /**
+   * Indices (into the input `messages` array) after which a prompt-cache
+   * breakpoint should be placed. The marker lands on the last Anthropic
+   * content block produced for that source message.
+   */
+  readonly cacheMessageIndices?: ReadonlySet<number>;
+}
+
+function markCache(block: AnthropicContentBlock | undefined): void {
+  if (block) block.cache_control = { type: 'ephemeral' };
+}
+
+export function toAnthropicMessages(
+  messages: ReadonlyArray<ProviderMessage>,
+  opts: ToAnthropicMessagesOptions = {},
+): {
   system: string | undefined;
   messages: AnthropicMessageInput[];
 } {
+  const cacheIdx = opts.cacheMessageIndices;
   let system: string | undefined;
   const out: AnthropicMessageInput[] = [];
   let pendingUserBlocks: AnthropicContentBlock[] | null = null;
@@ -32,25 +62,31 @@ export function toAnthropicMessages(messages: ReadonlyArray<ProviderMessage>): {
     }
   };
 
-  for (const msg of messages) {
+  messages.forEach((msg, i) => {
+    const wantCache = cacheIdx?.has(i) ?? false;
+
     if (msg.role === 'system') {
       const textBlock = msg.content.find((c) => c.type === 'text');
       if (textBlock && textBlock.type === 'text') {
         system = system ? `${system}\n\n${textBlock.text}` : textBlock.text;
       }
-      continue;
+      return;
     }
 
     if (msg.role === 'user') {
       flushUser();
-      out.push({ role: 'user', content: msg.content.map(toAnthropicBlock) });
-      continue;
+      const content = msg.content.map(toAnthropicBlock);
+      if (wantCache) markCache(content[content.length - 1]);
+      out.push({ role: 'user', content });
+      return;
     }
 
     if (msg.role === 'assistant') {
       flushUser();
-      out.push({ role: 'assistant', content: msg.content.map(toAnthropicBlock) });
-      continue;
+      const content = msg.content.map(toAnthropicBlock);
+      if (wantCache) markCache(content[content.length - 1]);
+      out.push({ role: 'assistant', content });
+      return;
     }
 
     if (msg.role === 'tool_result') {
@@ -66,8 +102,12 @@ export function toAnthropicMessages(messages: ReadonlyArray<ProviderMessage>): {
           });
         }
       }
+      // Breakpoint after a tool-result source message lands on the last block
+      // appended for it. Caching up to a mid-message block is valid (it just
+      // defines the prefix boundary), so merging doesn't break this.
+      if (wantCache) markCache(pendingUserBlocks[pendingUserBlocks.length - 1]);
     }
-  }
+  });
   flushUser();
   return { system, messages: out };
 }
@@ -103,11 +143,22 @@ function toAnthropicBlock(block: ContentBlock): AnthropicContentBlock {
   }
 }
 
-export function toAnthropicTools(tools: ReadonlyArray<ToolDef>): AnthropicToolDef[] {
-  return tools.map((t) => ({
+export interface ToAnthropicToolsOptions {
+  /** Place a cache breakpoint on the last tool, caching the whole tools array. */
+  readonly cacheLast?: boolean;
+}
+
+export function toAnthropicTools(
+  tools: ReadonlyArray<ToolDef>,
+  opts: ToAnthropicToolsOptions = {},
+): AnthropicToolDef[] {
+  const out = tools.map((t) => ({
     name: t.name,
     description: t.description,
     input_schema: t.inputJsonSchema ?? zodToJsonSchema(t.inputSchema),
-  }));
+  })) as AnthropicToolDef[];
+  if (opts.cacheLast && out.length > 0) {
+    out[out.length - 1]!.cache_control = { type: 'ephemeral' };
+  }
+  return out;
 }
-

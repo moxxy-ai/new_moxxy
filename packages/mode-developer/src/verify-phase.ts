@@ -4,6 +4,7 @@ import {
   collectProviderStream,
   projectMessagesFromLog,
   runCompactionIfNeeded,
+  runElisionIfNeeded,
   type ModeContext,
   type MoxxyEvent,
 } from '@moxxy/sdk';
@@ -54,6 +55,7 @@ export async function* runVerifyPhase(
     });
 
     await runCompactionIfNeeded(ctx);
+    await runElisionIfNeeded(ctx);
 
     const baseSystem =
       buildSystemPromptWithSkills(ctx.systemPrompt, ctx.skills.list()) ?? ctx.systemPrompt ?? '';

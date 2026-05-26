@@ -4,6 +4,8 @@ import {
   collectProviderStream,
   projectMessagesFromLog,
   runCompactionIfNeeded,
+  runElisionIfNeeded,
+  usageEventFields,
   type ModeContext,
 } from '@moxxy/sdk';
 
@@ -55,6 +57,7 @@ export async function executeStep(
     // phase can't blow the context window without warning. See
     // runCompactionIfNeeded() for the no-op fallbacks.
     await runCompactionIfNeeded(ctx);
+    await runElisionIfNeeded(ctx);
 
     const messages = projectMessagesFromLog(ctx, {
       systemPrompt:
@@ -70,7 +73,7 @@ export async function executeStep(
       model: ctx.model,
     });
 
-    const { text, toolUses, stopReason } = await collectProviderStream(ctx, messages, {
+    const { text, toolUses, stopReason, usage } = await collectProviderStream(ctx, messages, {
       iteration,
     });
 
@@ -81,6 +84,7 @@ export async function executeStep(
       source: 'system',
       provider: ctx.provider.name,
       model: ctx.model,
+      ...usageEventFields(usage),
     });
 
     // Surface any spoken text from the model. Note: we do NOT emit

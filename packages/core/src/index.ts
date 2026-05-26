@@ -38,6 +38,7 @@ export { ToolRegistryImpl, type ToolRegistry } from './registries/tools.js';
 export { ProviderRegistry } from './registries/providers.js';
 export { ModeRegistry } from './registries/modes.js';
 export { CompactorRegistry } from './registries/compactors.js';
+export { CacheStrategyRegistry } from './registries/cache-strategies.js';
 export { ChannelRegistryImpl } from './registries/channels.js';
 export { AgentRegistry } from './registries/agents.js';
 export { CommandRegistry } from './registries/commands.js';

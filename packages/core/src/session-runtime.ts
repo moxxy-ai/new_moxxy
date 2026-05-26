@@ -1,7 +1,9 @@
 import type {
   AppContext,
   ApprovalResolver,
+  CacheStrategyDef,
   CompactorDef,
+  ElisionSettings,
   HookDispatcher,
   LLMProvider,
   ModeDef,
@@ -44,8 +46,11 @@ export interface SessionRuntime {
   readonly providers: { getActive(): LLMProvider };
   readonly modes: { getActive(): ModeDef; list(): ReadonlyArray<ModeDef> };
   readonly compactors: { getActive(): CompactorDef | null };
+  readonly cacheStrategies: { getActive(): CacheStrategyDef | null };
   readonly resolver: PermissionResolver;
   readonly approvalResolver: ApprovalResolver | null;
+  readonly elisionSettings: ElisionSettings | null;
+  readonly lazyTools: boolean;
   readonly dispatcher: HookDispatcher;
   readonly pluginHost: PluginHostHandle;
   startTurn(): { turnId: TurnId };

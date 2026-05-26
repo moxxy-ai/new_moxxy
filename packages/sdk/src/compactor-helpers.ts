@@ -1,3 +1,11 @@
+import {
+  computeElisionState,
+  conversationalStub,
+  conversationalStubbed,
+  toolResultBytes,
+  toolResultStub,
+  toolResultStubbed,
+} from './elision-state.js';
 import type { EmittedEvent, MoxxyEvent } from './events.js';
 import type { EventLogReader } from './log.js';
 import type { ModeContext } from './mode.js';
@@ -6,7 +14,10 @@ import type { ModeContext } from './mode.js';
  * Cheap, no-network estimate of how many tokens the current event log
  * would consume on the next provider request. Char-based (chars/4) with
  * compaction events honored — events covered by a CompactionEvent.replacedRange
- * count as the (much shorter) summary rather than their original bytes.
+ * count as the (much shorter) summary rather than their original bytes — and
+ * elision honored: old tool results (seq ≤ the elision high-water mark) count
+ * as their ~stub size rather than their full payload, matching what
+ * `projectMessagesFromLog` actually sends.
  *
  * Used by the auto-compact helper (see `runCompactionIfNeeded`) and by
  * the TUI's context meter. For perfect accuracy callers can use the
@@ -14,9 +25,14 @@ import type { ModeContext } from './mode.js';
  * touch the network and is safe to run on every iteration.
  */
 export function estimateContextTokens(log: EventLogReader): number {
+  const events = log.slice();
+  // Share the exact stub decision with projection so the estimate matches what
+  // is actually sent — pinned recalls / never-elide / tiny turns counted full,
+  // not undercounted (which would let the context overflow before compaction).
+  const el = computeElisionState(events);
   let chars = 0;
   const compactedSeqs = new Set<number>();
-  for (const e of log.slice()) {
+  for (const e of events) {
     if (e.type === 'compaction') {
       for (let seq = e.replacedRange[0]; seq <= e.replacedRange[1]; seq++) {
         compactedSeqs.add(seq);
@@ -24,8 +40,17 @@ export function estimateContextTokens(log: EventLogReader): number {
       chars += e.summary.length;
     }
   }
-  for (const e of log.slice()) {
+  for (const e of events) {
     if (compactedSeqs.has(e.seq)) continue;
+    if (e.type === 'tool_result' && toolResultStubbed(e, el)) {
+      const recalled = el.recalledCallIds.has(e.callId) || el.recalledSeqs.has(e.seq);
+      chars += toolResultStub(e.callId, toolResultBytes(e.output), recalled).length;
+      continue;
+    }
+    if ((e.type === 'user_prompt' || e.type === 'assistant_message') && conversationalStubbed(e, el)) {
+      chars += conversationalStub(e.type === 'user_prompt' ? 'user' : 'assistant', e.seq).length;
+      continue;
+    }
     chars += eventChars(e);
   }
   return Math.ceil(chars / 4);

@@ -11,6 +11,7 @@ export type Overlay =
   | { kind: 'skills' }
   | { kind: 'tools' }
   | { kind: 'agents' }
+  | { kind: 'usage' }
   | null;
 
 export type Picker =

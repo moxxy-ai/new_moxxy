@@ -74,6 +74,10 @@ export function runSlash(cmd: string, deps: SlashDeps): void {
       deps.setSystemNotice(null);
       deps.setOverlay({ kind: 'agents' });
       return;
+    case '/usage':
+      deps.setSystemNotice(null);
+      deps.setOverlay({ kind: 'usage' });
+      return;
     case '/model':
       return openModelPicker(deps);
     case '/mcp':

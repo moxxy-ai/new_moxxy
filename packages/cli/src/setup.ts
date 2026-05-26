@@ -122,6 +122,17 @@ export async function setupSessionWithConfig(opts: SetupOptions): Promise<SetupR
 
   if (config.mode) session.modes.setActive(config.mode);
   if (config.compactor) session.compactors.setActive(config.compactor);
+  // Caching is on by default (stable-prefix auto-activates). `caching: false`
+  // selects the no-op strategy; an explicit name overrides the default.
+  if (config.context?.caching === false) {
+    session.cacheStrategies.setActive('none');
+  } else if (config.context?.cacheStrategy) {
+    session.cacheStrategies.setActive(config.context.cacheStrategy);
+  }
+  // Elision is on by default (built-in defaults); config only needs to be
+  // carried when the user customizes or disables it.
+  if (config.context?.elision) session.elisionSettings = config.context.elision;
+  if (config.context?.lazyTools) session.lazyTools = true;
 
   await applyPreferences(session, credentialResolver, logger);
   progress({ kind: 'prefs-applied' });

@@ -1,6 +1,8 @@
 import {
   buildSystemPromptWithSkills,
+  collectProviderStream,
   runCompactionIfNeeded,
+  usageEventFields,
   type ModeContext,
   type ProviderMessage,
 } from '@moxxy/sdk';
@@ -30,43 +32,18 @@ export async function collectPhase(
     model: ctx.model,
   });
 
-  let text = '';
-  try {
-    for await (const event of ctx.provider.stream({
-      model: ctx.model,
-      messages,
-      maxTokens: phase.maxTokens,
-      signal: ctx.signal,
-    })) {
-      if (event.type === 'text_delta') {
-        text += event.delta;
-        await ctx.emit({
-          type: 'assistant_chunk',
-          sessionId: ctx.sessionId,
-          turnId: ctx.turnId,
-          source: 'model',
-          delta: event.delta,
-        });
-      } else if (event.type === 'error') {
-        await ctx.emit({
-          type: 'error',
-          sessionId: ctx.sessionId,
-          turnId: ctx.turnId,
-          source: 'system',
-          kind: event.retryable ? 'retryable' : 'fatal',
-          message: event.message,
-        });
-        return null;
-      }
-    }
-  } catch (err) {
+  const { text, usage, error } = await collectProviderStream(ctx, messages, {
+    includeTools: false,
+    maxTokens: phase.maxTokens,
+  });
+  if (error) {
     await ctx.emit({
       type: 'error',
       sessionId: ctx.sessionId,
       turnId: ctx.turnId,
       source: 'system',
-      kind: 'fatal',
-      message: err instanceof Error ? err.message : String(err),
+      kind: error.retryable ? 'retryable' : 'fatal',
+      message: error.message,
     });
     return null;
   }
@@ -78,6 +55,7 @@ export async function collectPhase(
     source: 'system',
     provider: ctx.provider.name,
     model: ctx.model,
+    ...usageEventFields(usage),
   });
 
   return text;

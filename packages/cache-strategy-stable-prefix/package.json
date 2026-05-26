@@ -1,0 +1,31 @@
+{
+  "name": "@moxxy/cache-strategy-stable-prefix",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Default stable-prefix prompt-cache strategy for moxxy.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf dist .turbo"
+  },
+  "moxxy": { "plugin": { "entry": "./dist/index.js", "kind": "cache-strategy" } },
+  "dependencies": { "@moxxy/sdk": "workspace:*" },
+  "devDependencies": {
+    "@moxxy/tsconfig": "workspace:*",
+    "@moxxy/vitest-preset": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

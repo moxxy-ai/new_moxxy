@@ -2,6 +2,7 @@ import {
   asToolCallId,
   collectProviderStream,
   runCompactionIfNeeded,
+  runElisionIfNeeded,
   type ModeContext,
   type MoxxyEvent,
 } from '@moxxy/sdk';
@@ -64,6 +65,7 @@ export async function* runImplementationLoop(
     // context-heavy workflow we ship, so this is the mode that
     // benefits from auto-compaction the most.
     await runCompactionIfNeeded(ctx);
+    await runElisionIfNeeded(ctx);
 
     const messages = buildImplementationMessages(
       ctx,

@@ -89,10 +89,39 @@ export const embeddingsConfigSchema = z.object({
   persistIndex: z.boolean().optional(),
 });
 
+/**
+ * Turn-boundary elision settings (context-on-demand). Off-by-floor safety:
+ * `keepRecentTurns` never drops below 2 and elision is skipped while the
+ * context is under `minContextRatioToElide` full.
+ */
+export const elisionConfigSchema = z.object({
+  enabled: z.boolean().optional(),
+  keepRecentTurns: z.number().int().min(2).optional(),
+  minContextRatioToElide: z.number().min(0).max(1).optional(),
+  /** Also collapse old user/assistant text turns (not just bulky tool results). */
+  elideConversational: z.boolean().optional(),
+  /** Auto-disable conversational elision after this many `recall({seq})` calls. */
+  conversationalRecallThreshold: z.number().int().positive().optional(),
+  maxRecallBytes: z.number().int().positive().optional(),
+  neverElideTools: z.array(z.string()).optional(),
+});
+
+/** Context-window / token-efficiency settings. */
+export const contextConfigSchema = z.object({
+  /** Master switch for prompt caching. Default true (lossless). */
+  caching: z.boolean().optional(),
+  /** Name of the active CacheStrategy block (default 'stable-prefix'). */
+  cacheStrategy: z.string().optional(),
+  elision: elisionConfigSchema.optional(),
+  /** Lazy tool loading: send only core + loaded tool schemas, index the rest. Default false. */
+  lazyTools: z.boolean().optional(),
+});
+
 export const moxxyConfigSchema = z.object({
   provider: providerSettingsSchema.optional(),
   mode: z.string().optional(),
   compactor: z.string().optional(),
+  context: contextConfigSchema.optional(),
   systemPrompt: z.string().optional(),
   maxIterations: z.number().int().positive().optional(),
   hookTimeoutMs: z.number().int().positive().optional(),
@@ -113,6 +142,8 @@ export const moxxyConfigSchema = z.object({
 });
 
 export type MoxxyConfig = z.infer<typeof moxxyConfigSchema>;
+export type ContextConfig = z.infer<typeof contextConfigSchema>;
+export type ElisionConfig = z.infer<typeof elisionConfigSchema>;
 export type PluginSettings = z.infer<typeof pluginSettingsSchema>;
 export type ProviderSettings = z.infer<typeof providerSettingsSchema>;
 export type WatcherMode = z.infer<typeof watcherModeSchema>;

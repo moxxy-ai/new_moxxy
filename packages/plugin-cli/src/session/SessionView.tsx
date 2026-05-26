@@ -290,6 +290,8 @@ export const SessionView: React.FC<SessionViewProps> = ({
         systemNotice={systemNotice}
         session={session}
         events={stream.events}
+        contextWindow={contextWindow}
+        contextTokens={contextUsed}
         onClose={() => setOverlay(null)}
       />
       <InteractiveZone

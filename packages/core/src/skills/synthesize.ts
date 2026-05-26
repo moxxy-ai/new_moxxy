@@ -254,6 +254,32 @@ export function buildSynthesizeSkillPlugin(
           return `loaded ${discovered.length} skill${discovered.length === 1 ? '' : 's'}`;
         },
       }),
+      defineTool({
+        name: 'load_tool',
+        description:
+          'Load a tool whose full schema was indexed but not sent (see "Loadable tools" ' +
+          'in the system prompt). Call this with the tool name; the tool becomes callable ' +
+          'on the next turn. Only needed when lazy tool loading is enabled — core tools ' +
+          '(Read/Write/Edit/Bash/Grep/Glob) are always available.',
+        inputSchema: z.object({
+          name: z.string().min(1).describe('Exact tool name from the "Loadable tools" index.'),
+        }),
+        permission: { action: 'allow' },
+        handler: ({ name }) => {
+          // The call itself is recorded in the log; `applyLazyTools` reads that
+          // to include the tool's schema on subsequent requests. Here we just
+          // validate the name and echo the description so the model can proceed.
+          const tool = session.tools.get(name);
+          if (!tool) {
+            const known = session.tools
+              .list()
+              .map((t) => t.name)
+              .join(', ');
+            throw new Error(`load_tool: no tool named "${name}". Known tools: ${known}.`);
+          }
+          return { name: tool.name, description: tool.description, loaded: true };
+        },
+      }),
     ],
   });
 }

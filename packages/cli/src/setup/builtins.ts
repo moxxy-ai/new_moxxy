@@ -15,6 +15,7 @@ import { bmadModePlugin } from '@moxxy/mode-bmad';
 import { developerModePlugin } from '@moxxy/mode-developer';
 import { deepResearchModePlugin } from '@moxxy/mode-deep-research';
 import { summarizeCompactorPlugin } from '@moxxy/compactor-summarize';
+import { stablePrefixCacheStrategyPlugin } from '@moxxy/cache-strategy-stable-prefix';
 import {
   buildMemoryConsolidatePlugin,
   type MemoryStore,
@@ -75,6 +76,7 @@ export const BUILTIN_REQUIREMENT_DECISIONS: Readonly<Record<string, BuiltinRequi
   '@moxxy/mode-developer': { hardRequirements: false, reason: 'mode layers on tool-use; no hard plugin dependency' },
   '@moxxy/mode-deep-research': { hardRequirements: false, reason: 'mode needs @moxxy/plugin-subagents at runtime; surfaced as fatal error if absent' },
   '@moxxy/compactor-summarize': { hardRequirements: false, reason: 'compactor has no plugin dependency' },
+  '@moxxy/cache-strategy-stable-prefix': { hardRequirements: false, reason: 'cache strategy has no plugin dependency' },
   '@moxxy/plugin-vault': { hardRequirements: false, reason: 'vault is the base secret store' },
   '@moxxy/plugin-stt-whisper': { hardRequirements: false, reason: 'generic Whisper backend; harmless without a configured provider' },
   '@moxxy/plugin-stt-whisper-codex': { hardRequirements: true, reason: 'requires Codex provider and OAuth readiness' },
@@ -141,6 +143,7 @@ export function buildBuiltinsCore(args: BuildBuiltinsArgs): BuiltBuiltinsCore {
     { name: '@moxxy/mode-developer', plugin: developerModePlugin },
     { name: '@moxxy/mode-deep-research', plugin: deepResearchModePlugin },
     { name: '@moxxy/compactor-summarize', plugin: summarizeCompactorPlugin },
+    { name: '@moxxy/cache-strategy-stable-prefix', plugin: stablePrefixCacheStrategyPlugin },
     { name: '@moxxy/plugin-vault', plugin: vaultPlugin },
     { name: '@moxxy/plugin-stt-whisper', plugin: buildWhisperPlugin() },
     {

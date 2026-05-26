@@ -39,8 +39,28 @@ export class AnthropicProvider implements LLMProvider {
   }
 
   async *stream(req: ProviderRequest): AsyncIterable<ProviderEvent> {
-    const { system, messages } = toAnthropicMessages(req.messages);
-    const tools = req.tools && req.tools.length > 0 ? toAnthropicTools(req.tools) : undefined;
+    // Translate provider-neutral cache hints into Anthropic cache_control
+    // markers. `tools`/`system` mark those session-stable regions; a
+    // `{ messageIndex }` hint marks the end of that message (the rolling
+    // prefix breakpoint). Anthropic honors at most 4 breakpoints.
+    const hints = req.cacheHints ?? [];
+    const cacheTools = hints.some((h) => h.target === 'tools');
+    const cacheSystem = hints.some((h) => h.target === 'system');
+    const cacheMessageIndices = new Set<number>();
+    for (const h of hints) {
+      if (typeof h.target === 'object') cacheMessageIndices.add(h.target.messageIndex);
+    }
+
+    const { system, messages } = toAnthropicMessages(req.messages, { cacheMessageIndices });
+    const tools =
+      req.tools && req.tools.length > 0
+        ? toAnthropicTools(req.tools, { cacheLast: cacheTools })
+        : undefined;
+    // To carry cache_control the system prompt must be sent in block form.
+    const systemParam =
+      cacheSystem && system
+        ? [{ type: 'text' as const, text: system, cache_control: { type: 'ephemeral' as const } }]
+        : system;
     const model = req.model || this.defaultModel;
 
     yield { type: 'message_start', model };
@@ -51,7 +71,7 @@ export class AnthropicProvider implements LLMProvider {
         {
           model,
           max_tokens: req.maxTokens ?? 4096,
-          system,
+          system: systemParam,
           messages,
           tools,
           ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
@@ -84,9 +104,21 @@ export class AnthropicProvider implements LLMProvider {
         }
         switch (event.type) {
           case 'message_start': {
+            // Anthropic reports cache hits/writes only on the message_start
+            // usage block — `cache_read_input_tokens` (billed 0.1x) and
+            // `cache_creation_input_tokens` (billed 1.25x). Capture them here
+            // so the metering layer can prove cache savings; without this the
+            // fields are silently dropped and cache wins are invisible.
+            const u = event.message?.usage;
             usage = {
-              inputTokens: event.message?.usage?.input_tokens ?? 0,
-              outputTokens: event.message?.usage?.output_tokens ?? 0,
+              inputTokens: u?.input_tokens ?? 0,
+              outputTokens: u?.output_tokens ?? 0,
+              ...(u?.cache_read_input_tokens !== undefined
+                ? { cacheReadTokens: u.cache_read_input_tokens }
+                : {}),
+              ...(u?.cache_creation_input_tokens !== undefined
+                ? { cacheCreationTokens: u.cache_creation_input_tokens }
+                : {}),
             };
             break;
           }
@@ -142,7 +174,10 @@ export class AnthropicProvider implements LLMProvider {
               stopReason = mapStopReason(event.delta.stop_reason);
             }
             if (event.usage) {
+              // Preserve cache fields captured at message_start — the delta
+              // usage only carries the final output_tokens count.
               usage = {
+                ...usage,
                 inputTokens: usage?.inputTokens ?? 0,
                 outputTokens: event.usage.output_tokens ?? usage?.outputTokens ?? 0,
               };
@@ -190,7 +225,14 @@ interface AnthropicStreamEvent {
     | 'content_block_stop'
     | 'message_delta'
     | 'message_stop';
-  message?: { usage?: { input_tokens?: number; output_tokens?: number } };
+  message?: {
+    usage?: {
+      input_tokens?: number;
+      output_tokens?: number;
+      cache_read_input_tokens?: number;
+      cache_creation_input_tokens?: number;
+    };
+  };
   content_block?: { type: 'text' | 'tool_use'; id: string; name: string };
   index?: number;
   delta?: {

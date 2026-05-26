@@ -28,6 +28,7 @@ export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<SlashCommand> = [
   { name: 'tools', description: 'List the tools the active session can call' },
   { name: 'skills', description: 'List the discovered skills' },
   { name: 'agents', description: 'Inspect spawned subagents and their activity' },
+  { name: 'usage', description: 'Show session token usage, cache savings, and per-call trend' },
   { name: 'model', description: 'Switch provider + model — opens a picker' },
   {
     name: 'mode',

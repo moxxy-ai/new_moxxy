@@ -1,4 +1,5 @@
 import type { AgentDef } from './agent.js';
+import type { CacheStrategyDef } from './cache-strategy.js';
 import type { ChannelDef } from './channel.js';
 import type { CommandDef } from './command.js';
 import type { CompactorDef } from './compactor.js';
@@ -9,7 +10,7 @@ import type { MoxxyRequirement } from './requirements.js';
 import type { ToolDef } from './tool.js';
 import type { TranscriberDef } from './transcriber.js';
 
-export type PluginKind = 'tools' | 'provider' | 'mode' | 'compactor' | 'mcp' | 'cli' | 'channel' | 'hooks' | 'agent' | 'command' | 'transcriber';
+export type PluginKind = 'tools' | 'provider' | 'mode' | 'compactor' | 'cache-strategy' | 'mcp' | 'cli' | 'channel' | 'hooks' | 'agent' | 'command' | 'transcriber';
 
 export interface PluginSpec {
   readonly name: string;
@@ -18,6 +19,12 @@ export interface PluginSpec {
   readonly providers?: ReadonlyArray<ProviderDef>;
   readonly modes?: ReadonlyArray<ModeDef>;
   readonly compactors?: ReadonlyArray<CompactorDef>;
+  /**
+   * Prompt-caching strategies contributed by the plugin. One is active per
+   * session (selected via `session.cacheStrategies.setActive(name)`); the
+   * active strategy decides where cache breakpoints go for each provider call.
+   */
+  readonly cacheStrategies?: ReadonlyArray<CacheStrategyDef>;
   readonly channels?: ReadonlyArray<ChannelDef>;
   /**
    * Speech-to-text backends contributed by the plugin. Selected by name via

@@ -4,6 +4,8 @@ import {
   collectProviderStream,
   projectMessagesFromLog,
   runCompactionIfNeeded,
+  runElisionIfNeeded,
+  usageEventFields,
   type CollectedToolUse,
   type ModeContext,
   type MoxxyEvent,
@@ -50,6 +52,10 @@ export async function* runToolUseMode(ctx: ModeContext): AsyncIterable<MoxxyEven
     // by buildMessages) honors it, so the model sees a summarized
     // prefix instead of overflowing the window mid-loop.
     await runCompactionIfNeeded(ctx);
+    // Turn-boundary elision (context-on-demand): stub old bulky tool output and
+    // (when enabled) old text turns, recall-able on demand. Composes with
+    // compaction over the same projection.
+    await runElisionIfNeeded(ctx);
 
     const messages = buildMessages(ctx);
     yield await ctx.emit({
@@ -61,7 +67,7 @@ export async function* runToolUseMode(ctx: ModeContext): AsyncIterable<MoxxyEven
       model: ctx.model,
     });
 
-    const { text, toolUses, stopReason, error } = await collectProviderStream(ctx, messages, {
+    const { text, toolUses, stopReason, error, usage } = await collectProviderStream(ctx, messages, {
       iteration,
     });
 
@@ -72,6 +78,7 @@ export async function* runToolUseMode(ctx: ModeContext): AsyncIterable<MoxxyEven
       source: 'system',
       provider: ctx.provider.name,
       model: ctx.model,
+      ...usageEventFields(usage),
     });
 
     if (error) {

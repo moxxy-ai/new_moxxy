@@ -12,6 +12,21 @@ export type ContentBlock =
   | { readonly type: 'image'; readonly mediaType: string; readonly data: string }
   | { readonly type: 'audio'; readonly mediaType: string; readonly data: string };
 
+/**
+ * Provider-neutral instruction for where a prompt-cache breakpoint should be
+ * placed. A {@link CacheStrategyDef} emits these; providers that support
+ * caching (e.g. Anthropic via `cache_control`) translate them into their
+ * native marker, and providers that don't simply ignore them.
+ *
+ * `tools` / `system` mark the end of those (session-stable) regions;
+ * `{ messageIndex }` marks the end of the message at that index in the
+ * request's `messages` array (used for the rolling prefix breakpoint).
+ * Anthropic honors at most 4 breakpoints per request.
+ */
+export interface CacheHint {
+  readonly target: 'tools' | 'system' | { readonly messageIndex: number };
+}
+
 export interface ProviderRequest {
   readonly model: string;
   readonly system?: string;
@@ -20,6 +35,8 @@ export interface ProviderRequest {
   readonly maxTokens?: number;
   readonly temperature?: number;
   readonly signal?: AbortSignal;
+  /** Where to place prompt-cache breakpoints. Set by the active CacheStrategy. */
+  readonly cacheHints?: ReadonlyArray<CacheHint>;
 }
 
 export type ProviderEvent =
