@@ -1,6 +1,14 @@
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { z, defineTool, definePlugin, type Plugin } from '@moxxy/sdk';
+import {
+  z,
+  defineTool,
+  definePlugin,
+  type Plugin,
+  type CommandDef,
+  type EmittedEvent,
+  type TurnId,
+} from '@moxxy/sdk';
 import { createCombinedKeySource, type MasterKeySource } from './keysource.js';
 import { VaultStore } from './store.js';
 
@@ -33,13 +41,94 @@ export function buildVaultPlugin(opts: BuildVaultPluginOptions = {}): { plugin: 
     });
   const vault = new VaultStore({ filePath, keySource });
 
+  // `/vault` slash command. Lets the USER store a secret out-of-band: the
+  // value travels in the slash-command args, which channels intercept and
+  // never send to the model. After storing, we inject a note into the event
+  // log telling the model only the REFERENCE (`${vault:NAME}`) — never the
+  // plaintext — so the model can wire it up (config/tools) without seeing it.
+  const vaultCmd: CommandDef = {
+    name: 'vault',
+    description: 'Store a secret or list stored names',
+    pendingNotice: 'updating vault',
+    handler: async (ctx) => {
+      const trimmed = ctx.args.trim();
+      const [sub, ...rest] = trimmed.split(/\s+/);
+
+      if (!sub || sub === 'help') {
+        return { kind: 'text', text: vaultCommandUsage() };
+      }
+
+      if (sub === 'list') {
+        const entries = await vault.list();
+        if (entries.length === 0) {
+          return { kind: 'text', text: 'Vault is empty. Store a secret with `/vault set <name> <value>`.' };
+        }
+        const lines = entries.map(
+          (e) => `  ${e.name}${e.tags && e.tags.length ? `  [${e.tags.join(', ')}]` : ''}  →  \${vault:${e.name}}`,
+        );
+        return { kind: 'text', text: `Stored secrets (values hidden):\n${lines.join('\n')}` };
+      }
+
+      if (sub === 'set') {
+        const name = rest[0];
+        const value = rest.slice(1).join(' ');
+        if (!name || !/^[A-Za-z0-9_.-]+$/.test(name)) {
+          return {
+            kind: 'error',
+            message: 'usage: /vault set <name> <value>  (name may contain letters, digits, _ . -)',
+          };
+        }
+        if (!value) {
+          return { kind: 'error', message: `usage: /vault set ${name} <value>  — a value is required` };
+        }
+
+        await vault.set(name, value);
+
+        // Inform the model with a reference only — never the plaintext. Keep it
+        // terse: the behavioral guidance ("never ask for plaintext") lives in
+        // the vault-setup skill. The note projects as a message on the next turn
+        // and renders as a dim system note in the TUI (see EventLine).
+        const note =
+          `[vault] Secret "${name}" stored. Reference it as \${vault:${name}} — its value is hidden from you.`;
+        try {
+          const s = ctx.session as VaultCommandSession;
+          await s.log.append({
+            type: 'user_prompt',
+            sessionId: ctx.sessionId,
+            turnId: s.startTurn().turnId,
+            source: 'system',
+            text: note,
+          });
+        } catch {
+          // If the host session doesn't expose log/startTurn (unexpected),
+          // still confirm storage to the user below.
+        }
+
+        return {
+          kind: 'text',
+          text:
+            `✓ Stored "${name}" securely in the vault. ` +
+            `The assistant can reference it as \${vault:${name}} without ever seeing the value.`,
+        };
+      }
+
+      return { kind: 'error', message: `unknown subcommand "${sub}".\n${vaultCommandUsage()}` };
+    },
+  };
+
   const plugin = definePlugin({
     name: '@moxxy/plugin-vault',
     version: '0.0.0',
+    commands: [vaultCmd],
     tools: [
       defineTool({
         name: 'vault_set',
-        description: 'Store a secret in the encrypted vault. Overwrites if name exists.',
+        description:
+          'Store a secret in the encrypted vault. Overwrites if name exists. ' +
+          'IMPORTANT: do NOT use this for a secret the USER supplies — that would route the ' +
+          'plaintext through the conversation. Instead tell the user to run `/vault set <name> <value>` ' +
+          'themselves; you only receive a ${vault:<name>} reference. Use this tool only for a value you ' +
+          'legitimately already hold and may see.',
         inputSchema: z.object({
           name: z.string().min(1).regex(/^[A-Za-z0-9_.-]+$/),
           value: z.string().min(1),
@@ -96,6 +185,24 @@ export function buildVaultPlugin(opts: BuildVaultPluginOptions = {}): { plugin: 
   });
 
   return { plugin, vault };
+}
+
+/**
+ * Minimal slice of the real Session the /vault command needs to inject its
+ * reference note. Loosely typed so the package stays free of a core dep —
+ * the plugin host passes a real Session that satisfies this.
+ */
+interface VaultCommandSession {
+  startTurn(): { turnId: TurnId };
+  log: { append(event: EmittedEvent): Promise<unknown> };
+}
+
+function vaultCommandUsage(): string {
+  return (
+    'usage:\n' +
+    '  /vault set <name> <value>   store a secret (the value is hidden from the assistant)\n' +
+    '  /vault list                 list stored secret names'
+  );
 }
 
 async function defaultPrompt(): Promise<string> {

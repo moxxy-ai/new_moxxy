@@ -19,8 +19,8 @@ allowed-tools:
   - provider_list
   - provider_remove
   - provider_test
-  - vault_set
   - vault_status
+  - vault_list
 ---
 
 The user wants to add a new LLM provider to moxxy so they can switch to it later (`/provider <name>` or via `provider.name` in moxxy.config.ts). Walk them through these steps; be terse and pause for confirmation between gather → register → key.
@@ -60,27 +60,29 @@ Two paths, in order of preference:
    - groq → `https://console.groq.com/docs/models`
    - openrouter → `https://openrouter.ai/models`
    - fireworks → `https://fireworks.ai/models`
-2. **Hit the vendor's `/v1/models` endpoint** after the user gives you the key. Listing is free for almost every vendor. The response is the canonical model id list but does NOT include context windows — you still need to pull those from docs.
+2. **The vendor's `/v1/models` endpoint** lists canonical model ids (but not context windows). This needs the API key, which you will NOT have (see step 3 — the key goes straight into the vault, never to you). So prefer WebFetch for discovery; if you must use `/v1/models`, ask the user to run it themselves and paste the model-id list (not the key).
 
 Build the list, show it to the user as a markdown table (id / context / tools / images), and ask them to confirm or trim. **Do not invent context-window numbers.** If a model's context is unknown, ask the user or leave it out.
 
 Tool-call support and streaming default to `true` for OpenAI-compatible vendors (their /v1/chat/completions endpoint inherits both). Only flip them to `false` if you've confirmed the vendor doesn't.
 
-## 3. Test the endpoint (optional, but recommended)
+## 3. Store the API key in the vault — via the `/vault` command
 
-Before persisting, ask the user for their API key and call `provider_test` with `baseURL` + `apiKey`. This hits `/v1/models`:
+**Never ask the user to paste their API key to you.** The key must not pass through the conversation or a tool argument (both are visible to you). Instead, tell the user to store it themselves:
 
-- `{ ok: true }` → green light, proceed.
-- `{ ok: false, message: "..." }` → relay the vendor error verbatim. Common causes: wrong baseURL, wrong key, vendor doesn't expose `/v1/models`. For the last case, you can skip the test and proceed at the user's risk.
+```
+/vault set <SLUG>_API_KEY <their-key>
+```
 
-## 4. Store the API key in the vault
+Use the uppercase slug, e.g. "Please run `/vault set DEEPSEEK_API_KEY <your-key>` — the value stays local; I'll only get a reference." `<SLUG>_API_KEY` is moxxy's canonical resolution path (config.apiKey → vault → env → prompt), so once it's there the provider picks it up automatically. **Stop and wait** for the user to confirm before continuing.
 
-Call `vault_set` with:
-- `name`: `<SLUG>_API_KEY` (uppercase) — e.g. `ZAI_API_KEY`, `DEEPSEEK_API_KEY`. This matches moxxy's canonical resolution path (config.apiKey → vault → env → prompt).
-- `value`: the key the user gave you.
-- `tags`: `["provider", "<slug>"]` so the user can identify it later in `vault_list`.
+After they run it you'll get a note confirming storage and the reference `${vault:<SLUG>_API_KEY}` — you never see the key itself.
 
-If the user pasted the key inline before this step, store it FIRST so it doesn't linger in transcript scrollback as plaintext. Never repeat the key back to them.
+## 4. (Optional) Test the endpoint
+
+`provider_test` needs the plaintext key, which you don't have — so don't call it with the key yourself. To verify the endpoint, either:
+- ask the user to run a quick check themselves, or
+- skip ahead: after registering (step 5), have the user run `moxxy doctor`, which resolves `<SLUG>_API_KEY` from the vault and reports whether the provider's key is present.
 
 ## 5. Register the provider
 
@@ -115,12 +117,13 @@ Ask if they want this provider as the default:
 
 Report:
 - Provider slug + baseURL + default model.
-- That the API key is in the vault under `<SLUG>_API_KEY`.
+- That the API key is in the vault under `<SLUG>_API_KEY` (the user stored it via `/vault set`).
 - That `~/.moxxy/providers.json` was updated and the provider is live this session.
 - How to switch to it.
 
 ## Don't
 
+- Don't ask the user to paste their API key to you, and don't call any tool with the key as an argument. Direct them to `/vault set <SLUG>_API_KEY <key>` so it never enters the conversation.
 - Don't invent baseURLs, model ids, or context windows. If you're not sure, WebFetch or ask.
 - Don't store the API key anywhere except the vault. Never write it into a file in the repo, never echo it back.
 - Don't try to handle non-OpenAI-compatible vendors here — those need a real provider plugin (`.claude/agents/provider-author.md`).

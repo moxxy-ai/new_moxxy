@@ -14,6 +14,7 @@ import {
   parseVerify,
   renderDiffBody,
 } from './index.js';
+import { messageAwaitsUser } from './developer-loop.js';
 
 describe('parseVerify', () => {
   it('extracts SUMMARY and COMMIT subject + body', () => {
@@ -82,6 +83,78 @@ describe('renderDiffBody', () => {
     expect(body).toContain('Changed files (1)');
     expect(body).toContain('src/foo.ts  +3/-1');
     expect(body).toMatch(/```diff[\s\S]*\+new[\s\S]*```/);
+  });
+});
+
+describe('messageAwaitsUser', () => {
+  it('detects trailing questions and requests for the user', () => {
+    expect(messageAwaitsUser('I need your API key. Please run `/vault set X <key>`.')).toBe(true);
+    expect(messageAwaitsUser('Does this look right to you?')).toBe(true);
+    expect(messageAwaitsUser('Could you provide the endpoint URL?')).toBe(true);
+    expect(messageAwaitsUser('Let me know when the key is stored.')).toBe(true);
+    expect(messageAwaitsUser('Please confirm before I continue')).toBe(true);
+  });
+
+  it('does not fire on completion statements', () => {
+    expect(messageAwaitsUser('Done with the implementation.')).toBe(false);
+    expect(messageAwaitsUser('Added foo() and the tests pass.')).toBe(false);
+    expect(messageAwaitsUser('')).toBe(false);
+  });
+});
+
+describe('developerMode: pause when awaiting user input', () => {
+  it('skips verify+commit and yields when the model ends by asking for a key', async () => {
+    const repo = mkdtempSync(join(tmpdir(), 'moxxy-dev-await-'));
+    const git = (...args: string[]) => execFileSync('git', args, { cwd: repo, stdio: 'pipe' });
+    const originalCwd = process.cwd();
+    try {
+      git('init', '-q');
+      git('config', 'user.email', 'test@example.com');
+      git('config', 'user.name', 'Test');
+      git('config', 'commit.gpgsign', 'false');
+      const scratch = join(repo, 'scratch.ts');
+      writeFileSync(scratch, 'export const before = 1;\n');
+      git('add', '-A');
+      git('commit', '-q', '-m', 'initial');
+      // Non-empty pending diff: proves the skip is due to the await-user check,
+      // NOT the empty-diff short-circuit.
+      writeFileSync(scratch, 'export const before = 1;\nexport const after = 2;\n');
+      process.chdir(repo);
+
+      const provider = new FakeProvider({
+        script: [
+          // Implementation phase ends by asking the user to store a key.
+          textReply(
+            'I scaffolded the config but need your API key. Please run ' +
+              '`/vault set PLATFORM_API_KEY <your-key>` and let me know once done.',
+          ),
+          // If verify wrongly ran, it would consume this and produce a commit —
+          // the assertions below catch that regression.
+          textReply('SUMMARY: x\nCOMMIT:\nshould not happen'),
+        ],
+      });
+
+      const session = createFakeSession({ provider });
+      session.pluginHost.registerStatic(developerModePlugin);
+      session.modes.setActive(DEVELOPER_MODE_NAME);
+
+      const events = await collectTurn(session, 'integrate platform X');
+
+      // Yielded back to the user awaiting input…
+      expect(
+        events.some((e) => e.type === 'plugin_event' && e.subtype === 'developer_awaiting_user'),
+      ).toBe(true);
+      // …without entering the verify phase or opening a commit.
+      expect(
+        events.some((e) => e.type === 'plugin_event' && e.subtype === 'developer_verify_started'),
+      ).toBe(false);
+      expect(
+        events.some((e) => e.type === 'plugin_event' && e.subtype === 'developer_commit_created'),
+      ).toBe(false);
+    } finally {
+      process.chdir(originalCwd);
+      rmSync(repo, { recursive: true, force: true });
+    }
   });
 });
 

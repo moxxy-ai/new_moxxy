@@ -140,7 +140,8 @@ export function buildProviderAdminPlugin(opts: BuildProviderAdminPluginOptions):
             replaced: wasRegistered,
             note:
               `Provider "${entry.name}" is live in this session. ` +
-              `Store your API key with vault_set name=${(entry.envVar ?? `${entry.name.toUpperCase()}_API_KEY`)}. ` +
+              `Have the USER store the API key by running: /vault set ${(entry.envVar ?? `${entry.name.toUpperCase()}_API_KEY`)} <key> ` +
+              `— never ask them to paste the key to you. ` +
               `Switch with the /provider command or set provider.name in moxxy.config.ts.`,
           };
         },

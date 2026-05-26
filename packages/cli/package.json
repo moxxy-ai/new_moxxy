@@ -76,6 +76,7 @@
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "ink": "catalog:",
+    "punycode": "^2.3.1",
     "react": "catalog:",
     "tsup": "catalog:",
     "tsx": "catalog:",

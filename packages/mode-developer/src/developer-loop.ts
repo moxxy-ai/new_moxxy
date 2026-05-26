@@ -71,6 +71,25 @@ export async function* runDeveloperMode(ctx: ModeContext): AsyncIterable<MoxxyEv
 
   if (ctx.signal.aborted) return;
 
+  // If the model ended the implementation phase by asking the user a question
+  // or requesting an action (e.g. "run `/vault set <key>`"), it is PAUSED
+  // waiting for input — not declaring the work done. Forcing the verify+commit
+  // phase here would re-invoke the model (so it looks like it "keeps thinking"
+  // after it already stopped to ask) and could commit a half-finished change.
+  // Yield back to the user instead.
+  if (lastTurnAwaitsUser(ctx)) {
+    yield await ctx.emit({
+      type: 'plugin_event',
+      sessionId: ctx.sessionId,
+      turnId: ctx.turnId,
+      source: 'plugin',
+      pluginId: DEVELOPER_PLUGIN_ID,
+      subtype: 'developer_awaiting_user',
+      payload: { reason: 'implementation phase ended awaiting user input' },
+    });
+    return;
+  }
+
   // Short-circuit when the tool-use phase didn't actually modify any
   // files. Common cases: the user just said "hi", asked a question
   // about the codebase, or the model decided it needed clarification
@@ -193,6 +212,43 @@ export async function* runDeveloperMode(ctx: ModeContext): AsyncIterable<MoxxyEv
 function composeSystemPrompts(user: string | undefined, layer: string): string {
   if (!user || user.trim() === '') return layer;
   return `${layer}\n\n---\n\n${user}`;
+}
+
+/**
+ * Did the implementation phase end with the model asking the user a question
+ * or requesting an action? Inspects the most recent assistant message in the
+ * log. A turn that ends awaiting user input is a pause, not a completion —
+ * the caller skips verify+commit and yields back to the user.
+ */
+function lastTurnAwaitsUser(ctx: ModeContext): boolean {
+  const events = ctx.log.slice();
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    if (e?.type === 'assistant_message') return messageAwaitsUser(e.content);
+  }
+  return false;
+}
+
+const AWAIT_USER_PATTERNS: ReadonlyArray<RegExp> = [
+  /\/vault\s+set/i, // directing the user to store a secret themselves
+  /\bplease\s+(run|provide|share|paste|set|enter|add|confirm)\b/i,
+  /\b(can|could|would)\s+you\s+(run|provide|share|paste|confirm|set)\b/i,
+  /\bi\s+(need|'ll need|will need)\s+(you|your)\b/i,
+  /\blet me know\b/i,
+  /\bonce you('ve| have| 're)\b/i,
+  /\bwaiting for (you|your)\b/i,
+];
+
+/** Heuristic for "this message is awaiting user input": a trailing question
+ *  mark, or an explicit request for the user to do/provide something. Biased
+ *  to fire on clear pauses (asking for a key, "please run …", "let me know"). */
+export function messageAwaitsUser(text: string): boolean {
+  const t = text.trim();
+  if (t.length === 0) return false;
+  // Trailing markdown/punctuation shouldn't hide a closing question mark.
+  const lastChar = t.replace(/[`*_)\]\s]+$/, '').slice(-1);
+  if (lastChar === '?') return true;
+  return AWAIT_USER_PATTERNS.some((re) => re.test(t));
 }
 
 async function* runGitCommit(

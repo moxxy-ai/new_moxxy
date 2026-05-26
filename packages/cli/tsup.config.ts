@@ -62,6 +62,11 @@ export default defineConfig({
     options.alias = {
       ...options.alias,
       'react-devtools-core': path.resolve(here, 'scripts/devtools-stub.mjs'),
+      // Bundled deps (whatwg-url/tr46 via node-fetch, uri-js via ajv) call bare
+      // require("punycode"), which resolves to Node's DEPRECATED builtin (DEP0040).
+      // Redirect to the API-compatible userland package so esbuild inlines it and
+      // the deprecation warning never fires. (`punycode/` forces node_modules.)
+      punycode: 'punycode/',
     };
   },
   async onSuccess() {

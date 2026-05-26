@@ -352,6 +352,9 @@ importers:
       ink:
         specifier: 'catalog:'
         version: 5.2.1(@types/react@18.3.28)(react@18.3.1)
+      punycode:
+        specifier: ^2.3.1
+        version: 2.3.1
       react:
         specifier: 'catalog:'
         version: 18.3.1

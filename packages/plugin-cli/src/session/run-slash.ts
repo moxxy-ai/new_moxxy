@@ -123,36 +123,64 @@ function handleClearQueue(deps: SlashDeps): void {
 function openModelPicker(deps: SlashDeps): void {
   // Build a flat list of all (provider, model) pairs across every
   // registered provider — the user can switch BOTH provider and
-  // model in one pick. Grouping is by provider name. Providers
-  // that didn't pass credential probing at boot are tagged
-  // "not connected" so the user knows they need setup first.
+  // model in one pick. Grouping is by provider name. Providers whose
+  // credentials don't resolve are tagged "not connected".
   const providers = deps.session.providers.list();
   if (providers.length === 0) {
     deps.setSystemNotice('no providers registered');
     return;
   }
-  const ready =
-    (deps.session as unknown as { readyProviders?: Set<string> }).readyProviders ??
-    new Set<string>();
-  const options: ListPickerOption[] = [];
-  for (const p of providers) {
-    const isReady = ready.has(p.name);
-    for (const m of p.models) {
-      options.push({
-        id: `${p.name}::${m.id}`,
-        label: m.id,
-        group: p.name,
-        current: deps.providerName === p.name && deps.activeModel === m.id,
-        description: m.contextWindow ? `${formatTokensShort(m.contextWindow)} ctx` : undefined,
-        ...(isReady ? {} : { badge: 'not connected', badgeColor: 'red' as const }),
-      });
+  // Re-probe credential readiness live rather than trusting the boot-time
+  // snapshot: providers can be added (provider_add) and keys stored (/vault)
+  // at runtime, which the boot snapshot never sees. We refresh
+  // session.readyProviders so the selection guard (picker-handlers) agrees.
+  void (async () => {
+    const sess = deps.session as unknown as {
+      readyProviders?: Set<string>;
+      credentialResolver?: (name: string) => Promise<unknown>;
+    };
+    let ready = sess.readyProviders ?? new Set<string>();
+    if (sess.credentialResolver) {
+      const resolver = sess.credentialResolver;
+      const fresh = new Set<string>();
+      // The active provider is working by definition — always ready, even if
+      // a non-interactive re-resolve of its (e.g. OAuth) creds would fail.
+      if (deps.providerName) fresh.add(deps.providerName);
+      await Promise.all(
+        providers.map(async (p) => {
+          if (fresh.has(p.name)) return;
+          try {
+            await resolver(p.name);
+            fresh.add(p.name);
+          } catch {
+            // leave out — not connected
+          }
+        }),
+      );
+      ready = fresh;
+      sess.readyProviders = fresh;
     }
-  }
-  deps.setPicker({
-    kind: 'model',
-    title: 'Switch model',
-    options,
-  });
+
+    const options: ListPickerOption[] = [];
+    for (const p of providers) {
+      const isReady = ready.has(p.name);
+      for (const m of p.models) {
+        options.push({
+          id: `${p.name}::${m.id}`,
+          label: m.id,
+          group: p.name,
+          current: deps.providerName === p.name && deps.activeModel === m.id,
+          description: m.contextWindow ? `${formatTokensShort(m.contextWindow)} ctx` : undefined,
+          ...(isReady ? {} : { badge: 'not connected', badgeColor: 'red' as const }),
+        });
+      }
+    }
+    deps.setPicker({
+      kind: 'model',
+      title: 'Switch model',
+      options,
+    });
+  })();
 }
 
 function openMcpPicker(deps: SlashDeps): void {

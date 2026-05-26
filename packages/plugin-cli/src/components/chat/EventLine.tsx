@@ -7,6 +7,16 @@ import { AssistantBlock } from './AssistantBlock.js';
 export const EventLine: React.FC<{ event: MoxxyEvent }> = ({ event }) => {
   switch (event.type) {
     case 'user_prompt':
+      // System-injected context notes (e.g. the /vault reference) aren't user
+      // input — render them as a compact dim note rather than the bold pinned
+      // bar, so they don't dominate the transcript.
+      if (event.source && event.source !== 'user') {
+        return (
+          <Box marginTop={1}>
+            <Text dimColor>{`${Glyphs.midDot} ${event.text}`}</Text>
+          </Box>
+        );
+      }
       // Highlighted echo bar: bold prompt glyph + the user text, then a
       // dim horizontal rule under it. Matches the Grok-style "pinned
       // user prompt" treatment without needing a full bordered box.
