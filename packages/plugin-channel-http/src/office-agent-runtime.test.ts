@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { EventLog, Session, autoAllowResolver, silentLogger } from '@moxxy/core';
-import { defineProvider, definePlugin } from '@moxxy/sdk';
-import { FakeProvider, textReply } from '@moxxy/testing';
-import { toolUseLoopPlugin } from '@moxxy/loop-tool-use';
+import { defineProvider, definePlugin, defineTool } from '@moxxy/sdk';
+import { z } from 'zod';
+import { FakeProvider, textReply, toolUseReply } from '@moxxy/testing';
+import { toolUseModePlugin } from '@moxxy/mode-tool-use';
 import { builtinToolsPlugin } from '@moxxy/tools-builtin';
 import { OfficeAgentRuntime } from './office-agent-runtime.js';
+import { HttpPermissionBroker } from './permission-broker.js';
 
 function buildSession(log?: EventLog): Session {
   const provider = new FakeProvider({
@@ -30,7 +32,7 @@ function buildSession(log?: EventLog): Session {
   );
   session.providers.setActive(provider.name);
   session.pluginHost.registerStatic(builtinToolsPlugin);
-  session.pluginHost.registerStatic(toolUseLoopPlugin);
+  session.pluginHost.registerStatic(toolUseModePlugin);
   return session;
 }
 
@@ -119,5 +121,69 @@ describe('OfficeAgentRuntime persistence', () => {
         task: 'summarise context',
       }),
     ]);
+  });
+
+  it('routes office-agent tool permissions through the HTTP permission broker', async () => {
+    const provider = new FakeProvider({
+      script: [toolUseReply('web_fetch', { url: 'https://example.com' }, 'call-1'), textReply('done')],
+    });
+    const session = new Session({
+      cwd: process.cwd(),
+      logger: silentLogger,
+      permissionResolver: autoAllowResolver,
+    });
+    session.pluginHost.registerStatic(
+      definePlugin({
+        name: 'office-agent-permission-test-provider',
+        providers: [
+          defineProvider({
+            name: provider.name,
+            models: [...provider.models],
+            createClient: () => provider,
+          }),
+        ],
+      }),
+    );
+    session.providers.setActive(provider.name);
+    session.pluginHost.registerStatic(toolUseModePlugin);
+    session.tools.register(
+      defineTool({
+        name: 'web_fetch',
+        description: 'Fetch a URL',
+        inputSchema: z.object({ url: z.string() }),
+        handler: () => 'fetched',
+      }),
+    );
+
+    const broker = new HttpPermissionBroker();
+    broker.attachSession(session);
+    session.setPermissionResolver(broker);
+    const runtime = new OfficeAgentRuntime(session, silentLogger, broker);
+
+    const agent = await runtime.create({ name: 'researcher' });
+    runtime.startRun(agent.id, 'search the web');
+
+    await waitForLog(session, () =>
+      session.log.ofType('plugin_event').some((event) => event.subtype === 'permission.requested'),
+    );
+
+    const request = session.log
+      .ofType('plugin_event')
+      .find((event) => event.subtype === 'permission.requested');
+    expect(request?.payload).toMatchObject({
+      agent_id: agent.id,
+      tool_name: 'web_fetch',
+    });
+    const requestId = (request?.payload as { request_id?: string } | undefined)?.request_id;
+    expect(requestId).toBeTruthy();
+
+    expect(await broker.decide(requestId!, { mode: 'allow_session', reason: 'test allow' })).toBe(true);
+
+    await waitForLog(session, () =>
+      session.log.ofType('plugin_event').some((event) => event.subtype === 'office_agent.message_final'),
+    );
+    expect(
+      session.log.ofType('plugin_event').some((event) => event.subtype === 'permission.resolved'),
+    ).toBe(true);
   });
 });

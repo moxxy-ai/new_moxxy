@@ -241,6 +241,16 @@ export type {
   CommandOutput,
   CommandHandlerResult,
 } from './command.js';
+export {
+  COMMAND_SESSION_ACTION_SUBTYPE,
+  COMMAND_STATE_CHANGED_SUBTYPE,
+  isCommandSessionActionPayload,
+  isCommandStateChangedPayload,
+  type CommandOriginChannel,
+  type CommandSessionActionPayload,
+  type CommandStateChangedPayload,
+  type CommandTarget,
+} from './command-sync.js';
 
 export type {
   ToolRegistry,

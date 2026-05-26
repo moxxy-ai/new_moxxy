@@ -1,4 +1,11 @@
-import type { MoxxyEvent } from '@moxxy/sdk';
+import {
+  type MoxxyEvent,
+} from '@moxxy/sdk';
+
+const COMMAND_SESSION_ACTION_SUBTYPE = 'command.session_action';
+const COMMAND_STATE_CHANGED_SUBTYPE = 'command.state_changed';
+const PERMISSION_REQUESTED_SUBTYPE = 'permission.requested';
+const PERMISSION_RESOLVED_SUBTYPE = 'permission.resolved';
 
 export interface VirtualOfficeEnvelope {
   agent_id: string;
@@ -60,6 +67,41 @@ function pluginEventToVirtualOfficeEnvelope(
   event: Extract<MoxxyEvent, { type: 'plugin_event' }>,
   base: Omit<VirtualOfficeEnvelope, 'event_type' | 'payload'>,
 ): VirtualOfficeEnvelope | null {
+  if (
+    event.subtype === COMMAND_SESSION_ACTION_SUBTYPE &&
+    isCommandSessionActionPayload(event.payload)
+  ) {
+    return {
+      ...base,
+      event_type: COMMAND_SESSION_ACTION_SUBTYPE,
+      payload: { ...event.payload },
+    };
+  }
+  if (
+    event.subtype === COMMAND_STATE_CHANGED_SUBTYPE &&
+    isCommandStateChangedPayload(event.payload)
+  ) {
+    return {
+      ...base,
+      event_type: COMMAND_STATE_CHANGED_SUBTYPE,
+      payload: { ...event.payload },
+    };
+  }
+  if (
+    (event.subtype === PERMISSION_REQUESTED_SUBTYPE || event.subtype === PERMISSION_RESOLVED_SUBTYPE) &&
+    event.payload &&
+    typeof event.payload === 'object' &&
+    !Array.isArray(event.payload)
+  ) {
+    const payload = event.payload as Record<string, unknown>;
+    return {
+      ...base,
+      agent_id: typeof payload.agent_id === 'string' ? payload.agent_id : base.agent_id,
+      run_id: null,
+      event_type: event.subtype,
+      payload: { ...payload },
+    };
+  }
   if (typeof event.subtype !== 'string' || !event.subtype.startsWith('subagent_')) return null;
   const payload = event.payload && typeof event.payload === 'object'
     ? (event.payload as Record<string, unknown>)
@@ -86,4 +128,27 @@ function pluginEventToVirtualOfficeEnvelope(
     };
   }
   return null;
+}
+
+function isCommandSessionActionPayload(value: unknown): value is Record<string, unknown> {
+  return isCommandPayloadBase(value) && (value as Record<string, unknown>).action === 'new';
+}
+
+function isCommandStateChangedPayload(value: unknown): value is Record<string, unknown> {
+  if (!isCommandPayloadBase(value)) return false;
+  const record = value as Record<string, unknown>;
+  if (record.action === 'model_changed') return typeof record.model === 'string';
+  if (record.action === 'loop_changed') return typeof record.loop === 'string';
+  return false;
+}
+
+function isCommandPayloadBase(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.command === 'string' &&
+    record.target === 'session' &&
+    typeof record.origin_channel === 'string' &&
+    typeof record.origin_id === 'string'
+  );
 }

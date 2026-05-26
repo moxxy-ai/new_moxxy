@@ -71,6 +71,7 @@ export interface UiPluginHostOptions extends StartUiPluginOptions {
     start(opts: { session: Session }): Promise<ChannelHandle>;
   };
   readonly withTui?: boolean;
+  readonly preferBridgePermissions?: boolean;
   readonly model?: string;
   readonly stdout?: Pick<NodeJS.WriteStream, 'write'>;
   readonly open?: boolean;
@@ -90,6 +91,7 @@ export interface UiPluginSessionSelectionHostOptions extends StartUiPluginOption
     start(opts: { session: Session }): Promise<ChannelHandle>;
   };
   readonly withTui?: boolean;
+  readonly preferBridgePermissions?: boolean;
   readonly model?: string;
   readonly stdout?: Pick<NodeJS.WriteStream, 'write'>;
   readonly open?: boolean;
@@ -275,7 +277,9 @@ export async function startUiPluginHost(opts: UiPluginHostOptions): Promise<Star
     let tuiRunning: Promise<StartUiPluginResult> | null = null;
     if (opts.withTui) {
       const tui = opts.createTuiChannel?.() ?? new TuiChannel();
-      opts.session.setPermissionResolver(tui.permissionResolver);
+      if (!opts.preferBridgePermissions) {
+        opts.session.setPermissionResolver(tui.permissionResolver);
+      }
       const handle = await tui.start({
         session: opts.session,
         ...(opts.model ? { model: opts.model } : {}),
@@ -383,7 +387,9 @@ export async function startUiPluginHostWithSessionSelection(
     let tuiRunning: Promise<StartUiPluginResult> | null = null;
     if (opts.withTui) {
       const tui = opts.createTuiChannel?.() ?? new TuiChannel();
-      session.setPermissionResolver(tui.permissionResolver);
+      if (!opts.preferBridgePermissions) {
+        session.setPermissionResolver(tui.permissionResolver);
+      }
       const handle = await tui.start({
         session,
         ...(opts.model ? { model: opts.model } : {}),
@@ -439,6 +445,7 @@ export async function runPluginStartCommand(argv: ParsedArgv): Promise<number> {
   const token = randomBytes(24).toString('hex');
   const explicitSessionId = stringFlag(argv, 'session') ?? stringFlag(argv, 's');
   const forceNewSession = hasBoolFlag(argv, 'new-session');
+  const allowedTools = parseList(stringFlag(argv, 'allow-tools'));
 
   if (explicitSessionId && forceNewSession) {
     printError('Use either --session <id> or --new-session, not both.');
@@ -449,7 +456,8 @@ export async function runPluginStartCommand(argv: ParsedArgv): Promise<number> {
     port: apiPort,
     host: '127.0.0.1',
     authToken: token,
-    allowedTools: parseList(stringFlag(argv, 'allow-tools')),
+    allowedTools,
+    interactivePermissions: !allowedTools,
     logger: session.logger,
   });
 
@@ -477,6 +485,7 @@ export async function runPluginStartCommand(argv: ParsedArgv): Promise<number> {
         apiPort,
         token,
         withTui: hasBoolFlag(argv, 'tui'),
+        preferBridgePermissions: !allowedTools,
         model: stringFlag(argv, 'model'),
         open: argv.flags.open === true,
         handleSignals: true,
@@ -495,6 +504,7 @@ export async function runPluginStartCommand(argv: ParsedArgv): Promise<number> {
       apiPort,
       token,
       withTui: hasBoolFlag(argv, 'tui'),
+      preferBridgePermissions: !allowedTools,
       model: stringFlag(argv, 'model'),
       open: argv.flags.open === true,
       handleSignals: true,

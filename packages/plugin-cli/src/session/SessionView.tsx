@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Box } from 'ink';
 import { useApp } from 'ink';
-import type { UserPromptAttachment } from '@moxxy/sdk';
+import type { MoxxyEvent, UserPromptAttachment } from '@moxxy/sdk';
 import type { ClientSession as Session } from '@moxxy/sdk';
 import { savePreferences } from '@moxxy/core';
 import { ChatView } from '../components/ChatView.js';
@@ -24,6 +24,12 @@ import { useGlobalHotkeys } from './use-global-hotkeys.js';
 import { useVoiceInput } from './use-voice-input.js';
 import { makePickerHandler } from './picker-handlers.js';
 import { runSlash } from './run-slash.js';
+import {
+  appendCommandSessionAction,
+  createTuiCommandOriginId,
+  getExternalCommandSessionAction,
+  getExternalCommandStateChanged,
+} from './command-sync.js';
 import { OverlayOrNotice } from './OverlayOrNotice.js';
 import { InteractiveZone } from './InteractiveZone.js';
 import type { InteractiveSessionProps } from './props.js';
@@ -65,6 +71,7 @@ export const SessionView: React.FC<SessionViewProps> = ({
   // this takes precedence over the prop passed in at mount time.
   const [activeModelOverride, setActiveModelOverride] = useState<string | null>(null);
   const [picker, setPicker] = useState<Picker>(null);
+  const commandOriginIdRef = useRef(createTuiCommandOriginId());
   const permissions = usePermissionQueue(session, registerInteractiveResolver);
   const images = useImageAttachments((msg) => setSystemNotice(msg));
   const voice = useVoiceInput({ session, setSystemNotice });
@@ -181,15 +188,42 @@ export const SessionView: React.FC<SessionViewProps> = ({
         setSystemNotice,
         setActiveModelOverride,
         refreshMcpStatus,
+        commandOriginId: commandOriginIdRef.current,
       }),
     [session, providerName, refreshMcpStatus],
   );
+
+  const resetSessionUi = (notice?: string): void => {
+    clearTerminalScreen();
+    stream.setEvents([]);
+    stream.cancelStreamFlush();
+    stream.setStreamingDelta('');
+    stream.streamingBufferRef.current = '';
+    const ctrl = turn.turnControllerRef.current;
+    if (ctrl && !ctrl.signal.aborted) ctrl.abort('session reset');
+    setOverlay(null);
+    setPicker(null);
+    for (const p of permissions.pendingPermissions) {
+      p.resolve({ mode: 'deny', reason: '/new — session reset' });
+    }
+    permissions.setPendingPermissions([]);
+    permissions.setPendingApproval(null);
+    turn.setBusy(false);
+    setYolo(false);
+    turn.queueRef.current = [];
+    turn.setQueueCount(0);
+    if (notice) setSystemNotice(notice);
+  };
 
   // Channel-side handler for `session-action` outputs returned by
   // commands registered in `session.commands`. The actual TUI state
   // mutations (clearing scrollback, aborting turns, exiting Ink) live
   // here because the registry handlers are channel-agnostic.
-  const performSessionAction = (action: 'new' | 'clear' | 'exit', notice?: string): void => {
+  const performSessionAction = (
+    action: 'new' | 'clear' | 'exit',
+    notice?: string,
+    command = `/${action}`,
+  ): void => {
     if (action === 'exit') {
       exit();
       return;
@@ -204,21 +238,39 @@ export const SessionView: React.FC<SessionViewProps> = ({
       return;
     }
     // 'new': full session reset.
-    const ctrl = turn.turnControllerRef.current;
-    if (ctrl && !ctrl.signal.aborted) ctrl.abort('user reset');
+    resetSessionUi(notice);
     session.log.clear();
-    setOverlay(null);
-    for (const p of permissions.pendingPermissions) {
-      p.resolve({ mode: 'deny', reason: '/new — session reset' });
-    }
-    permissions.setPendingPermissions([]);
-    permissions.setPendingApproval(null);
-    turn.setBusy(false);
-    setYolo(false);
-    turn.queueRef.current = [];
-    turn.setQueueCount(0);
-    if (notice) setSystemNotice(notice);
+    void appendCommandSessionAction(session, {
+      command,
+      action: 'new',
+      target: 'session',
+      origin_channel: 'tui',
+      origin_id: commandOriginIdRef.current,
+      ...(notice ? { notice } : {}),
+    });
   };
+
+  useEffect(() => {
+    return session.log.subscribe((event: MoxxyEvent) => {
+      const sessionAction = getExternalCommandSessionAction(event, commandOriginIdRef.current);
+      if (sessionAction?.action === 'new' && sessionAction.target === 'session') {
+        resetSessionUi(sessionAction.notice);
+        return;
+      }
+
+      const stateChanged = getExternalCommandStateChanged(event, commandOriginIdRef.current);
+      if (!stateChanged) return;
+      if (stateChanged.action === 'model_changed' && stateChanged.model) {
+        setActiveModelOverride(stateChanged.model);
+        setSystemNotice(stateChanged.notice ?? `model → ${stateChanged.provider ? `${stateChanged.provider}:` : ''}${stateChanged.model}`);
+        return;
+      }
+      if (stateChanged.action === 'loop_changed' && stateChanged.loop) {
+        setSystemNotice(stateChanged.notice ?? `loop strategy → ${stateChanged.loop}`);
+      }
+    });
+    // resetSessionUi intentionally uses live render state; re-subscribe when these change.
+  }, [session, stream, turn, permissions]);
 
   const handleSubmit = async (text: string): Promise<void> => {
     setSystemNotice(null);

@@ -1,10 +1,19 @@
 import { z } from 'zod';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { randomUUID } from 'node:crypto';
 import { runTurn, savePreferences, type Session as CoreSession } from '@moxxy/core';
-import { readRequestBody, bearerTokenMatches } from '@moxxy/sdk';
-import type { ClientSession as Session, MoxxyEvent } from '@moxxy/sdk';
+import {
+  asPluginId,
+  readRequestBody,
+  bearerTokenMatches,
+  type ClientSession as Session,
+  type CommandSessionActionPayload,
+  type CommandStateChangedPayload,
+  type MoxxyEvent,
+} from '@moxxy/sdk';
 import { OfficeAgentRuntime } from './office-agent-runtime.js';
 import { eventToVirtualOfficeEnvelope } from './virtual-office-events.js';
+import type { HttpPermissionBroker } from './permission-broker.js';
 
 export const turnRequestSchema = z.object({
   prompt: z.string().min(1),
@@ -17,12 +26,22 @@ export type TurnRequest = z.infer<typeof turnRequestSchema>;
 const commandRequestSchema = z.object({
   agent_id: z.string().min(1).default('session'),
   command: z.string().min(1),
+  origin_id: z.string().min(1).optional(),
 });
+
+const permissionDecisionSchema = z.object({
+  mode: z.enum(['allow', 'allow_session', 'allow_always', 'deny']),
+  reason: z.string().optional(),
+});
+
+const COMMAND_SESSION_ACTION_SUBTYPE = 'command.session_action';
+const COMMAND_STATE_CHANGED_SUBTYPE = 'command.state_changed';
 
 export interface RouterContext {
   readonly session: Session;
   readonly authToken: string | null;
   readonly officeAgents?: OfficeAgentRuntime;
+  readonly permissionBroker?: HttpPermissionBroker;
   readonly logger?: { warn(msg: string, meta?: Record<string, unknown>): void };
 }
 
@@ -54,6 +73,7 @@ export function routeRequest(req: IncomingMessage): RouteHandler | null {
   if (req.method === 'GET' && /^\/v1\/agents\/[^/]+\/history$/.test(pathname)) return handleAgentHistory;
   if (req.method === 'POST' && /^\/v1\/agents\/[^/]+\/reset$/.test(pathname)) return handleResetAgent;
   if (req.method === 'GET' && pathname === '/v1/events/stream') return handleVirtualOfficeEvents;
+  if (req.method === 'POST' && /^\/v1\/permissions\/[^/]+\/decision$/.test(pathname)) return handlePermissionDecision;
   return null;
 }
 
@@ -106,12 +126,48 @@ function pathPart(req: IncomingMessage, index: number): string {
 function officeRuntime(ctx: RouterContext): OfficeAgentRuntime {
   if (ctx.officeAgents) return ctx.officeAgents;
   const mutable = ctx as RouterContext & { __officeAgents?: OfficeAgentRuntime };
-  mutable.__officeAgents ??= new OfficeAgentRuntime(coreSession(ctx.session), ctx.logger);
+  mutable.__officeAgents ??= new OfficeAgentRuntime(
+    coreSession(ctx.session),
+    ctx.logger,
+    ctx.permissionBroker,
+  );
   return mutable.__officeAgents;
 }
 
 function coreSession(session: Session): CoreSession {
   return session as unknown as CoreSession;
+}
+
+export async function handlePermissionDecision(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: RouterContext,
+): Promise<void> {
+  if (!checkAuth(req, ctx.authToken)) {
+    reply(res, 401, { error: 'unauthorized' });
+    return;
+  }
+  if (!ctx.permissionBroker) {
+    reply(res, 404, { error: 'not_found', message: 'interactive permissions are not enabled' });
+    return;
+  }
+
+  let body: z.infer<typeof permissionDecisionSchema>;
+  try {
+    const raw = await readBody(req);
+    body = permissionDecisionSchema.parse(JSON.parse(raw));
+  } catch (err) {
+    reply(res, 400, { error: 'bad_request', message: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+
+  const requestId = pathPart(req, 3);
+  const ok = await ctx.permissionBroker.decide(requestId, body);
+  if (!ok) {
+    reply(res, 404, { error: 'not_found', message: 'permission request not found' });
+    return;
+  }
+  reply(res, 200, { ok: true });
 }
 
 interface OfficeCommandDescriptor {
@@ -282,7 +338,13 @@ export async function handleRunCommand(
   }
 
   try {
-    const output = await executeOfficeCommand(parsed.name, parsed.args, body.agent_id, ctx);
+    const output = await executeOfficeCommand(
+      parsed.name,
+      parsed.args,
+      body.agent_id,
+      body.origin_id ?? createOfficeOriginId(),
+      ctx,
+    );
     if (output.kind === 'unsupported') {
       reply(res, 409, { error: 'unsupported', message: output.message });
       return;
@@ -299,7 +361,7 @@ export async function handleRunCommand(
 type OfficeCommandOutput =
   | { kind: 'text'; text: string }
   | { kind: 'notice'; message: string }
-  | { kind: 'client_action'; action: 'reset_agent' | 'clear_agent_timeline'; agent_id: string; notice: string }
+  | { kind: 'client_action'; action: 'reset_session' | 'reset_agent' | 'clear_agent_timeline'; agent_id: string; notice: string }
   | { kind: 'options'; title: string; options: Array<{ id: string; label: string; group?: string; current?: boolean; description?: string }> }
   | { kind: 'error'; message: string }
   | { kind: 'noop' }
@@ -347,17 +409,32 @@ async function executeOfficeCommand(
   name: string,
   args: string,
   agentId: string,
+  originId: string,
   ctx: RouterContext,
 ): Promise<OfficeCommandOutput> {
   switch (name) {
     case 'new': {
-      const agent = officeRuntime(ctx).reset(agentId);
-      if (!agent) return { kind: 'error', message: `agent not found: ${agentId}` };
+      if (agentId !== 'session') {
+        return {
+          kind: 'unsupported',
+          message: '/new starts a new main session; use /clear for an Office Agent timeline',
+        };
+      }
+      const notice = 'new session — conversation history cleared';
+      ctx.session.log.clear();
+      await appendCommandSessionAction(ctx.session, {
+        command: '/new',
+        action: 'new',
+        target: 'session',
+        origin_channel: 'office',
+        origin_id: originId,
+        notice,
+      });
       return {
         kind: 'client_action',
-        action: 'reset_agent',
-        agent_id: agentId,
-        notice: 'New chat started for this agent.',
+        action: 'reset_session',
+        agent_id: 'session',
+        notice,
       };
     }
     case 'clear':
@@ -376,14 +453,52 @@ async function executeOfficeCommand(
     case 'agents':
       return { kind: 'text', text: formatAgents(officeRuntime(ctx).list()) };
     case 'model':
-      return switchModel(ctx.session, args);
+      return switchModelWithSync(ctx.session, args, originId);
     case 'loop':
-      return switchLoop(ctx.session, args);
+      return switchLoopWithSync(ctx.session, args, originId);
     case 'mcp':
       return { kind: 'text', text: formatMcpTools(ctx.session) };
     default:
       return runRegistryCommand(ctx.session, name, args);
   }
+}
+
+function createOfficeOriginId(): string {
+  return `office-${randomUUID()}`;
+}
+
+const COMMAND_PLUGIN_ID = asPluginId('@moxxy/plugin-commands');
+
+async function appendCommandSessionAction(
+  session: Session,
+  payload: CommandSessionActionPayload,
+): Promise<void> {
+  const writable = coreSession(session);
+  await writable.log.append({
+    type: 'plugin_event',
+    sessionId: writable.id,
+    turnId: writable.startTurn().turnId,
+    source: 'plugin',
+    pluginId: COMMAND_PLUGIN_ID,
+    subtype: COMMAND_SESSION_ACTION_SUBTYPE,
+    payload,
+  });
+}
+
+async function appendCommandStateChanged(
+  session: Session,
+  payload: CommandStateChangedPayload,
+): Promise<void> {
+  const writable = coreSession(session);
+  await writable.log.append({
+    type: 'plugin_event',
+    sessionId: writable.id,
+    turnId: writable.startTurn().turnId,
+    source: 'plugin',
+    pluginId: COMMAND_PLUGIN_ID,
+    subtype: COMMAND_STATE_CHANGED_SUBTYPE,
+    payload,
+  });
 }
 
 async function runRegistryCommand(session: Session, name: string, args: string): Promise<OfficeCommandOutput> {
@@ -455,6 +570,67 @@ function formatMcpTools(session: Session): string {
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([server, tools]) => `${server}: ${tools.length} tool${tools.length === 1 ? '' : 's'}\n${tools.map((tool) => `  ${tool}`).join('\n')}`)
     .join('\n');
+}
+
+async function switchModelWithSync(
+  session: Session,
+  args: string,
+  originId: string,
+): Promise<OfficeCommandOutput> {
+  const target = resolveModelTarget(session, args);
+  const output = await switchModel(session, args);
+  if (output.kind === 'notice' && target) {
+    await appendCommandStateChanged(session, {
+      command: `/model ${target.providerId}::${target.modelId}`,
+      action: 'model_changed',
+      target: 'session',
+      origin_channel: 'office',
+      origin_id: originId,
+      notice: output.message,
+      provider: target.providerId,
+      model: target.modelId,
+    });
+  }
+  return output;
+}
+
+function resolveModelTarget(
+  session: Session,
+  args: string,
+): { providerId: string; modelId: string } | null {
+  const target = args.trim();
+  if (!target) return null;
+  const providers = session.providers.list();
+  const activeProvider = session.providers.getActiveName();
+  const activeDef = providers.find((provider) => provider.name === activeProvider) ?? providers[0];
+  if (!activeDef) return null;
+  const [rawProvider, rawModel] = target.includes('::')
+    ? target.split('::', 2)
+    : [activeDef.name, target];
+  const providerId = rawProvider?.trim();
+  const modelId = rawModel?.trim();
+  return providerId && modelId ? { providerId, modelId } : null;
+}
+
+async function switchLoopWithSync(
+  session: Session,
+  args: string,
+  originId: string,
+): Promise<OfficeCommandOutput> {
+  const target = args.trim();
+  const output = await switchLoop(session, args);
+  if (output.kind === 'notice' && target) {
+    await appendCommandStateChanged(session, {
+      command: `/loop ${target}`,
+      action: 'loop_changed',
+      target: 'session',
+      origin_channel: 'office',
+      origin_id: originId,
+      notice: output.message,
+      loop: target,
+    });
+  }
+  return output;
 }
 
 async function switchModel(session: Session, args: string): Promise<OfficeCommandOutput> {

@@ -35,6 +35,43 @@ describe('runSlash', () => {
       'context compacted: 3 events, ~1.2k tokens saved',
     ]);
   });
+
+  it('passes the slash command name to channel session actions', async () => {
+    const actions: Array<{ action: 'new' | 'clear' | 'exit'; notice?: string; command?: string }> = [];
+    const commandDone = Promise.resolve({
+      kind: 'session-action' as const,
+      action: 'new' as const,
+      notice: 'new session — conversation history cleared',
+    });
+
+    runSlash('/new', {
+      ...baseDeps(),
+      performSessionAction: (action, notice, command) => {
+        actions.push({ action, notice, command });
+      },
+      session: {
+        id: 'sess-1',
+        commands: {
+          get: () => ({
+            name: 'new',
+            description: 'Start fresh',
+            handler: () => commandDone,
+          }),
+        },
+      },
+    } as unknown as SlashDeps);
+
+    await commandDone;
+    await Promise.resolve();
+
+    expect(actions).toEqual([
+      {
+        action: 'new',
+        notice: 'new session — conversation history cleared',
+        command: '/new',
+      },
+    ]);
+  });
 });
 
 function baseDeps(): SlashDeps {

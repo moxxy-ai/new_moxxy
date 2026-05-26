@@ -20,11 +20,17 @@ export {
   handleAgentHistory,
   handleResetAgent,
   handleVirtualOfficeEvents,
+  handlePermissionDecision,
   turnRequestSchema,
   type TurnRequest,
   type RouterContext,
   type RouteHandler,
 } from './router.js';
+export {
+  HttpPermissionBroker,
+  PERMISSION_REQUESTED_SUBTYPE,
+  PERMISSION_RESOLVED_SUBTYPE,
+} from './permission-broker.js';
 export {
   OfficeAgentRuntime,
   type OfficeAgentCreateInput,

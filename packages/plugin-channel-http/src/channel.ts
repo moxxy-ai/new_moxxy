@@ -10,6 +10,7 @@ import type {
 } from '@moxxy/sdk';
 import { routeRequest, type RouterContext } from './router.js';
 import { OfficeAgentRuntime } from './office-agent-runtime.js';
+import { HttpPermissionBroker } from './permission-broker.js';
 
 export interface HttpChannelOptions {
   readonly port?: number;
@@ -23,6 +24,7 @@ export interface HttpChannelOptions {
    * not in this list is denied.
    */
   readonly allowedTools?: ReadonlyArray<string>;
+  readonly interactivePermissions?: boolean;
   readonly logger?: {
     info?(msg: string, meta?: Record<string, unknown>): void;
     warn?(msg: string, meta?: Record<string, unknown>): void;
@@ -40,6 +42,7 @@ export class HttpChannel implements Channel<HttpStartOpts> {
   private readonly host: string;
   private readonly authToken: string | null;
   private readonly logger: HttpChannelOptions['logger'];
+  private readonly permissionBroker: HttpPermissionBroker | null;
   private server: Server | null = null;
 
   constructor(opts: HttpChannelOptions = {}) {
@@ -47,20 +50,25 @@ export class HttpChannel implements Channel<HttpStartOpts> {
     this.host = opts.host ?? '127.0.0.1';
     this.authToken = opts.authToken ?? null;
     this.logger = opts.logger;
+    this.permissionBroker = opts.interactivePermissions ? new HttpPermissionBroker() : null;
     this.permissionResolver = opts.allowedTools && opts.allowedTools.length > 0
       ? createAllowListResolver([...opts.allowedTools])
-      : denyByDefaultResolver;
+      : this.permissionBroker ?? denyByDefaultResolver;
   }
 
   async start(startOpts: HttpStartOpts): Promise<ChannelHandle> {
+    const coreSession = startOpts.session as unknown as CoreSession;
+    this.permissionBroker?.attachSession(coreSession);
     const officeAgents = new OfficeAgentRuntime(
-      startOpts.session as unknown as CoreSession,
+      coreSession,
       this.logger as RouterContext['logger'],
+      this.permissionBroker,
     );
     const ctx: RouterContext = {
       session: startOpts.session,
       authToken: this.authToken,
       officeAgents,
+      ...(this.permissionBroker ? { permissionBroker: this.permissionBroker } : {}),
       logger: this.logger as RouterContext['logger'],
     };
 
@@ -107,6 +115,7 @@ export class HttpChannel implements Channel<HttpStartOpts> {
     return {
       running,
       stop: async () => {
+        this.permissionBroker?.abortAll('HTTP channel stopped');
         await officeAgents.archiveLiveAgents('session_closed');
         await new Promise<void>((resolve) => {
           if (!this.server) return resolve();

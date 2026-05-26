@@ -10,6 +10,7 @@ import type {
   TurnId,
 } from '@moxxy/sdk';
 import { eventToVirtualOfficeEnvelope, type VirtualOfficeEnvelope } from './virtual-office-events.js';
+import type { HttpPermissionBroker } from './permission-broker.js';
 
 const VIRTUAL_OFFICE_PLUGIN_ID = asPluginId('@moxxy/virtual-office');
 
@@ -127,6 +128,7 @@ export class OfficeAgentRuntime {
   constructor(
     private readonly session: Session,
     private readonly logger?: { warn(msg: string, meta?: Record<string, unknown>): void },
+    private readonly permissionBroker?: HttpPermissionBroker | null,
   ) {
     const persisted = readPersistedOfficeEnvelopes(session.log.toJSON());
     this.archivedEntries = projectArchivedAgents(persisted);
@@ -165,6 +167,7 @@ export class OfficeAgentRuntime {
       activeTurnId: null,
     };
     this.agents.set(id, agent);
+    this.permissionBroker?.registerAgentSession(String(agent.sessionId), id);
     const snapshot = this.snapshot(agent);
     await this.emitLifecycle(agent, 'office_agent.created', { agent: snapshot });
     return snapshot;
@@ -180,6 +183,7 @@ export class OfficeAgentRuntime {
     const entry = this.archiveEntry(agent, 'stopped');
     await this.emitLifecycle(agent, 'office_agent.archived', { agent_id: id, entry });
     this.archivedEntries.push(entry);
+    this.permissionBroker?.unregisterAgentSession(String(agent.sessionId));
     this.agents.delete(id);
     await this.emitLifecycle(null, 'office_agent.dismissed', { agent_id: id });
     return true;
@@ -193,6 +197,7 @@ export class OfficeAgentRuntime {
       const entry = this.archiveEntry(agent, 'stopped');
       await this.emitLifecycle(agent, 'office_agent.archived', { agent_id: agent.id, reason, entry });
       this.archivedEntries.push(entry);
+      this.permissionBroker?.unregisterAgentSession(String(agent.sessionId));
       this.agents.delete(agent.id);
     }
   }
