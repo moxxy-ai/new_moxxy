@@ -149,12 +149,18 @@ export class PluginHost implements PluginHostHandle {
   }
 
   registerDiscovered(plugin: Plugin, manifest: ResolvedPluginManifest): void {
-    if (this.loaded.has(plugin.name)) {
-      throw new Error(`Plugin already registered: ${plugin.name}`);
+    // Key the loaded map by the PACKAGE name — not the plugin's declared
+    // `name` — so it lines up with `discoverAndLoad`'s dedupe check, `reload`'s
+    // `wanted` set, and `unload(packageName)` callers (self-update, config,
+    // plugins-admin). Keying by `plugin.name` silently broke all three whenever
+    // a plugin's declared name differed from its package name (re-load throws,
+    // reload unloads everything, unload no-ops).
+    if (this.loaded.has(manifest.packageName)) {
+      throw new Error(`Plugin already registered: ${manifest.packageName}`);
     }
     this.assertRequirementsReady(plugin, manifest.requirements, 'discovered', manifest);
     const record = this.applyPlugin(plugin, manifest);
-    this.loaded.set(plugin.name, record);
+    this.loaded.set(manifest.packageName, record);
     this.clearSkip(plugin.name);
     this.clearSkip(manifest.packageName);
     this.opts.requirements.registerPlugin(plugin.name, plugin.version);

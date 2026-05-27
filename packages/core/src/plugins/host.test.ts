@@ -243,6 +243,28 @@ describe('PluginHost', () => {
     expect(tools.has('e')).toBe(false);
   });
 
+  it('keys a discovered plugin by package name, so unload(packageName) works even when it differs from the declared name', async () => {
+    const { host, tools } = makeHost();
+    const tool = defineTool({
+      name: 'dt',
+      description: '',
+      inputSchema: z.any(),
+      handler: () => null,
+    });
+    // Declared plugin name intentionally differs from the package name.
+    const plugin = definePlugin({ name: 'weird-internal-name', tools: [tool] });
+    host.registerDiscovered(plugin, {
+      entry: './dist/index.js',
+      packageName: '@scope/pkg',
+      packageVersion: '1.0.0',
+      packagePath: '/tmp/pkg',
+    });
+    expect(tools.has('dt')).toBe(true);
+    // Callers (self-update/config/plugins-admin) unload by PACKAGE name.
+    await host.unload('@scope/pkg');
+    expect(tools.has('dt')).toBe(false);
+  });
+
   it('discoverAndLoad without loader warns and returns nothing', async () => {
     const { host } = makeHost();
     const warn = vi.spyOn(silentLogger, 'warn');
