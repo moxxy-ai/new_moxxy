@@ -214,7 +214,7 @@ export default defineConfig({
   },
   loop: 'tool-use',
   plugins: {
-    '@moxxy/loop-plan-execute': { enabled: false },     // disable per-plugin
+    '@moxxy/mode-plan-execute': { enabled: false },     // disable per-plugin
   },
 });
 ```
@@ -227,17 +227,22 @@ export default defineConfig({
 @moxxy/sdk                          ← typed public surface (zero runtime deps)
 @moxxy/core                         ← runtime: event log, registries, plugin host, permissions, skills
 @moxxy/tools-builtin                ← Read / Edit / Write / Bash / Grep / Glob
-@moxxy/loop-tool-use                ← default loop strategy
-@moxxy/loop-plan-execute            ← plan-then-execute strategy
-@moxxy/loop-bmad                    ← BMAD multi-persona loop
+@moxxy/mode-tool-use                ← default loop strategy (Claude Code-style)
+@moxxy/mode-plan-execute            ← plan-then-execute strategy
+@moxxy/mode-developer               ← implement → verify → commit strategy
+@moxxy/mode-bmad                    ← BMAD multi-persona strategy
+@moxxy/mode-deep-research           ← multi-query research + synthesis strategy
 @moxxy/plugin-provider-anthropic    ← LLM provider
 @moxxy/plugin-provider-openai       ← LLM provider
 @moxxy/plugin-provider-openai-codex ← ChatGPT OAuth provider
+@moxxy/plugin-provider-admin        ← register OpenAI-compatible providers at runtime
 @moxxy/plugin-mcp                   ← MCP servers as tool sources
 @moxxy/plugin-vault                 ← encrypted secrets
 @moxxy/plugin-memory                ← journal LTM + vector recall + STM selectors
 @moxxy/plugin-embeddings-openai     ← neural embeddings (optional)
+@moxxy/plugin-embeddings-transformers ← on-device embeddings via transformers.js
 @moxxy/plugin-stt-whisper           ← OpenAI Whisper Transcriber (voice in)
+@moxxy/plugin-stt-whisper-codex     ← Whisper Transcriber via the ChatGPT OAuth creds
 @moxxy/plugin-browser               ← headless Playwright sidecar + web_fetch
 @moxxy/plugin-computer-control      ← macOS native input (screenshot, click, type, …)
 @moxxy/plugin-oauth                 ← generic OAuth 2.0 + PKCE / device-code
