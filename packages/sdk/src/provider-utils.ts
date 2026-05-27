@@ -65,7 +65,12 @@ export function toFriendlyError(
  */
 export function zodToJsonSchema(schema: unknown): unknown {
   const s = schema as { _def?: { typeName?: string }; toJSON?: () => unknown };
-  if (typeof s.toJSON === 'function') return s.toJSON();
+  // Only honor a pre-serialized schema's `toJSON` for NON-zod objects (a plain
+  // JSON-schema object passed through). A real zod schema (has `_def`) MUST go
+  // through the unwrap below — short-circuiting on a zod `toJSON` (some versions
+  // add one) skips the ZodEffects/intersection handling and yields a
+  // properties-less object schema that providers like Codex reject.
+  if (!s._def && typeof s.toJSON === 'function') return s.toJSON();
   const def = s._def;
   const typeName = def?.typeName;
 
