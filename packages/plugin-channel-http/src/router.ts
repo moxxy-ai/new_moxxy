@@ -1,7 +1,15 @@
 import { z } from 'zod';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
-import { runTurn, savePreferences, type Session as CoreSession } from '@moxxy/core';
+import {
+  CODEX_TRANSCRIBER_NAME,
+  checkCodexTranscriptionReady,
+  formatCodexTranscriptionReadiness,
+  resolveCodexTranscriber,
+  runTurn,
+  savePreferences,
+  type Session as CoreSession,
+} from '@moxxy/core';
 import {
   asPluginId,
   readRequestBody,
@@ -9,7 +17,10 @@ import {
   type ClientSession as Session,
   type CommandSessionActionPayload,
   type CommandStateChangedPayload,
+  type ModelDescriptor,
   type MoxxyEvent,
+  type ProviderDef,
+  type UserPromptAttachment,
 } from '@moxxy/sdk';
 import { OfficeAgentRuntime } from './office-agent-runtime.js';
 import { eventToVirtualOfficeEnvelope } from './virtual-office-events.js';
@@ -22,6 +33,30 @@ export const turnRequestSchema = z.object({
 });
 
 export type TurnRequest = z.infer<typeof turnRequestSchema>;
+
+const IMAGE_ATTACHMENT_MAX = 10 * 1024 * 1024;
+const AGENT_RUN_BODY_MAX =
+  (4 * Math.ceil((IMAGE_ATTACHMENT_MAX * 4) / 3)) + (1024 * 1024);
+const imageAttachmentSchema = z.object({
+  kind: z.literal('image'),
+  content: z.string().min(1),
+  mediaType: z.enum(['image/png', 'image/jpeg', 'image/webp', 'image/gif']),
+  name: z.string().optional(),
+}).superRefine((attachment, ctx) => {
+  const size = Buffer.from(attachment.content, 'base64').length;
+  if (size > IMAGE_ATTACHMENT_MAX) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'image attachment exceeds 10 MB',
+      path: ['content'],
+    });
+  }
+});
+
+const agentRunRequestSchema = z.object({
+  task: z.string().min(1),
+  attachments: z.array(imageAttachmentSchema).max(4).optional(),
+});
 
 const commandRequestSchema = z.object({
   agent_id: z.string().min(1).default('session'),
@@ -58,6 +93,8 @@ export function routeRequest(req: IncomingMessage): RouteHandler | null {
   if (req.method === 'POST' && pathname === '/v1/turn') return handleTurn;
   if (req.method === 'POST' && pathname === '/v1/turn/stream') return handleTurnStream;
   if (req.method === 'POST' && pathname === '/v1/turn/audio') return handleTurnAudio;
+  if (req.method === 'GET' && pathname === '/v1/input-capabilities') return handleInputCapabilities;
+  if (req.method === 'POST' && pathname === '/v1/transcriptions') return handleTranscription;
   if (req.method === 'GET' && pathname === '/v1/session-selection') return handleSessionSelection;
   if (req.method === 'GET' && pathname === '/v1/providers') return handleProviders;
   if (req.method === 'GET' && /^\/v1\/providers\/[^/]+\/models$/.test(pathname)) return handleProviderModels;
@@ -95,6 +132,92 @@ export async function handleSessionSelection(
     return;
   }
   reply(res, 200, { status: 'ready', sessions: [] });
+}
+
+export async function handleInputCapabilities(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: RouterContext,
+): Promise<void> {
+  if (!checkAuth(req, ctx.authToken)) {
+    reply(res, 401, { error: 'unauthorized' });
+    return;
+  }
+
+  const voice = checkCodexTranscriptionReady(ctx.session);
+  const modelInfo = activeModelInfo(ctx.session);
+  const codexRegistered = ctx.session.transcribers.has(CODEX_TRANSCRIBER_NAME);
+  reply(res, 200, {
+    voice: {
+      ready: voice.ready,
+      reason: voice.ready ? null : formatCodexTranscriptionReadiness(voice),
+      transcriber: codexRegistered ? CODEX_TRANSCRIBER_NAME : ctx.session.transcribers.getActiveName(),
+    },
+    active_model: {
+      provider_id: modelInfo.providerId,
+      model_id: modelInfo.modelId,
+      supports_images: modelInfo.model?.supportsImages === true,
+      supports_audio: modelInfo.model?.supportsAudio === true,
+    },
+  });
+}
+
+export async function handleTranscription(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: RouterContext,
+): Promise<void> {
+  if (!checkAuth(req, ctx.authToken)) {
+    reply(res, 401, { error: 'unauthorized' });
+    return;
+  }
+
+  const readiness = checkCodexTranscriptionReady(ctx.session);
+  if (!readiness.ready) {
+    reply(res, 503, {
+      error: 'voice_unavailable',
+      message: formatCodexTranscriptionReadiness(readiness),
+    });
+    return;
+  }
+
+  const contentType = (req.headers['content-type'] ?? '').toLowerCase();
+  if (!contentType.startsWith('audio/')) {
+    reply(res, 415, {
+      error: 'unsupported_media_type',
+      message: 'Expected Content-Type: audio/*.',
+    });
+    return;
+  }
+
+  let bytes: Buffer;
+  try {
+    bytes = await readBodyBytes(req, DEFAULT_AUDIO_MAX);
+  } catch (err) {
+    reply(res, 413, { error: 'payload_too_large', message: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+  if (bytes.length === 0) {
+    reply(res, 400, { error: 'empty_body', message: 'audio body is empty' });
+    return;
+  }
+
+  let transcript: string;
+  try {
+    const result = await resolveCodexTranscriber(ctx.session).transcribe(new Uint8Array(bytes), {
+      mimeType: contentType,
+    });
+    transcript = result.text.trim();
+  } catch (err) {
+    ctx.logger?.warn('http voice transcription failed', { err: err instanceof Error ? err.message : String(err) });
+    reply(res, 502, { error: 'transcription_failed', message: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+  if (!transcript) {
+    reply(res, 422, { error: 'empty_transcript', message: 'transcriber returned empty text' });
+    return;
+  }
+  reply(res, 200, { transcript });
 }
 
 function checkAuth(req: IncomingMessage, expected: string | null): boolean {
@@ -136,6 +259,37 @@ function officeRuntime(ctx: RouterContext): OfficeAgentRuntime {
 
 function coreSession(session: Session): CoreSession {
   return session as unknown as CoreSession;
+}
+
+function activeModelInfo(session: Session, providerId?: string, modelId?: string): {
+  provider: ProviderDef | null;
+  providerId: string;
+  model: ModelDescriptor | null;
+  modelId: string;
+} {
+  const activeName = session.providers.getActiveName();
+  const providers = session.providers.list();
+  const provider = providers.find((entry) => entry.name === providerId)
+    ?? providers.find((entry) => entry.name === activeName)
+    ?? providers[0]
+    ?? null;
+  const model = provider?.models.find((entry) => entry.id === modelId)
+    ?? provider?.models[0]
+    ?? null;
+  return {
+    provider,
+    providerId: provider?.name ?? providerId ?? activeName ?? 'none',
+    model,
+    modelId: model?.id ?? modelId ?? 'default',
+  };
+}
+
+function imageAttachments(attachments: ReadonlyArray<UserPromptAttachment> | undefined): ReadonlyArray<UserPromptAttachment> {
+  return (attachments ?? []).filter((attachment) => attachment.kind === 'image');
+}
+
+function supportsImageAttachments(session: Session, providerId?: string, modelId?: string): boolean {
+  return activeModelInfo(session, providerId, modelId).model?.supportsImages === true;
 }
 
 export async function handlePermissionDecision(
@@ -279,6 +433,8 @@ export async function handleProviderModels(
         maxOutputTokens: model.maxOutputTokens,
         supportsTools: model.supportsTools,
         supportsStreaming: model.supportsStreaming,
+        supportsImages: model.supportsImages === true,
+        supportsAudio: model.supportsAudio === true,
       },
     })),
   );
@@ -846,6 +1002,7 @@ interface SessionHistoryMessage {
   run_id: string | null;
   timestamp: number;
   created_at: string;
+  attachments?: ReadonlyArray<UserPromptAttachment>;
 }
 
 function historyFromSessionLog(session: Session, limit: number): {
@@ -862,6 +1019,7 @@ function historyFromSessionLog(session: Session, limit: number): {
         run_id: String(event.turnId),
         timestamp: event.ts,
         created_at: new Date(event.ts).toISOString(),
+        ...(event.attachments && event.attachments.length > 0 ? { attachments: event.attachments } : {}),
       });
       continue;
     }
@@ -908,18 +1066,32 @@ export async function handleAgentRun(
     reply(res, 401, { error: 'unauthorized' });
     return;
   }
-  let body: { task: string };
+  let body: z.infer<typeof agentRunRequestSchema>;
   try {
-    const raw = await readBody(req);
-    body = z.object({ task: z.string().min(1) }).parse(JSON.parse(raw));
+    const raw = await readBody(req, AGENT_RUN_BODY_MAX);
+    body = agentRunRequestSchema.parse(JSON.parse(raw));
   } catch (err) {
     reply(res, 400, { error: 'bad_request', message: err instanceof Error ? err.message : String(err) });
     return;
   }
 
   const agentId = pathPart(req, 3) || 'session';
+  const attachments = body.attachments ?? [];
   if (agentId !== 'session') {
-    const started = officeRuntime(ctx).startRun(agentId, body.task);
+    const runtime = officeRuntime(ctx);
+    const agent = runtime.get(agentId);
+    if (!agent) {
+      reply(res, 404, { error: 'not_found', message: 'agent not found' });
+      return;
+    }
+    if (imageAttachments(attachments).length > 0 && !supportsImageAttachments(ctx.session, agent.provider_id, agent.model_id)) {
+      reply(res, 400, {
+        error: 'unsupported_attachments',
+        message: `model ${agent.provider_id}::${agent.model_id} does not support image attachments`,
+      });
+      return;
+    }
+    const started = runtime.startRun(agentId, body.task, attachments);
     if (started === 'not_found') {
       reply(res, 404, { error: 'not_found', message: 'agent not found' });
       return;
@@ -932,9 +1104,20 @@ export async function handleAgentRun(
     return;
   }
 
+  if (imageAttachments(attachments).length > 0 && !supportsImageAttachments(ctx.session)) {
+    const modelInfo = activeModelInfo(ctx.session);
+    reply(res, 400, {
+      error: 'unsupported_attachments',
+      message: `model ${modelInfo.providerId}::${modelInfo.modelId} does not support image attachments`,
+    });
+    return;
+  }
+
   void (async () => {
     try {
-      for await (const event of runTurn(coreSession(ctx.session), body.task)) {
+      for await (const event of runTurn(coreSession(ctx.session), body.task, {
+        ...(attachments.length > 0 ? { attachments } : {}),
+      })) {
         void event;
       }
     } catch (err) {
@@ -949,6 +1132,7 @@ export async function handleAgentRun(
     run_id: null,
     task: body.task,
     status: 'running',
+    ...(attachments.length > 0 ? { attachments } : {}),
   });
 }
 

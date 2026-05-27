@@ -30,7 +30,14 @@ export function eventToVirtualOfficeEnvelope(
   };
   switch (event.type) {
     case 'user_prompt':
-      return { ...base, event_type: 'run.started', payload: { task: event.text } };
+      return {
+        ...base,
+        event_type: 'run.started',
+        payload: {
+          task: event.text,
+          ...(event.attachments && event.attachments.length > 0 ? { attachments: event.attachments } : {}),
+        },
+      };
     case 'assistant_chunk':
       return { ...base, event_type: 'message.delta', payload: { content: event.delta } };
     case 'assistant_message':

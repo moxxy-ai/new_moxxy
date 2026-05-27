@@ -7,7 +7,10 @@ import { definePlugin, defineProvider, defineTranscriber } from '@moxxy/sdk';
 import {
   routeRequest,
   handleHealth,
+  handleAgentRun,
+  handleInputCapabilities,
   handleRunCommand,
+  handleTranscription,
   handleTurnAudio,
   turnRequestSchema,
 } from './router.js';
@@ -82,6 +85,189 @@ describe('routeRequest', () => {
     expect(
       routeRequest(makeIncoming({ method: 'POST', url: '/v1/turn/audio?model=sonnet' })),
     ).toBe(handleTurnAudio);
+  });
+
+  it('matches Virtual Office input capability and transcription endpoints', () => {
+    expect(routeRequest(makeIncoming({ method: 'GET', url: '/v1/input-capabilities' }))).toBe(
+      handleInputCapabilities,
+    );
+    expect(routeRequest(makeIncoming({ method: 'POST', url: '/v1/transcriptions' }))).toBe(
+      handleTranscription,
+    );
+  });
+});
+
+describe('Virtual Office input endpoints', () => {
+  const ctx = (session: Session) => ({ session, authToken: 'x', logger: silentLogger });
+
+  function makeCodexSession(opts: { oauthReady?: boolean; supportsImages?: boolean; transcript?: string } = {}): Session {
+    const session = new Session({ cwd: '/tmp', silent: true });
+    session.pluginHost.registerStatic(
+      definePlugin({
+        name: 'router-codex-input-test',
+        providers: [
+          defineProvider({
+            name: 'openai-codex',
+            models: [
+              {
+                id: 'gpt-5.5',
+                contextWindow: 300_000,
+                supportsTools: true,
+                supportsStreaming: true,
+                supportsImages: opts.supportsImages ?? true,
+              },
+            ],
+            createClient: () => ({}) as never,
+          }),
+        ],
+        transcribers: [
+          defineTranscriber({
+            name: 'openai-codex-transcribe',
+            createClient: () => ({
+              name: 'openai-codex-transcribe',
+              transcribe: async () => ({ text: opts.transcript ?? 'transcribed text' }),
+            }),
+          }),
+        ],
+      }),
+    );
+    session.providers.setActive('openai-codex');
+    if (opts.oauthReady ?? true) session.requirements.setRuntime('auth:provider:openai-codex', 'ready');
+    return session;
+  }
+
+  it('reports voice and image readiness without leaking auth data', async () => {
+    const session = makeCodexSession({ supportsImages: true });
+    const res = makeResponse();
+
+    await handleInputCapabilities(
+      makeIncoming({
+        method: 'GET',
+        url: '/v1/input-capabilities',
+        headers: { authorization: 'Bearer x' },
+      }),
+      res,
+      ctx(session),
+    );
+
+    expect(res._status).toBe(200);
+    expect(JSON.parse(res._body)).toEqual({
+      voice: {
+        ready: true,
+        reason: null,
+        transcriber: 'openai-codex-transcribe',
+      },
+      active_model: {
+        provider_id: 'openai-codex',
+        model_id: 'gpt-5.5',
+        supports_images: true,
+        supports_audio: false,
+      },
+    });
+    expect(res._body).not.toContain('Bearer');
+    expect(res._body).not.toContain('token');
+  });
+
+  it('returns voice unavailable when Codex OAuth is not ready', async () => {
+    const session = makeCodexSession({ oauthReady: false });
+    const res = makeResponse();
+
+    await handleInputCapabilities(
+      makeIncoming({
+        method: 'GET',
+        url: '/v1/input-capabilities',
+        headers: { authorization: 'Bearer x' },
+      }),
+      res,
+      ctx(session),
+    );
+
+    expect(res._status).toBe(200);
+    expect(JSON.parse(res._body)).toMatchObject({
+      voice: {
+        ready: false,
+        transcriber: 'openai-codex-transcribe',
+      },
+    });
+    expect(JSON.parse(res._body).voice.reason).toContain('openai-codex');
+  });
+
+  it('transcribes raw browser audio without starting a run', async () => {
+    const session = makeCodexSession({ transcript: 'voice prompt' });
+    const res = makeResponse();
+
+    await handleTranscription(
+      makeIncoming({
+        method: 'POST',
+        url: '/v1/transcriptions',
+        headers: { 'content-type': 'audio/webm', authorization: 'Bearer x' },
+        body: 'webmbytes',
+      }),
+      res,
+      ctx(session),
+    );
+
+    expect(res._status).toBe(200);
+    expect(JSON.parse(res._body)).toEqual({ transcript: 'voice prompt' });
+    expect(session.log.ofType('user_prompt')).toHaveLength(0);
+  });
+
+  it('rejects non-audio transcription uploads', async () => {
+    const session = makeCodexSession();
+    const res = makeResponse();
+
+    await handleTranscription(
+      makeIncoming({
+        method: 'POST',
+        url: '/v1/transcriptions',
+        headers: { 'content-type': 'application/json', authorization: 'Bearer x' },
+        body: '{}',
+      }),
+      res,
+      ctx(session),
+    );
+
+    expect(res._status).toBe(415);
+  });
+
+  it('accepts image attachment payloads larger than the default JSON body limit', async () => {
+    const session = makeCodexSession({ supportsImages: true });
+    const res = makeResponse();
+    const imageContent = Buffer.alloc(70 * 1024, 1).toString('base64');
+
+    await handleAgentRun(
+      makeIncoming({
+        method: 'POST',
+        url: '/v1/agents/session/runs',
+        headers: { 'content-type': 'application/json', authorization: 'Bearer x' },
+        body: JSON.stringify({
+          task: 'Describe this image',
+          attachments: [
+            {
+              kind: 'image',
+              content: imageContent,
+              mediaType: 'image/png',
+              name: 'large-enough.png',
+            },
+          ],
+        }),
+      }),
+      res,
+      ctx(session),
+    );
+
+    expect(res._status).toBe(200);
+    expect(JSON.parse(res._body)).toMatchObject({
+      agent_id: 'session',
+      status: 'running',
+      attachments: [
+        {
+          kind: 'image',
+          mediaType: 'image/png',
+          name: 'large-enough.png',
+        },
+      ],
+    });
   });
 });
 

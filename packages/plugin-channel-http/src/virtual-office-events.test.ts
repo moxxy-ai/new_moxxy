@@ -203,6 +203,44 @@ describe('eventToVirtualOfficeEnvelope', () => {
     });
   });
 
+  it('preserves user prompt image attachments for Virtual Office resume previews', () => {
+    const event: MoxxyEvent = {
+      id: asEventId('evt-user-with-image'),
+      seq: 40,
+      ts: 123,
+      sessionId: asSessionId('sess-1'),
+      turnId: asTurnId('turn-1'),
+      source: 'user',
+      type: 'user_prompt',
+      text: 'describe this',
+      attachments: [
+        {
+          kind: 'image',
+          content: 'aW1hZ2U=',
+          mediaType: 'image/png',
+          name: 'diagram.png',
+        },
+      ],
+    };
+
+    expect(eventToVirtualOfficeEnvelope(event)).toMatchObject({
+      agent_id: 'session',
+      run_id: 'turn-1',
+      event_type: 'run.started',
+      payload: {
+        task: 'describe this',
+        attachments: [
+          {
+            kind: 'image',
+            content: 'aW1hZ2U=',
+            mediaType: 'image/png',
+            name: 'diagram.png',
+          },
+        ],
+      },
+    });
+  });
+
   it('maps denied tool calls to failed primitive activity', () => {
     const event: MoxxyEvent = {
       id: asEventId('evt-tool-denied'),

@@ -71,6 +71,54 @@ describe('OfficeAgentRuntime persistence', () => {
     );
   });
 
+  it('stores image attachments on office agent user prompts and history', async () => {
+    const session = buildSession();
+    const runtime = new OfficeAgentRuntime(session, silentLogger);
+
+    const agent = await runtime.create({ name: 'vision' });
+    runtime.startRun(agent.id, 'inspect this image', [
+      {
+        kind: 'image',
+        content: 'aW1hZ2U=',
+        mediaType: 'image/png',
+        name: 'screenshot.png',
+      },
+    ]);
+
+    await waitForLog(session, () =>
+      session.log.ofType('plugin_event').some((event) => event.subtype === 'office_agent.run_started'),
+    );
+
+    expect(runtime.history(agent.id)?.messages[0]).toMatchObject({
+      role: 'user',
+      text: 'inspect this image',
+      attachments: [
+        {
+          kind: 'image',
+          content: 'aW1hZ2U=',
+          mediaType: 'image/png',
+          name: 'screenshot.png',
+        },
+      ],
+    });
+    const runStarted = session.log.ofType('plugin_event').find((event) => event.subtype === 'office_agent.run_started');
+    expect(runStarted?.payload).toMatchObject({
+      envelope: {
+        payload: {
+          task: 'inspect this image',
+          attachments: [
+            {
+              kind: 'image',
+              content: 'aW1hZ2U=',
+              mediaType: 'image/png',
+              name: 'screenshot.png',
+            },
+          ],
+        },
+      },
+    });
+  });
+
   it('archives dismissed office agents with chat and log history', async () => {
     const session = buildSession();
     const runtime = new OfficeAgentRuntime(session, silentLogger);

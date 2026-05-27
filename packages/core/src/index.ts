@@ -60,6 +60,14 @@ export { EmbedderRegistry } from './registries/embedders.js';
 export { IsolatorRegistry as ContributedIsolatorRegistry } from './registries/isolators.js';
 export { RequirementRegistry, type RequirementRegistryOptions } from './requirements.js';
 export {
+  CODEX_AUTH_RUNTIME_NAME,
+  CODEX_TRANSCRIBER_NAME,
+  CODEX_VOICE_PROVIDER_NAME,
+  checkCodexTranscriptionReady,
+  formatCodexTranscriptionReadiness,
+  resolveCodexTranscriber,
+} from './codex-voice.js';
+export {
   SessionPersistence,
   defaultSessionsDir,
   readIndex as readSessionIndex,

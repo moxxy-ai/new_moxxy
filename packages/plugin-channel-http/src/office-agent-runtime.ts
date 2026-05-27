@@ -8,6 +8,7 @@ import type {
   ToolDef,
   ToolRegistry,
   TurnId,
+  UserPromptAttachment,
 } from '@moxxy/sdk';
 import { eventToVirtualOfficeEnvelope, type VirtualOfficeEnvelope } from './virtual-office-events.js';
 import type { HttpPermissionBroker } from './permission-broker.js';
@@ -49,6 +50,7 @@ export interface OfficeRunStart {
   run_id: string | null;
   task: string;
   status: 'running';
+  attachments?: ReadonlyArray<UserPromptAttachment>;
 }
 
 export interface OfficeAgentHistory {
@@ -57,6 +59,7 @@ export interface OfficeAgentHistory {
     text: string;
     run_id: string | null;
     timestamp: number;
+    attachments?: ReadonlyArray<UserPromptAttachment>;
   }>;
 }
 
@@ -68,6 +71,7 @@ export interface OfficeGraveyardChatMessage {
   role: 'user' | 'assistant';
   text: string;
   timestamp: number;
+  attachments?: ReadonlyArray<UserPromptAttachment>;
 }
 
 export interface OfficeGraveyardLogItem {
@@ -241,7 +245,11 @@ export class OfficeAgentRuntime {
     return [...this.archivedEntries];
   }
 
-  startRun(id: string, task: string): OfficeRunStart | 'not_found' | 'already_running' {
+  startRun(
+    id: string,
+    task: string,
+    attachments: ReadonlyArray<UserPromptAttachment> = [],
+  ): OfficeRunStart | 'not_found' | 'already_running' {
     if (id === 'session') return 'not_found';
     const agent = this.agents.get(id);
     if (!agent) return 'not_found';
@@ -259,7 +267,7 @@ export class OfficeAgentRuntime {
       await this.recordEnvelope(agent, envelope, event.turnId);
     });
 
-    void this.runAgentTurn(agent, turnId, task, controller.signal)
+    void this.runAgentTurn(agent, turnId, task, attachments, controller.signal)
       .then(async (result) => {
         if (result !== 'completed') return;
         await this.recordEnvelope(agent, {
@@ -294,6 +302,7 @@ export class OfficeAgentRuntime {
       run_id: String(turnId),
       task,
       status: 'running',
+      ...(attachments.length > 0 ? { attachments } : {}),
     };
   }
 
@@ -306,6 +315,7 @@ export class OfficeAgentRuntime {
     agent: OfficeAgentState,
     turnId: ReturnType<typeof newTurnId>,
     task: string,
+    attachments: ReadonlyArray<UserPromptAttachment>,
     signal: AbortSignal,
   ): Promise<'completed' | 'failed'> {
     const effectiveSignal = AbortSignal.any([this.session.signal, signal]);
@@ -315,6 +325,7 @@ export class OfficeAgentRuntime {
       turnId,
       source: 'user',
       text: task,
+      ...(attachments.length > 0 ? { attachments } : {}),
     });
     const mode = this.session.modes.getActive();
     const toolRegistry = agent.allowedTools
@@ -483,6 +494,7 @@ function messagesFromLog(log: EventLog, agentId: string): OfficeAgentHistory['me
         text: event.text,
         run_id: String(event.turnId),
         timestamp: event.ts,
+        ...(event.attachments && event.attachments.length > 0 ? { attachments: event.attachments } : {}),
       });
       continue;
     }
@@ -662,6 +674,7 @@ function buildChatHistory(
         role: 'user',
         text: task,
         timestamp: fallbackTs + index,
+        ...readEnvelopeAttachments(event),
       });
       return;
     }
@@ -712,6 +725,24 @@ function buildChatHistory(
     }
   });
   return messages;
+}
+
+function readEnvelopeAttachments(event: VirtualOfficeEnvelope): { attachments?: ReadonlyArray<UserPromptAttachment> } {
+  const raw = event.payload.attachments;
+  if (!Array.isArray(raw)) return {};
+  const attachments = raw.filter(isUserPromptAttachment);
+  return attachments.length > 0 ? { attachments } : {};
+}
+
+function isUserPromptAttachment(value: unknown): value is UserPromptAttachment {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Record<string, unknown>;
+  return (
+    (record.kind === 'stdin' || record.kind === 'file' || record.kind === 'image' || record.kind === 'audio') &&
+    typeof record.content === 'string' &&
+    (record.name === undefined || typeof record.name === 'string') &&
+    (record.mediaType === undefined || typeof record.mediaType === 'string')
+  );
 }
 
 function buildLogHistory(

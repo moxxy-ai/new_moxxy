@@ -6,6 +6,8 @@ export {
   routeRequest,
   handleHealth,
   handleSessionSelection,
+  handleInputCapabilities,
+  handleTranscription,
   handleTurn,
   handleTurnStream,
   handleTurnAudio,
