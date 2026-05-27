@@ -50,8 +50,37 @@ export function eventToVirtualOfficeEnvelope(
           ...(event.ok ? { output: event.output } : { error: event.error?.message }),
         },
       };
+    case 'tool_call_denied':
+      return {
+        ...base,
+        event_type: 'primitive.failed',
+        payload: { call_id: String(event.callId), error: event.reason },
+      };
     case 'skill_invoked':
       return { ...base, event_type: 'skill.invoked', payload: { skill_id: event.skillId, name: event.name } };
+    case 'provider_request':
+      return {
+        ...base,
+        event_type: 'thinking.started',
+        payload: {
+          provider: event.provider,
+          model: event.model,
+          ...(typeof event.inputTokens === 'number' ? { input_tokens: event.inputTokens } : {}),
+        },
+      };
+    case 'provider_response':
+      return {
+        ...base,
+        event_type: 'thinking.completed',
+        payload: {
+          provider: event.provider,
+          model: event.model,
+          ...(typeof event.inputTokens === 'number' ? { input_tokens: event.inputTokens } : {}),
+          ...(typeof event.outputTokens === 'number' ? { output_tokens: event.outputTokens } : {}),
+          ...(typeof event.cacheReadTokens === 'number' ? { cache_read_tokens: event.cacheReadTokens } : {}),
+          ...(typeof event.cacheCreationTokens === 'number' ? { cache_creation_tokens: event.cacheCreationTokens } : {}),
+        },
+      };
     case 'plugin_event':
       return pluginEventToVirtualOfficeEnvelope(event, base);
     case 'abort':
@@ -106,28 +135,102 @@ function pluginEventToVirtualOfficeEnvelope(
   const payload = event.payload && typeof event.payload === 'object'
     ? (event.payload as Record<string, unknown>)
     : {};
+  const childSessionId = typeof payload.childSessionId === 'string' && payload.childSessionId.trim()
+    ? payload.childSessionId
+    : null;
   const childName =
     typeof payload.label === 'string'
       ? payload.label
-      : typeof payload.childSessionId === 'string'
-        ? payload.childSessionId
+      : childSessionId
+        ? childSessionId
         : 'subagent';
+  if (!childSessionId) return null;
+  const subagentBase = {
+    ...base,
+    agent_id: childSessionId,
+    parent_run_id: base.run_id,
+  };
+  const subagentPayload = {
+    ...payload,
+    parent_agent_id: base.agent_id,
+    child_name: childName,
+  };
   if (event.subtype === 'subagent_started') {
     return {
-      ...base,
+      ...subagentBase,
       event_type: 'subagent.spawned',
-      payload: { ...payload, child_name: childName },
+      payload: subagentPayload,
+    };
+  }
+  if (event.subtype === 'subagent_chunk') {
+    const content = typeof payload.delta === 'string' ? payload.delta : '';
+    return {
+      ...subagentBase,
+      event_type: 'message.delta',
+      payload: { ...subagentPayload, content, delta: content },
+    };
+  }
+  if (event.subtype === 'subagent_tool_call') {
+    return {
+      ...subagentBase,
+      event_type: 'primitive.invoked',
+      payload: {
+        ...subagentPayload,
+        name: typeof payload.name === 'string' ? payload.name : 'tool',
+        input: payload.input,
+        call_id: typeof payload.callId === 'string' ? payload.callId : String(payload.callId ?? ''),
+      },
+    };
+  }
+  if (event.subtype === 'subagent_tool_result') {
+    const ok = payload.ok === true;
+    return {
+      ...subagentBase,
+      event_type: ok ? 'primitive.completed' : 'primitive.failed',
+      payload: {
+        ...subagentPayload,
+        call_id: typeof payload.callId === 'string' ? payload.callId : String(payload.callId ?? ''),
+        ...(ok ? { output: payload.output } : { error: normalizeError(payload.error) }),
+      },
     };
   }
   if (event.subtype === 'subagent_completed') {
     const failed = payload.stopReason === 'error' || typeof payload.error === 'string';
     return {
-      ...base,
+      ...subagentBase,
       event_type: failed ? 'subagent.failed' : 'subagent.completed',
-      payload: { ...payload, child_name: childName },
+      payload: {
+        ...subagentPayload,
+        ...(typeof payload.text === 'string' ? { result: payload.text } : {}),
+        ...(typeof payload.error === 'string' ? { error: payload.error } : {}),
+      },
+    };
+  }
+  if (event.subtype === 'subagent_error' || event.subtype === 'subagent_abort') {
+    return {
+      ...subagentBase,
+      event_type: 'subagent.failed',
+      payload: {
+        ...subagentPayload,
+        error: typeof payload.message === 'string'
+          ? payload.message
+          : typeof payload.reason === 'string'
+            ? payload.reason
+            : 'subagent failed',
+      },
     };
   }
   return null;
+}
+
+function normalizeError(value: unknown): string {
+  if (value instanceof Error) return value.message;
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object' && 'message' in value) {
+    const message = (value as { message?: unknown }).message;
+    if (typeof message === 'string') return message;
+  }
+  return value == null ? 'unknown error' : String(value);
 }
 
 function isCommandSessionActionPayload(value: unknown): value is Record<string, unknown> {

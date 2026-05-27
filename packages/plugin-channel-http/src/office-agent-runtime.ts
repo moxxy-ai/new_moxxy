@@ -86,7 +86,7 @@ export interface OfficeGraveyardEntry {
   runId: string | null;
   outcome: 'completed' | 'failed' | 'stopped';
   timestamp: number;
-  isSubagent: false;
+  isSubagent: boolean;
   task: string | null;
   lastMessage: string | null;
   recentLogs: string[];
@@ -131,7 +131,10 @@ export class OfficeAgentRuntime {
     private readonly permissionBroker?: HttpPermissionBroker | null,
   ) {
     const persisted = readPersistedOfficeEnvelopes(session.log.toJSON());
-    this.archivedEntries = projectArchivedAgents(persisted);
+    this.archivedEntries = [
+      ...projectArchivedAgents(persisted),
+      ...projectRuntimeSubagents(session.log.toJSON()),
+    ].sort((a, b) => a.timestamp - b.timestamp);
     this.nextId = nextOfficeAgentId(persisted);
   }
 
@@ -443,7 +446,7 @@ export class OfficeAgentRuntime {
     agent: OfficeAgentState,
     outcome: OfficeGraveyardEntry['outcome'],
   ): OfficeGraveyardEntry {
-    return buildGraveyardEntryFromEnvelopes(agent.id, agent.name, agent.events, Date.now(), outcome);
+    return buildGraveyardEntryFromEnvelopes(agent.id, agent.name, agent.events, Date.now(), outcome, false);
   }
 }
 
@@ -562,7 +565,40 @@ function projectArchivedAgents(persisted: ReadonlyArray<PersistedOfficeEnvelope>
     const envelopes = items.map((item) => item.envelope);
     const name = readAgentName(envelopes) ?? agentId;
     const timestamp = items.at(-1)?.ts ?? Date.now();
-    entries.push(buildGraveyardEntryFromEnvelopes(agentId, name, envelopes, timestamp, 'stopped'));
+    entries.push(buildGraveyardEntryFromEnvelopes(agentId, name, envelopes, timestamp, 'stopped', false));
+  }
+  return entries.sort((a, b) => a.timestamp - b.timestamp);
+}
+
+function projectRuntimeSubagents(events: ReadonlyArray<MoxxyEvent>): OfficeGraveyardEntry[] {
+  const grouped = new Map<string, { envelopes: VirtualOfficeEnvelope[]; timestamps: number[] }>();
+  for (const event of events) {
+    if (event.type !== 'plugin_event') continue;
+    if (String(event.pluginId) !== '@moxxy/subagents') continue;
+    const envelope = eventToVirtualOfficeEnvelope(event, 'session');
+    if (!envelope) continue;
+    const current = grouped.get(envelope.agent_id) ?? { envelopes: [], timestamps: [] };
+    current.envelopes.push(envelope);
+    current.timestamps.push(event.ts);
+    grouped.set(envelope.agent_id, current);
+  }
+
+  const entries: OfficeGraveyardEntry[] = [];
+  for (const [agentId, item] of grouped) {
+    const terminal = [...item.envelopes].reverse().find(
+      (event) => event.event_type === 'subagent.completed' || event.event_type === 'subagent.failed',
+    );
+    if (!terminal) continue;
+    const outcome = terminal.event_type === 'subagent.failed' ? 'failed' : 'completed';
+    const timestamp = item.timestamps.at(-1) ?? Date.now();
+    entries.push(buildGraveyardEntryFromEnvelopes(
+      agentId,
+      readSubagentName(item.envelopes) ?? agentId,
+      item.envelopes,
+      timestamp,
+      outcome,
+      true,
+    ));
   }
   return entries.sort((a, b) => a.timestamp - b.timestamp);
 }
@@ -583,6 +619,7 @@ function buildGraveyardEntryFromEnvelopes(
   envelopes: ReadonlyArray<VirtualOfficeEnvelope>,
   timestamp: number,
   outcome: OfficeGraveyardEntry['outcome'],
+  isSubagent: boolean,
 ): OfficeGraveyardEntry {
   const chatHistory = buildChatHistory(agentId, envelopes, timestamp);
   const logHistory = buildLogHistory(agentId, envelopes, timestamp);
@@ -598,7 +635,7 @@ function buildGraveyardEntryFromEnvelopes(
     runId,
     outcome,
     timestamp,
-    isSubagent: false,
+    isSubagent,
     task,
     lastMessage,
     recentLogs,
@@ -628,8 +665,40 @@ function buildChatHistory(
       });
       return;
     }
+    if (event.event_type === 'subagent.spawned') {
+      const task = typeof event.payload.prompt === 'string' ? event.payload.prompt : '';
+      if (!task.trim()) return;
+      messages.push({
+        id: `${agentId}:${event.run_id ?? 'run'}:user:${index}`,
+        agentId,
+        runId: event.run_id ?? null,
+        state: 'done',
+        role: 'user',
+        text: task,
+        timestamp: fallbackTs + index,
+      });
+      return;
+    }
     if (event.event_type === 'message.final') {
       const content = typeof event.payload.content === 'string' ? event.payload.content : '';
+      if (!content.trim()) return;
+      messages.push({
+        id: `${agentId}:${event.run_id ?? 'run'}:assistant:${index}`,
+        agentId,
+        runId: event.run_id ?? null,
+        state: 'done',
+        role: 'assistant',
+        text: content,
+        timestamp: fallbackTs + index,
+      });
+    }
+    if (event.event_type === 'subagent.completed' || event.event_type === 'subagent.failed') {
+      const content =
+        typeof event.payload.result === 'string'
+          ? event.payload.result
+          : typeof event.payload.error === 'string'
+            ? event.payload.error
+            : '';
       if (!content.trim()) return;
       messages.push({
         id: `${agentId}:${event.run_id ?? 'run'}:assistant:${index}`,
@@ -687,6 +756,12 @@ function summarizeEnvelope(event: VirtualOfficeEnvelope): string {
       return 'Office agent archived';
     case 'office_agent.dismissed':
       return 'Office agent dismissed';
+    case 'subagent.spawned':
+      return `Subagent spawned${text('child_name') ? `: ${text('child_name')}` : ''}`;
+    case 'subagent.completed':
+      return `Subagent completed${text('child_name') ? `: ${text('child_name')}` : ''}`;
+    case 'subagent.failed':
+      return `Subagent failed${text('error') ? `: ${text('error')}` : ''}`;
     default:
       return event.event_type;
   }
@@ -698,6 +773,16 @@ function readAgentName(envelopes: ReadonlyArray<VirtualOfficeEnvelope>): string 
     if (!agent || typeof agent !== 'object') continue;
     const name = (agent as Record<string, unknown>).name;
     if (typeof name === 'string' && name.trim()) return name;
+  }
+  return null;
+}
+
+function readSubagentName(envelopes: ReadonlyArray<VirtualOfficeEnvelope>): string | null {
+  for (const event of envelopes) {
+    const name = event.payload.child_name;
+    if (typeof name === 'string' && name.trim()) return name;
+    const label = event.payload.label;
+    if (typeof label === 'string' && label.trim()) return label;
   }
   return null;
 }
@@ -727,7 +812,7 @@ function isOfficeGraveyardEntry(value: unknown): value is OfficeGraveyardEntry {
     (record.runId === null || typeof record.runId === 'string') &&
     (record.outcome === 'completed' || record.outcome === 'failed' || record.outcome === 'stopped') &&
     typeof record.timestamp === 'number' &&
-    record.isSubagent === false &&
+    typeof record.isSubagent === 'boolean' &&
     Array.isArray(record.recentLogs) &&
     Array.isArray(record.chatHistory) &&
     Array.isArray(record.logHistory)

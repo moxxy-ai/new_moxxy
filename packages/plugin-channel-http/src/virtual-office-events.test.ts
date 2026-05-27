@@ -39,4 +39,195 @@ describe('eventToVirtualOfficeEnvelope', () => {
       sensitive: false,
     });
   });
+
+  it('maps runtime subagent lifecycle events to the child session id', () => {
+    const started: MoxxyEvent = {
+      id: asEventId('evt-sub-start'),
+      seq: 10,
+      ts: 123,
+      sessionId: asSessionId('sess-1'),
+      turnId: asTurnId('turn-parent'),
+      source: 'plugin',
+      type: 'plugin_event',
+      pluginId: asPluginId('@moxxy/subagents'),
+      subtype: 'subagent_started',
+      payload: {
+        label: 'agent-polityka-iran',
+        childSessionId: 'child-iran',
+        prompt: 'Zbadaj najnowsze informacje o Iranie',
+        mode: 'tool-use',
+        model: 'gpt-5.5',
+      },
+    };
+
+    expect(eventToVirtualOfficeEnvelope(started)).toEqual({
+      agent_id: 'child-iran',
+      run_id: 'turn-parent',
+      parent_run_id: 'turn-parent',
+      sequence: 10,
+      event_type: 'subagent.spawned',
+      payload: {
+        label: 'agent-polityka-iran',
+        childSessionId: 'child-iran',
+        prompt: 'Zbadaj najnowsze informacje o Iranie',
+        mode: 'tool-use',
+        model: 'gpt-5.5',
+        parent_agent_id: 'session',
+        child_name: 'agent-polityka-iran',
+      },
+      sensitive: false,
+    });
+  });
+
+  it('maps runtime subagent progress events to Office-friendly event types', () => {
+    const base = {
+      id: asEventId('evt-sub'),
+      ts: 123,
+      sessionId: asSessionId('sess-1'),
+      turnId: asTurnId('turn-parent'),
+      source: 'plugin' as const,
+      type: 'plugin_event' as const,
+      pluginId: asPluginId('@moxxy/subagents'),
+    };
+
+    const chunk = eventToVirtualOfficeEnvelope({
+      ...base,
+      id: asEventId('evt-sub-chunk'),
+      seq: 11,
+      subtype: 'subagent_chunk',
+      payload: { label: 'researcher', childSessionId: 'child-a', delta: 'partial answer' },
+    });
+    const toolCall = eventToVirtualOfficeEnvelope({
+      ...base,
+      id: asEventId('evt-sub-tool'),
+      seq: 12,
+      subtype: 'subagent_tool_call',
+      payload: { label: 'researcher', childSessionId: 'child-a', name: 'web_fetch', input: { url: 'https://example.com' }, callId: 'call-1' },
+    });
+    const toolResult = eventToVirtualOfficeEnvelope({
+      ...base,
+      id: asEventId('evt-sub-tool-result'),
+      seq: 13,
+      subtype: 'subagent_tool_result',
+      payload: { label: 'researcher', childSessionId: 'child-a', callId: 'call-1', ok: true, output: 'ok' },
+    });
+    const completed = eventToVirtualOfficeEnvelope({
+      ...base,
+      id: asEventId('evt-sub-complete'),
+      seq: 14,
+      subtype: 'subagent_completed',
+      payload: { label: 'researcher', childSessionId: 'child-a', text: 'final answer', stopReason: 'stop' },
+    });
+    const aborted = eventToVirtualOfficeEnvelope({
+      ...base,
+      id: asEventId('evt-sub-abort'),
+      seq: 15,
+      subtype: 'subagent_abort',
+      payload: { label: 'researcher', childSessionId: 'child-a', reason: 'cancelled' },
+    });
+
+    expect(chunk).toMatchObject({
+      agent_id: 'child-a',
+      event_type: 'message.delta',
+      payload: { content: 'partial answer', child_name: 'researcher' },
+    });
+    expect(toolCall).toMatchObject({
+      agent_id: 'child-a',
+      event_type: 'primitive.invoked',
+      payload: { name: 'web_fetch', call_id: 'call-1' },
+    });
+    expect(toolResult).toMatchObject({
+      agent_id: 'child-a',
+      event_type: 'primitive.completed',
+      payload: { call_id: 'call-1', output: 'ok' },
+    });
+    expect(completed).toMatchObject({
+      agent_id: 'child-a',
+      event_type: 'subagent.completed',
+      payload: { result: 'final answer', child_name: 'researcher' },
+    });
+    expect(aborted).toMatchObject({
+      agent_id: 'child-a',
+      event_type: 'subagent.failed',
+      payload: { error: 'cancelled', child_name: 'researcher' },
+    });
+  });
+
+  it('maps provider request and response to thinking activity events', () => {
+    const request: MoxxyEvent = {
+      id: asEventId('evt-provider-request'),
+      seq: 20,
+      ts: 123,
+      sessionId: asSessionId('sess-1'),
+      turnId: asTurnId('turn-1'),
+      source: 'model',
+      type: 'provider_request',
+      provider: 'openai-codex',
+      model: 'gpt-5.5',
+      inputTokens: 1234,
+    };
+    const response: MoxxyEvent = {
+      id: asEventId('evt-provider-response'),
+      seq: 21,
+      ts: 124,
+      sessionId: asSessionId('sess-1'),
+      turnId: asTurnId('turn-1'),
+      source: 'model',
+      type: 'provider_response',
+      provider: 'openai-codex',
+      model: 'gpt-5.5',
+      inputTokens: 1234,
+      outputTokens: 55,
+    };
+
+    expect(eventToVirtualOfficeEnvelope(request)).toMatchObject({
+      agent_id: 'session',
+      run_id: 'turn-1',
+      event_type: 'thinking.started',
+      payload: {
+        provider: 'openai-codex',
+        model: 'gpt-5.5',
+        input_tokens: 1234,
+      },
+    });
+    expect(eventToVirtualOfficeEnvelope(response)).toMatchObject({
+      agent_id: 'session',
+      run_id: 'turn-1',
+      event_type: 'thinking.completed',
+      payload: {
+        provider: 'openai-codex',
+        model: 'gpt-5.5',
+        input_tokens: 1234,
+        output_tokens: 55,
+      },
+    });
+  });
+
+  it('maps denied tool calls to failed primitive activity', () => {
+    const event: MoxxyEvent = {
+      id: asEventId('evt-tool-denied'),
+      seq: 30,
+      ts: 123,
+      sessionId: asSessionId('sess-1'),
+      turnId: asTurnId('turn-1'),
+      source: 'tool',
+      type: 'tool_call_denied',
+      callId: 'call-1',
+      decidedBy: 'resolver',
+      reason: 'not allowed',
+    };
+
+    expect(eventToVirtualOfficeEnvelope(event)).toEqual({
+      agent_id: 'session',
+      run_id: 'turn-1',
+      parent_run_id: null,
+      sequence: 30,
+      event_type: 'primitive.failed',
+      payload: {
+        call_id: 'call-1',
+        error: 'not allowed',
+      },
+      sensitive: false,
+    });
+  });
 });

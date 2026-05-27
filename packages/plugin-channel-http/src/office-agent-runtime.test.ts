@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EventLog, Session, autoAllowResolver, silentLogger } from '@moxxy/core';
-import { defineProvider, definePlugin, defineTool } from '@moxxy/sdk';
+import { asPluginId, defineProvider, definePlugin, defineTool } from '@moxxy/sdk';
 import { z } from 'zod';
 import { FakeProvider, textReply, toolUseReply } from '@moxxy/testing';
 import { toolUseModePlugin } from '@moxxy/mode-tool-use';
@@ -121,6 +121,71 @@ describe('OfficeAgentRuntime persistence', () => {
         task: 'summarise context',
       }),
     ]);
+  });
+
+  it('projects completed runtime subagents from a restored session log into graveyard', async () => {
+    const session = buildSession();
+    const turnId = session.startTurn().turnId;
+
+    await session.log.append({
+      type: 'plugin_event',
+      sessionId: session.id,
+      turnId,
+      source: 'plugin',
+      pluginId: asPluginId('@moxxy/subagents'),
+      subtype: 'subagent_started',
+      payload: {
+        label: 'agent-polityka-iran',
+        childSessionId: 'child-iran',
+        prompt: 'Zbadaj relacje Trump-Iran',
+        mode: 'tool-use',
+      },
+    });
+    await session.log.append({
+      type: 'plugin_event',
+      sessionId: session.id,
+      turnId,
+      source: 'plugin',
+      pluginId: asPluginId('@moxxy/subagents'),
+      subtype: 'subagent_tool_call',
+      payload: {
+        label: 'agent-polityka-iran',
+        childSessionId: 'child-iran',
+        name: 'web_fetch',
+        input: { url: 'https://example.com' },
+        callId: 'call-1',
+      },
+    });
+    await session.log.append({
+      type: 'plugin_event',
+      sessionId: session.id,
+      turnId,
+      source: 'plugin',
+      pluginId: asPluginId('@moxxy/subagents'),
+      subtype: 'subagent_completed',
+      payload: {
+        label: 'agent-polityka-iran',
+        childSessionId: 'child-iran',
+        text: 'Iran result',
+        stopReason: 'stop',
+      },
+    });
+
+    const runtime = new OfficeAgentRuntime(buildSession(new EventLog(session.log.toJSON())), silentLogger);
+
+    expect(runtime.graveyard()).toEqual([
+      expect.objectContaining({
+        agentId: 'child-iran',
+        agentName: 'agent-polityka-iran',
+        outcome: 'completed',
+        isSubagent: true,
+        task: 'Zbadaj relacje Trump-Iran',
+        lastMessage: 'Iran result',
+      }),
+    ]);
+    expect(runtime.graveyard()[0].logHistory.map((item) => item.eventType)).toEqual(
+      expect.arrayContaining(['subagent.spawned', 'primitive.invoked', 'subagent.completed']),
+    );
   });
 
   it('routes office-agent tool permissions through the HTTP permission broker', async () => {
