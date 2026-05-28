@@ -2,13 +2,48 @@
   "name": "@moxxy/cli",
   "version": "0.1.0",
   "description": "moxxy command-line binary. Subcommand dispatcher consuming the moxxy SDK.",
+  "keywords": [
+    "moxxy",
+    "agent",
+    "agents",
+    "agent-framework",
+    "ai",
+    "llm",
+    "anthropic",
+    "claude",
+    "openai",
+    "gpt",
+    "cli",
+    "tui",
+    "terminal",
+    "ink",
+    "mcp",
+    "tool-use",
+    "voice",
+    "telegram"
+  ],
+  "homepage": "https://moxxy.ai",
+  "bugs": {
+    "url": "https://github.com/moxxy-ai/new_moxxy/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/moxxy-ai/new_moxxy.git",
+    "directory": "packages/cli"
+  },
+  "author": "Michal Makowski <michal.makowski97@gmail.com>",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.10.0"
+  },
   "type": "module",
   "main": "./dist/bin.js",
   "bin": {
     "moxxy": "dist/bin.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "publishConfig": {
     "access": "public"

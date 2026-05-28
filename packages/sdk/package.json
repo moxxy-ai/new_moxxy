@@ -2,6 +2,41 @@
   "name": "@moxxy/sdk",
   "version": "0.1.0",
   "description": "Typed public surface for the moxxy framework: event types, define* factories, lifecycle hook signatures.",
+  "keywords": [
+    "moxxy",
+    "agent",
+    "agents",
+    "agent-framework",
+    "ai",
+    "llm",
+    "anthropic",
+    "claude",
+    "openai",
+    "gpt",
+    "plugin",
+    "plugin-sdk",
+    "sdk",
+    "tools",
+    "tool-use",
+    "mcp",
+    "typescript",
+    "zero-deps"
+  ],
+  "homepage": "https://moxxy.ai",
+  "bugs": {
+    "url": "https://github.com/moxxy-ai/new_moxxy/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/moxxy-ai/new_moxxy.git",
+    "directory": "packages/sdk"
+  },
+  "author": "Michal Makowski <michal.makowski97@gmail.com>",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.10.0"
+  },
+  "sideEffects": false,
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -13,7 +48,8 @@
   },
   "files": [
     "dist",
-    "src"
+    "src",
+    "README.md"
   ],
   "publishConfig": {
     "access": "public"
