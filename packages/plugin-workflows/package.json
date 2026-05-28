@@ -1,0 +1,40 @@
+{
+  "name": "@moxxy/plugin-workflows",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Workflows plugin for moxxy — a swappable DAG engine that chains skills/prompts/tools into saved, parameterized, schedulable/event-triggered pipelines.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "skills",
+    "workflows"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf dist .turbo"
+  },
+  "dependencies": {
+    "@moxxy/sdk": "workspace:*",
+    "ulid": "^2.3.0",
+    "yaml": "^2.6.0",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@moxxy/tsconfig": "workspace:*",
+    "@moxxy/vitest-preset": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

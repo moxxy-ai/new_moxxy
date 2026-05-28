@@ -1,5 +1,6 @@
 export { Session, type SessionOptions } from './session.js';
 export { runTurn, collectTurn, type RunTurnOptions } from './run-turn.js';
+export { createSubagentSpawner, type SubagentRuntime } from './subagents.js';
 export {
   loadPreferences,
   savePreferences,

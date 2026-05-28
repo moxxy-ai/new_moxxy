@@ -50,6 +50,9 @@ export type {
   CredentialResolver,
   McpAdminView,
   McpServerStatusView,
+  WorkflowsView,
+  WorkflowSummaryView,
+  WorkflowRunView,
 } from './session-like.js';
 
 export type {
@@ -213,6 +216,23 @@ export {
 
 export type { Skill, SkillDef, SkillFrontmatter, SkillScope, SkillSchedule } from './skill.js';
 
+export type {
+  Workflow,
+  WorkflowStep,
+  WorkflowTrigger,
+  WorkflowStepErrorMode,
+  WorkflowInputSpec,
+  WorkflowDelivery,
+  WorkflowToolRunner,
+  WorkflowLookup,
+  WorkflowEventSubtype,
+  WorkflowRunDeps,
+  WorkflowStepStatus,
+  WorkflowStepResult,
+  WorkflowRunResult,
+  WorkflowExecutorDef,
+} from './workflow.js';
+
 export type { AgentDef } from './agent.js';
 
 export type {
@@ -305,6 +325,7 @@ export {
   defineEmbedder,
   defineCommand,
   defineAgent,
+  defineWorkflowExecutor,
 } from './define.js';
 
 export {

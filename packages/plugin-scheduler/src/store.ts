@@ -18,7 +18,7 @@ import { isValidCron } from './cron.js';
  * adds/removes its own rows.
  */
 
-export const scheduleSourceSchema = z.enum(['manual', 'skill']);
+export const scheduleSourceSchema = z.enum(['manual', 'skill', 'workflow']);
 export type ScheduleSource = z.infer<typeof scheduleSourceSchema>;
 
 export const scheduleEntrySchema = z
@@ -48,6 +48,8 @@ export const scheduleEntrySchema = z
     source: scheduleSourceSchema.default('manual'),
     /** When source='skill': the skill name this schedule mirrors. */
     skillName: z.string().optional(),
+    /** When source='workflow': the workflow name this schedule fires. */
+    workflowName: z.string().optional(),
   })
   .superRefine((entry, ctx) => {
     if (!entry.cron && !entry.runAt) {
@@ -108,7 +110,7 @@ export class ScheduleStore {
 
   async create(
     input: Omit<ScheduleEntry, 'id' | 'createdAt' | 'enabled' | 'source'> &
-      Partial<Pick<ScheduleEntry, 'enabled' | 'source' | 'skillName'>>,
+      Partial<Pick<ScheduleEntry, 'enabled' | 'source' | 'skillName' | 'workflowName'>>,
   ): Promise<ScheduleEntry> {
     const entry: ScheduleEntry = scheduleEntrySchema.parse({
       ...input,
@@ -161,6 +163,25 @@ export class ScheduleStore {
       );
       if (entry) {
         filtered.push(scheduleEntrySchema.parse({ ...entry, source: 'skill', skillName }));
+      }
+      return filtered;
+    });
+  }
+
+  /**
+   * Replace the `source='workflow'` schedule for `workflowName` with the
+   * supplied entry, or remove it if `entry` is null. Mirrors
+   * {@link syncSkillSchedule}; manual/skill schedules are left untouched.
+   * Used by the workflows integration to mirror a workflow's `on.schedule`
+   * into the shared poller without a separate timer.
+   */
+  async syncWorkflowSchedule(workflowName: string, entry: ScheduleEntry | null): Promise<void> {
+    await this.mutate((schedules) => {
+      const filtered = schedules.filter(
+        (s) => !(s.source === 'workflow' && s.workflowName === workflowName),
+      );
+      if (entry) {
+        filtered.push(scheduleEntrySchema.parse({ ...entry, source: 'workflow', workflowName }));
       }
       return filtered;
     });

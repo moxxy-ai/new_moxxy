@@ -28,6 +28,15 @@ export function runSlash(cmd: string, deps: SlashDeps): void {
   // First: route through the channel-agnostic command registry.
   // Plugins (/info, /clear, /new, /exit, /help, ...) and any
   // user-defined commands live here.
+  // `/workflows` opens an interactive TUI modal (list + enable/disable + run),
+  // intercepted BEFORE the command registry so the overlay wins here while
+  // non-TUI channels (which don't run this code) still get the text command.
+  if (name === 'workflows' || name === 'workflow' || name === 'flows') {
+    deps.setSystemNotice(null);
+    deps.setOverlay({ kind: 'workflows' });
+    return;
+  }
+
   const registered = deps.session.commands.get(name);
   if (registered) {
     void (async () => {

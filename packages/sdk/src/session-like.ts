@@ -121,6 +121,37 @@ export interface McpAdminView {
   listServers(): Promise<ReadonlyArray<McpServerStatusView>>;
 }
 
+/** One workflow's summary for the `/workflows` modal. */
+export interface WorkflowSummaryView {
+  readonly name: string;
+  readonly description: string;
+  readonly enabled: boolean;
+  readonly scope: string;
+  readonly steps: number;
+  /** Human-readable trigger summary, e.g. `cron(0 8 * * *)` or `on-demand`. */
+  readonly triggers: string;
+}
+
+/** Result of running a workflow from the modal. */
+export interface WorkflowRunView {
+  readonly ok: boolean;
+  readonly output: string;
+  readonly error?: string;
+  readonly steps: ReadonlyArray<{ readonly id: string; readonly status: string; readonly error?: string }>;
+}
+
+/**
+ * The slice of the workflows API a channel needs to drive the `/workflows`
+ * modal (list, enable/disable toggle, run). Present on a local Session when
+ * `@moxxy/plugin-workflows` is wired; a `RemoteSession` leaves
+ * {@link SessionLike.workflows} undefined and the UI degrades gracefully.
+ */
+export interface WorkflowsView {
+  list(): Promise<ReadonlyArray<WorkflowSummaryView>>;
+  setEnabled(name: string, enabled: boolean): Promise<void>;
+  run(name: string): Promise<WorkflowRunView>;
+}
+
 /**
  * The session surface a `Channel` depends on, decoupled from whether the
  * session runs in-process (`@moxxy/core`'s `Session`) or is a thin-client
@@ -155,4 +186,6 @@ export interface SessionLike {
   credentialResolver?: CredentialResolver;
   /** MCP admin slice backing the MCP picker / status line. */
   mcpAdmin?: McpAdminView;
+  /** Workflows slice backing the `/workflows` modal. */
+  workflows?: WorkflowsView;
 }

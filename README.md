@@ -251,6 +251,7 @@ export default defineConfig({
 @moxxy/plugin-channel-http          ← HTTP channel (POST /v1/turn, /v1/turn/stream, /v1/turn/audio)
 @moxxy/plugin-scheduler             ← time-driven prompts
 @moxxy/plugin-webhooks              ← external-event triggers (verified HTTP listener + tunnels)
+@moxxy/plugin-workflows             ← swappable DAG engine: chain skills/prompts/tools into saved, schedulable pipelines
 @moxxy/plugin-security              ← opt-in capability isolation (Isolator interface + none/inproc impls)
 @moxxy/isolator-worker              ← worker_threads Isolator (memory + time + JS-state isolation)
 @moxxy/isolator-subprocess          ← subprocess Isolator (kernel-enforced process boundary)

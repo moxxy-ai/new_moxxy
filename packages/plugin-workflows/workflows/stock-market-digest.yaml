@@ -1,0 +1,54 @@
+# Sample workflow shipped with @moxxy/plugin-workflows. Disabled by default —
+# enable it from the /workflows modal (press `d`) once you've connected a
+# delivery tool, or just use it as a template. It demonstrates fan-out
+# (analyze ∥ check_watchlist), fan-in (email needs both), a `when` guard, and
+# a schedule trigger.
+name: stock-market-digest
+description: Weekday mornings — fetch Dow Jones news, analyze sentiment, check a watchlist, and email a digest.
+enabled: false
+on:
+  schedule:
+    cron: "0 8 * * 1-5"
+    timeZone: "America/New_York"
+inputs:
+  watchlist:
+    default: ["AAPL", "MSFT", "NVDA"]
+    description: Tickers to check against the day's news.
+delivery:
+  channel: inbox
+steps:
+  - id: fetch_news
+    skill: web-research
+    input: "Fetch today's market-moving headlines from Dow Jones, WSJ, and other major outlets. Summarize the top items."
+
+  - id: analyze
+    needs: [fetch_news]
+    prompt: |
+      Analyze these headlines for overall market sentiment and the most notable movers.
+      Be concise — bullet points.
+
+      {{ steps.fetch_news.output }}
+
+  - id: check_watchlist
+    needs: [fetch_news]
+    prompt: |
+      For each ticker in {{ inputs.watchlist }}, note anything in today's news that affects it.
+      If a ticker isn't mentioned, say "no news".
+
+      {{ steps.fetch_news.output }}
+
+  - id: email
+    needs: [analyze, check_watchlist]
+    when: '{{ steps.analyze.output }} is not empty'
+    # Replace `gmail_send` with whatever delivery tool you've connected. If you
+    # have none, the result still lands in ~/.moxxy/inbox/ via delivery.channel.
+    tool: gmail_send
+    onError: continue
+    args:
+      subject: "Daily Market Digest"
+      body: |
+        ## Market sentiment
+        {{ steps.analyze.output }}
+
+        ## Watchlist
+        {{ steps.check_watchlist.output }}

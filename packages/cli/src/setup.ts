@@ -138,6 +138,7 @@ export async function setupSessionWithConfig(opts: SetupOptions): Promise<SetupR
 
   if (config.mode) session.modes.setActive(config.mode);
   if (config.compactor) session.compactors.setActive(config.compactor);
+  if (config.workflowExecutor) session.workflowExecutors.setActive(config.workflowExecutor);
   // Caching is on by default (stable-prefix auto-activates). `caching: false`
   // selects the no-op strategy; an explicit name overrides the default.
   if (config.context?.caching === false) {

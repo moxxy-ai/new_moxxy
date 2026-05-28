@@ -14,6 +14,7 @@ import type { ToolIsolationSpec } from './isolation.js';
 import type { TranscriberDef } from './transcriber.js';
 import type { ViewRendererDef } from './view-renderer.js';
 import type { TunnelProviderDef } from './tunnel.js';
+import type { WorkflowExecutorDef } from './workflow.js';
 import type { z } from 'zod';
 
 export function definePlugin(spec: PluginSpec): Plugin {
@@ -114,5 +115,9 @@ export function defineCommand(spec: CommandDef): CommandDef {
 }
 
 export function defineAgent(spec: AgentDef): AgentDef {
+  return Object.freeze(spec);
+}
+
+export function defineWorkflowExecutor(spec: WorkflowExecutorDef): WorkflowExecutorDef {
   return Object.freeze(spec);
 }

@@ -18,6 +18,7 @@ import type {
   Isolator,
   ViewRendererDef,
   TunnelProviderDef,
+  WorkflowExecutorDef,
 } from '@moxxy/sdk';
 import type { Logger } from '../logger.js';
 import type { AgentRegistry } from '../registries/agents.js';
@@ -33,6 +34,7 @@ import type { ToolRegistry } from '../registries/tools.js';
 import type { TranscriberRegistry } from '../registries/transcribers.js';
 import type { EmbedderRegistry } from '../registries/embedders.js';
 import type { IsolatorRegistry } from '../registries/isolators.js';
+import type { WorkflowExecutorRegistry } from '../registries/workflow-executors.js';
 import type { HookDispatcherImpl } from './lifecycle.js';
 import type { RequirementRegistry } from '../requirements.js';
 import { discoverPlugins } from './discovery.js';
@@ -54,6 +56,7 @@ export interface PluginHostOptions {
   readonly transcribers: TranscriberRegistry;
   readonly embedders: EmbedderRegistry;
   readonly isolators: IsolatorRegistry;
+  readonly workflowExecutors: WorkflowExecutorRegistry;
   readonly requirements: RequirementRegistry;
   readonly dispatcher: HookDispatcherImpl;
   readonly loader?: PluginLoader;
@@ -124,6 +127,7 @@ interface LoadedRecord {
   readonly transcriberNames: ReadonlyArray<string>;
   readonly embedderNames: ReadonlyArray<string>;
   readonly isolatorNames: ReadonlyArray<string>;
+  readonly workflowExecutorNames: ReadonlyArray<string>;
 }
 
 export class PluginHost implements PluginHostHandle {
@@ -244,6 +248,8 @@ export class PluginHost implements PluginHostHandle {
     for (const transcriberName of record.transcriberNames) this.opts.transcribers.unregister(transcriberName);
     for (const embedderName of record.embedderNames) this.opts.embedders.unregister(embedderName);
     for (const isolatorName of record.isolatorNames) this.opts.isolators.unregister(isolatorName);
+    for (const wfxName of record.workflowExecutorNames)
+      this.opts.workflowExecutors.unregister(wfxName);
     this.loaded.delete(name);
     this.opts.requirements.unregisterPlugin(record.plugin.name);
     this.refreshDispatcher();
@@ -282,6 +288,9 @@ export class PluginHost implements PluginHostHandle {
     const transcriberNames = (plugin.transcribers ?? []).map((t: TranscriberDef) => t.name);
     const embedderNames = (plugin.embedders ?? []).map((e: EmbedderDef) => e.name);
     const isolatorNames = (plugin.isolators ?? []).map((i: Isolator) => i.name);
+    const workflowExecutorNames = (plugin.workflowExecutors ?? []).map(
+      (w: WorkflowExecutorDef) => w.name,
+    );
 
     for (const tool of plugin.tools ?? []) this.opts.tools.register(tool);
     for (const provider of plugin.providers ?? []) this.opts.providers.register(provider);
@@ -299,6 +308,8 @@ export class PluginHost implements PluginHostHandle {
     for (const transcriber of plugin.transcribers ?? []) this.opts.transcribers.register(transcriber);
     for (const embedder of plugin.embedders ?? []) this.opts.embedders.register(embedder);
     for (const isolator of plugin.isolators ?? []) this.opts.isolators.register(isolator);
+    for (const wfx of plugin.workflowExecutors ?? [])
+      this.opts.workflowExecutors.register(wfx);
 
     return {
       plugin,
@@ -316,6 +327,7 @@ export class PluginHost implements PluginHostHandle {
       transcriberNames,
       embedderNames,
       isolatorNames,
+      workflowExecutorNames,
     };
   }
 

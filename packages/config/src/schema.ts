@@ -121,6 +121,8 @@ export const moxxyConfigSchema = z.object({
   provider: providerSettingsSchema.optional(),
   mode: z.string().optional(),
   compactor: z.string().optional(),
+  /** Name of the active WorkflowExecutor block (default 'dag'). */
+  workflowExecutor: z.string().optional(),
   context: contextConfigSchema.optional(),
   systemPrompt: z.string().optional(),
   maxIterations: z.number().int().positive().optional(),

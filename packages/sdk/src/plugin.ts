@@ -13,8 +13,9 @@ import type { ToolDef } from './tool.js';
 import type { TranscriberDef } from './transcriber.js';
 import type { ViewRendererDef } from './view-renderer.js';
 import type { TunnelProviderDef } from './tunnel.js';
+import type { WorkflowExecutorDef } from './workflow.js';
 
-export type PluginKind = 'tools' | 'provider' | 'mode' | 'compactor' | 'cache-strategy' | 'view-renderer' | 'tunnel-provider' | 'mcp' | 'cli' | 'channel' | 'hooks' | 'agent' | 'command' | 'transcriber' | 'embedder' | 'isolator';
+export type PluginKind = 'tools' | 'provider' | 'mode' | 'compactor' | 'cache-strategy' | 'view-renderer' | 'tunnel-provider' | 'mcp' | 'cli' | 'channel' | 'hooks' | 'agent' | 'command' | 'transcriber' | 'embedder' | 'isolator' | 'workflow-executor';
 
 export interface PluginSpec {
   readonly name: string;
@@ -82,6 +83,13 @@ export interface PluginSpec {
    * pickers, raw-mode toggles) inside the channel itself.
    */
   readonly commands?: ReadonlyArray<CommandDef>;
+  /**
+   * Workflow-execution strategies contributed by the plugin. One is active per
+   * session (selected via `session.workflowExecutors.setActive(name)`); the
+   * active executor runs a workflow DAG. `@moxxy/plugin-workflows` ships the
+   * default `dag` executor.
+   */
+  readonly workflowExecutors?: ReadonlyArray<WorkflowExecutorDef>;
   readonly hooks?: LifecycleHooks;
   readonly skillsDir?: string;
 }

@@ -29,6 +29,7 @@ import { CommandRegistry } from './registries/commands.js';
 import { TranscriberRegistry } from './registries/transcribers.js';
 import { EmbedderRegistry } from './registries/embedders.js';
 import { IsolatorRegistry } from './registries/isolators.js';
+import { WorkflowExecutorRegistry } from './registries/workflow-executors.js';
 import { RequirementRegistry } from './requirements.js';
 import { PermissionEngine } from './permissions/engine.js';
 import { autoAllowResolver } from './permissions/resolvers.js';
@@ -37,6 +38,7 @@ import type {
   CredentialResolver,
   ElisionSettings,
   McpAdminView,
+  WorkflowsView,
   PendingToolCall,
   PermissionContext,
   PermissionResolver,
@@ -94,6 +96,7 @@ export class Session implements ClientSession, SessionRuntime {
   readonly transcribers: TranscriberRegistry;
   readonly embedders: EmbedderRegistry;
   readonly isolators: IsolatorRegistry;
+  readonly workflowExecutors: WorkflowExecutorRegistry;
   readonly requirements: RequirementRegistry;
   readonly permissions: PermissionEngine;
   /** Current PermissionResolver. Update via `setPermissionResolver(r)`. */
@@ -123,6 +126,7 @@ export class Session implements ClientSession, SessionRuntime {
   readyProviders?: Set<string>;
   credentialResolver?: CredentialResolver;
   mcpAdmin?: McpAdminView;
+  workflows?: WorkflowsView;
   readonly dispatcher: HookDispatcherImpl;
   readonly pluginHost: PluginHost;
   private readonly controller = new AbortController();
@@ -152,6 +156,7 @@ export class Session implements ClientSession, SessionRuntime {
     this.transcribers = new TranscriberRegistry();
     this.embedders = new EmbedderRegistry();
     this.isolators = new IsolatorRegistry();
+    this.workflowExecutors = new WorkflowExecutorRegistry();
     this.requirements = new RequirementRegistry({
       tools: this.tools,
       providers: this.providers,
@@ -193,6 +198,7 @@ export class Session implements ClientSession, SessionRuntime {
       transcribers: this.transcribers,
       embedders: this.embedders,
       isolators: this.isolators,
+      workflowExecutors: this.workflowExecutors,
       requirements: this.requirements,
       dispatcher: this.dispatcher,
       loader: opts.pluginLoader,

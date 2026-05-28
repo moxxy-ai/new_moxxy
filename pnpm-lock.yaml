@@ -377,6 +377,9 @@ importers:
       '@moxxy/plugin-webhooks':
         specifier: workspace:*
         version: link:../plugin-webhooks
+      '@moxxy/plugin-workflows':
+        specifier: workspace:*
+        version: link:../plugin-workflows
       '@moxxy/runner':
         specifier: workspace:*
         version: link:../runner
@@ -1554,6 +1557,37 @@ importers:
       ulid:
         specifier: ^2.3.0
         version: 2.4.0
+      zod:
+        specifier: 'catalog:'
+        version: 3.25.76
+    devDependencies:
+      '@moxxy/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/tsconfig
+      '@moxxy/vitest-preset':
+        specifier: workspace:*
+        version: link:../../tooling/vitest-preset
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.19.18
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vitest:
+        specifier: 'catalog:'
+        version: 2.1.9(@types/node@22.19.18)
+
+  packages/plugin-workflows:
+    dependencies:
+      '@moxxy/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+      ulid:
+        specifier: ^2.3.0
+        version: 2.4.0
+      yaml:
+        specifier: ^2.6.0
+        version: 2.9.0
       zod:
         specifier: 'catalog:'
         version: 3.25.76

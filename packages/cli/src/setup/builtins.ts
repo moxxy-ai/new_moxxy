@@ -55,7 +55,9 @@ import {
 import { workerIsolator } from '@moxxy/isolator-worker';
 import { subprocessIsolator } from '@moxxy/isolator-subprocess';
 import { wasmIsolator } from '@moxxy/isolator-wasm';
+import type { WorkflowStore } from '@moxxy/plugin-workflows';
 import { BUILTIN_SKILLS_DIR_RESOLVED } from './builtin-skills-dir.js';
+import { buildWorkflowsIntegration } from './workflows.js';
 
 export interface BuiltinEntry {
   readonly name: string;
@@ -101,6 +103,7 @@ export const BUILTIN_REQUIREMENT_DECISIONS: Readonly<Record<string, BuiltinRequi
   '@moxxy/synthesize-skill': { hardRequirements: false, reason: 'session access is injected by closure' },
   '@moxxy/plugin-scheduler': { hardRequirements: false, reason: 'runner and skills registry are injected by closure' },
   '@moxxy/plugin-webhooks': { hardRequirements: false, reason: 'runner is injected by closure' },
+  '@moxxy/plugin-workflows': { hardRequirements: false, reason: 'store, runner, and registries are injected by closure' },
   '@moxxy/plugin-security': { hardRequirements: false, reason: 'disabled by default and configured at runtime' },
   '@moxxy/plugin-config': { hardRequirements: false, reason: 'config applier is injected by bootstrap closure' },
   '@moxxy/plugin-usage-stats': { hardRequirements: false, reason: 'records usage via lifecycle hooks; no plugin dependency' },
@@ -127,6 +130,7 @@ export interface BuiltBuiltinsCore {
     readonly stop: () => Promise<void>;
   };
   readonly security: SecurityPluginHandle;
+  readonly workflows: { readonly store: WorkflowStore; readonly stop: () => void };
 }
 
 /**
@@ -365,6 +369,13 @@ export function buildBuiltinsCore(args: BuildBuiltinsArgs): BuiltBuiltinsCore {
     });
   entries.push({ name: '@moxxy/plugin-scheduler', plugin: schedulerPlugin });
 
+  // Workflows — saved DAGs of skills/prompts/tools. Reuses the scheduler store
+  // for time triggers (no new timer), the EventLog for afterWorkflow, and the
+  // subagent spawner for step execution. Stashes a `WorkflowsView` on the
+  // session (in onReady) backing the `/workflows` modal.
+  const workflows = buildWorkflowsIntegration({ session, scheduleStore, logger });
+  entries.push({ name: '@moxxy/plugin-workflows', plugin: workflows.plugin });
+
   // Webhooks — generic external-event triggers. Listens on its own port
   // (default 3738) and dispatches verified deliveries to runTurn via
   // the supplied runner. Agent-facing tools (webhook_create,
@@ -411,6 +422,7 @@ export function buildBuiltinsCore(args: BuildBuiltinsArgs): BuiltBuiltinsCore {
     scheduler: { store: scheduleStore, poller: schedulerPoller },
     webhooks: { store: webhookStore, config: webhookConfig, stop: stopWebhooks },
     security,
+    workflows: { store: workflows.store, stop: workflows.stop },
   };
 }
 

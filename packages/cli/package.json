@@ -107,6 +107,7 @@
     "@moxxy/plugin-usage-stats": "workspace:*",
     "@moxxy/plugin-vault": "workspace:*",
     "@moxxy/plugin-webhooks": "workspace:*",
+    "@moxxy/plugin-workflows": "workspace:*",
     "@moxxy/runner": "workspace:*",
     "@moxxy/skills-builtin": "workspace:*",
     "@moxxy/tools-builtin": "workspace:*",

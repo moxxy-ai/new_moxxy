@@ -6,6 +6,7 @@ import { SkillsPanel } from '../components/SkillsPanel.js';
 import { ToolsPanel } from '../components/ToolsPanel.js';
 import { AgentsPanel } from '../components/AgentsPanel.js';
 import { UsagePanel } from '../components/UsagePanel.js';
+import { WorkflowsPanel } from '../components/WorkflowsPanel.js';
 import { Colors } from '../theme.js';
 import { deriveMcpServers } from './helpers.js';
 import type { Overlay } from './types.js';
@@ -40,6 +41,9 @@ export const OverlayOrNotice: React.FC<OverlayOrNoticeProps> = ({
   }
   if (overlay?.kind === 'tools') {
     return <ToolsPanel tools={session.tools.list()} onClose={onClose} />;
+  }
+  if (overlay?.kind === 'workflows') {
+    return <WorkflowsPanel view={session.workflows ?? null} onClose={onClose} />;
   }
   if (overlay?.kind === 'agents') {
     return (

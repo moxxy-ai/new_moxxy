@@ -34,6 +34,7 @@ If you're a Claude Code agent or any other autonomous agent: read this file firs
 @moxxy/plugin-embeddings-transformers   on-device embeddings via xenova
 @moxxy/plugin-browser             web_fetch tool + Playwright sidecar (heavy)
 @moxxy/plugin-scheduler           cron/heartbeat: time-driven prompts + auto-scheduled skills
+@moxxy/plugin-workflows           swappable DAG engine: chain skills/prompts/tools into saved, schedulable pipelines
 @moxxy/plugin-security            opt-in capability isolation: Isolator interface + `none` / `inproc` impls
 @moxxy/isolator-worker            worker_threads-based Isolator (memory + time + JS-state isolation)
 @moxxy/isolator-subprocess        subprocess Isolator (kernel-enforced process boundary)
