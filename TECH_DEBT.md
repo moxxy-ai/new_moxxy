@@ -44,13 +44,14 @@ runner/thin-client work, not standalone.
 
 No bugs surfaced — the security paths behave correctly under test.
 
-### 3. Collapse the duplicate RFC 8628 device-flow in plugin-oauth
-**Finding:** oauth #12 (**high**). **Risk:** moderate. **Blocked** by the fix agent (see Blocked §B1).
-`src/oauth/device-flow.ts` (`runDeviceCodeFlow`) duplicates `src/adapters/rfc8628-device-flow.ts`
-(~90 lines) and they've already drifted. Not collapsible mechanically because the legacy path
-conditionally sends `client_secret` and surfaces interval/expiry in seconds vs the adapter's
-`*Ms`. **Action:** unify deliberately — extend the rfc8628 adapter to cover the legacy dialect (or
-explicitly fork two named adapters), repoint `tools.ts`, and keep tests green.
+### 3. Collapse the duplicate RFC 8628 device-flow in plugin-oauth — ✅ DONE
+**Finding:** oauth #12 (**high**). Extracted the shared RFC 8628 device-authorization request +
+poll-response classification into `src/oauth/device-flow-shared.ts`
+(`requestDeviceAuthorization`, `classifyDeviceTokenResponse`). The legacy `runDeviceCodeFlow` and
+the `rfc8628DeviceFlow` adapter now both call it; each keeps only its genuine difference (the legacy
+flow appends `client_id`/`client_secret` on the poll; the adapter reports ms vs the legacy's
+seconds). Behavior preserved, 22/22 oauth tests green. `openai-device-flow.ts` is a distinct
+non-RFC-8628 protocol (two-step authorization_code exchange) and correctly stays separate.
 
 ---
 
@@ -128,8 +129,8 @@ they're low-risk polish. Notable clusters worth a future pass:
 
 ## Blocked items (fix agents declined to do mechanically — sound calls)
 
-- **B1.** oauth: collapse legacy `runDeviceCodeFlow` onto the rfc8628 adapter — not behavior-preserving
-  (client_secret + seconds-vs-ms divergence). → P1 #3.
+- **B1.** oauth: collapse legacy `runDeviceCodeFlow` onto the rfc8628 adapter — ✅ resolved via a
+  shared-helper extraction (P1 #3 DONE) rather than a full collapse, preserving each flow's genuine difference.
 - **B2.** tools-builtin / computer-control: no tool/platform `MoxxyErrorCode` exists; used `INTERNAL`. → P2 #6.
 - **B3.** plugin-cli/plugin-telegram: kept `@moxxy/core` dep (real imports remain). → P3.
 - **B4.** plugin-subagents/plugin-view: kept `@moxxy/core` **dev**Dep — `*.test.ts` import `collectTurn` /

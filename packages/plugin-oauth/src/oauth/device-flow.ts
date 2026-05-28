@@ -1,6 +1,5 @@
-import { classifyHttpStatus, MoxxyError } from '@moxxy/sdk';
 import { pollUntil, type PollOutcome } from './poll-until.js';
-import { parseTokenResponse } from './token-exchange.js';
+import { classifyDeviceTokenResponse, requestDeviceAuthorization } from './device-flow-shared.js';
 import type { DeviceFlowOptions, TokenSet } from './types.js';
 
 const DEVICE_POLL_SAFETY_MARGIN_MS = 0;
@@ -25,60 +24,31 @@ const DEVICE_POLL_SAFETY_MARGIN_MS = 0;
  *        - access_denied        → user clicked deny; throw.
  *        - expired_token        → device_code expired; throw.
  *        - access_token, ...    → success; return TokenSet.
+ *
+ * The device-authorization request + the poll-response classification are
+ * shared with the {@link rfc8628DeviceFlow} adapter via `device-flow-shared`.
+ * This flow additionally sends `client_id` (+ optional `client_secret`) on the
+ * poll, which is why it builds its own poll body.
  */
 export async function runDeviceCodeFlow(opts: DeviceFlowOptions): Promise<TokenSet> {
-  const deviceBody = new URLSearchParams();
-  deviceBody.set('client_id', opts.clientId);
-  deviceBody.set('scope', opts.scopes.join(' '));
-  const deviceRes = await fetch(opts.deviceUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
-    body: deviceBody.toString(),
+  const auth = await requestDeviceAuthorization({
+    deviceUrl: opts.deviceUrl,
+    clientId: opts.clientId,
+    scopes: opts.scopes,
+    ...(opts.signal ? { signal: opts.signal } : {}),
   });
-  if (!deviceRes.ok) {
-    const text = await deviceRes.text().catch(() => '');
-    throw (
-      classifyHttpStatus(deviceRes.status, { url: opts.deviceUrl, body: text }) ??
-      new MoxxyError({
-        code: 'AUTH_INVALID',
-        message: `device-code request failed (HTTP ${deviceRes.status}): ${text.slice(0, 300)}`,
-        context: { status: deviceRes.status, url: opts.deviceUrl },
-      })
-    );
-  }
-  const deviceJson = (await deviceRes.json()) as Record<string, unknown>;
-  const deviceCode = typeof deviceJson.device_code === 'string' ? deviceJson.device_code : null;
-  const userCode = typeof deviceJson.user_code === 'string' ? deviceJson.user_code : null;
-  const verificationUri =
-    typeof deviceJson.verification_uri === 'string'
-      ? deviceJson.verification_uri
-      : typeof deviceJson.verification_url === 'string'
-        ? deviceJson.verification_url
-        : null;
-  const verificationUriComplete =
-    typeof deviceJson.verification_uri_complete === 'string'
-      ? deviceJson.verification_uri_complete
-      : undefined;
-  const expiresIn = typeof deviceJson.expires_in === 'number' ? deviceJson.expires_in : 600;
-  const interval = typeof deviceJson.interval === 'number' ? deviceJson.interval : 5;
-  if (!deviceCode || !userCode || !verificationUri) {
-    throw new MoxxyError({
-      code: 'PROVIDER_UNKNOWN_RESPONSE',
-      message: `device-code response missing required fields: ${JSON.stringify(deviceJson).slice(0, 200)}`,
-    });
-  }
 
   opts.onPrompt({
-    userCode,
-    verificationUri,
-    ...(verificationUriComplete ? { verificationUriComplete } : {}),
-    expiresIn,
-    interval,
+    userCode: auth.userCode,
+    verificationUri: auth.verificationUri,
+    ...(auth.verificationUriComplete ? { verificationUriComplete: auth.verificationUriComplete } : {}),
+    expiresIn: auth.expiresInSec,
+    interval: auth.intervalSec,
   });
 
-  return pollUntil((state) => pollOnce(opts, deviceCode, state), {
-    intervalMs: interval * 1000 + DEVICE_POLL_SAFETY_MARGIN_MS,
-    timeoutMs: Math.min(opts.timeoutMs ?? expiresIn * 1000, expiresIn * 1000),
+  return pollUntil((state) => pollOnce(opts, auth.deviceCode, state), {
+    intervalMs: auth.intervalSec * 1000 + DEVICE_POLL_SAFETY_MARGIN_MS,
+    timeoutMs: Math.min(opts.timeoutMs ?? auth.expiresInSec * 1000, auth.expiresInSec * 1000),
     label: 'OAuth device flow',
     leadingWait: true,
     ...(opts.signal ? { signal: opts.signal } : {}),
@@ -101,33 +71,5 @@ async function pollOnce(
     body: body.toString(),
   });
   const pollJson = (await pollRes.json().catch(() => ({}))) as Record<string, unknown>;
-  if (pollRes.ok && typeof pollJson.access_token === 'string') {
-    return { done: parseTokenResponse(pollJson) };
-  }
-  const err = typeof pollJson.error === 'string' ? pollJson.error : `HTTP ${pollRes.status}`;
-  if (err === 'authorization_pending') return { pending: true };
-  if (err === 'slow_down') {
-    state.intervalMs += 5000;
-    return { pending: true };
-  }
-  if (err === 'access_denied') {
-    throw new MoxxyError({
-      code: 'OAUTH_FLOW_DENIED',
-      message: 'You declined the device authorization.',
-      hint: 'Re-run the login command and approve the consent screen on your browser device.',
-    });
-  }
-  if (err === 'expired_token') {
-    throw new MoxxyError({
-      code: 'OAUTH_FLOW_TIMEOUT',
-      message: 'The device code expired before you finished signing in.',
-      hint: 'Re-run the login command — a new code will be generated.',
-    });
-  }
-  const desc = typeof pollJson.error_description === 'string' ? pollJson.error_description : '';
-  throw new MoxxyError({
-    code: 'AUTH_INVALID',
-    message: `OAuth device flow failed: ${err}${desc ? ` — ${desc}` : ''}.`,
-    context: { provider_error: String(err), ...(desc ? { description: desc } : {}) },
-  });
+  return classifyDeviceTokenResponse(pollRes, pollJson, state);
 }
