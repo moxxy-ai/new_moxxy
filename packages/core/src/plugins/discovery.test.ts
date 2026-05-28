@@ -56,6 +56,23 @@ describe('discoverPlugins + createPluginLoader (end-to-end)', () => {
     expect(plugin.version).toBe('1.2.3');
   });
 
+  it('stamps the package.json version over a hardcoded definePlugin literal', async () => {
+    const pkgRoot = path.join(cwd, 'node_modules', '@acme', 'mox-thing');
+    // package.json version is 1.2.3 (makePkg), but the entry hardcodes 0.0.0 —
+    // the placeholder plugin authors leave in definePlugin. The loader must
+    // report the package version, not the literal.
+    await makePkg(pkgRoot, {
+      name: '@acme/mox-thing',
+      entry: 'index.mjs',
+      entryContent: `export default Object.freeze({ __moxxy: 'plugin', name: '@acme/mox-thing', version: '0.0.0', tools: [] });\n`,
+    });
+
+    const manifests = await discoverPlugins({ cwd, logger: silentLogger });
+    const ours = manifests.find((m) => m.packageName === '@acme/mox-thing');
+    const plugin = await createPluginLoader({ cwd }).load(ours!);
+    expect(plugin.version).toBe('1.2.3');
+  });
+
   it('ignores packages without a moxxy.plugin manifest', async () => {
     const pkgRoot = path.join(cwd, 'node_modules', 'plain-pkg');
     await fs.mkdir(pkgRoot, { recursive: true });

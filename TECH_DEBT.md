@@ -57,12 +57,14 @@ non-RFC-8628 protocol (two-step authorization_code exchange) and correctly stays
 
 ## P2 — Medium
 
-### 4. Plugin `version` literals are hardcoded and wrong
-**Cross-cut 2.9.** ~30 packages hardcode `definePlugin({ version: '0.0.0' })` while `package.json` is
-`0.0.1`; two say `'1.2.3'`/`'1.0.0'`. The runtime-reported version is meaningless.
-**Action (pick one, apply uniformly):** have `PluginLoader` stamp `spec.version` from the package
-manifest it already reads, then drop the literals; or inject the version at build time. Touches core
-loader semantics — a deliberate decision, not a per-package edit.
+### 4. Plugin `version` literals are hardcoded and wrong — ✅ DONE (discovered/installed path)
+**Cross-cut 2.9.** `PluginLoader.load` now stamps the manifest's `packageVersion` over the
+hardcoded `definePlugin` literal, so discovered/installed plugins (the ones `moxxy plugins list`
+shows) report their real `package.json` version (+regression test in `discovery.test.ts`). The
+~30 placeholder literals are now ignored on that path — they need not be maintained.
+**Remaining (minor):** bundled plugins registered directly via `registerStatic` (no manifest at
+register time) still carry their literal. Harmless — they're the framework's own packages; their
+"version" is the framework version. Could stamp from a known framework version if it ever matters.
 
 ### 5. `moxxy.plugin` manifest `kind` is semantically wrong for non-plugin packages
 **Cross-cut 2.10.** Both embedders declare `kind: 'tools'` but export no `definePlugin` (they're

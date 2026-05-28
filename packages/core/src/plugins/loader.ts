@@ -50,6 +50,13 @@ export function createPluginLoader(opts: JitiLoaderOptions): PluginLoader {
           `Plugin entry did not export a valid Plugin (default export with __moxxy === 'plugin'): ${entry}`,
         );
       }
+      // The runtime-reported version is the package.json version — the single
+      // source of truth. Plugin authors hardcode a placeholder `version` in
+      // definePlugin (commonly '0.0.0'), so stamp the manifest's packageVersion
+      // here; otherwise `moxxy plugins list` and PluginRegisteredEvent lie.
+      if (manifest.packageVersion && plugin.version !== manifest.packageVersion) {
+        return Object.freeze({ ...plugin, version: manifest.packageVersion });
+      }
       return plugin;
     },
   };
