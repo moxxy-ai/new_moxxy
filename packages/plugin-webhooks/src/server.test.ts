@@ -13,10 +13,24 @@ interface FiredCall {
 }
 
 function pickPort(): number {
-  // Ephemeral range; rerunning the suite in parallel won't collide because
-  // OS-assigned bind happens via 0, but we want a deterministic test path.
-  // Using 0 lets the OS pick — we read the bound port off the server.
+  // 0 → OS-assigned ephemeral port; we read the actual bound port off the
+  // server. Never a fixed port, so parallel runs can't collide.
   return 0;
+}
+
+/**
+ * Poll `pred` until true (or time out). Used instead of a fixed `setTimeout`
+ * sleep to wait on the fire-and-forget dispatcher — a fixed delay races under
+ * parallel test load and was the source of this suite's flakiness.
+ */
+async function waitUntil(pred: () => boolean, timeoutMs = 2000): Promise<void> {
+  const start = Date.now();
+  while (!pred()) {
+    if (Date.now() - start > timeoutMs) {
+      throw new Error(`waitUntil: condition not met within ${timeoutMs}ms`);
+    }
+    await new Promise((r) => setTimeout(r, 5));
+  }
 }
 
 describe('WebhookServer', () => {
@@ -151,8 +165,9 @@ describe('WebhookServer', () => {
       body,
     });
     expect(res.status).toBe(202);
-    // Give the fire-and-forget dispatcher a moment to settle.
-    await new Promise((r) => setTimeout(r, 50));
+    // Wait deterministically for the fire-and-forget dispatcher to record the
+    // outcome (polls until present rather than guessing a fixed delay).
+    await waitUntil(() => fired.length >= 1);
     expect(fired).toHaveLength(1);
     expect(fired[0]!.outcome.ok).toBe(true);
     expect(fired[0]!.outcome.text).toContain('ran with prompt: New event: issues');
