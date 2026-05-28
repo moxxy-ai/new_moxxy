@@ -28,6 +28,7 @@ import { AgentRegistry } from './registries/agents.js';
 import { CommandRegistry } from './registries/commands.js';
 import { TranscriberRegistry } from './registries/transcribers.js';
 import { EmbedderRegistry } from './registries/embedders.js';
+import { IsolatorRegistry } from './registries/isolators.js';
 import { RequirementRegistry } from './requirements.js';
 import { PermissionEngine } from './permissions/engine.js';
 import { autoAllowResolver } from './permissions/resolvers.js';
@@ -92,6 +93,7 @@ export class Session implements ClientSession, SessionRuntime {
   readonly commands: CommandRegistry;
   readonly transcribers: TranscriberRegistry;
   readonly embedders: EmbedderRegistry;
+  readonly isolators: IsolatorRegistry;
   readonly requirements: RequirementRegistry;
   readonly permissions: PermissionEngine;
   /** Current PermissionResolver. Update via `setPermissionResolver(r)`. */
@@ -149,6 +151,7 @@ export class Session implements ClientSession, SessionRuntime {
     this.commands = new CommandRegistry();
     this.transcribers = new TranscriberRegistry();
     this.embedders = new EmbedderRegistry();
+    this.isolators = new IsolatorRegistry();
     this.requirements = new RequirementRegistry({
       tools: this.tools,
       providers: this.providers,
@@ -189,6 +192,7 @@ export class Session implements ClientSession, SessionRuntime {
       commands: this.commands,
       transcribers: this.transcribers,
       embedders: this.embedders,
+      isolators: this.isolators,
       requirements: this.requirements,
       dispatcher: this.dispatcher,
       loader: opts.pluginLoader,

@@ -116,6 +116,13 @@ export async function setupSessionWithConfig(opts: SetupOptions): Promise<SetupR
   // the configured embedder onto session.embedders; memory reads it lazily.
   await selectEmbedder(session, rawConfig.embeddings, logger);
 
+  // Bridge plugin-contributed isolators (from discovered `kind: 'isolator'`
+  // plugins) into the security layer's registry, BEFORE its onInit wraps tools.
+  // Opt-in only: registering an isolator never activates it — the user still
+  // selects one by name via `security.isolator`, so a discovered isolator can't
+  // silently become the sandbox boundary.
+  for (const iso of session.isolators.list()) security.registry.register(iso);
+
   const { credentialResolver } = await activateProvider({
     session,
     config,

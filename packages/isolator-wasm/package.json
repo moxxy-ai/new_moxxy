@@ -22,6 +22,12 @@
     "test": "vitest run",
     "clean": "rm -rf dist .turbo"
   },
+  "moxxy": {
+    "plugin": {
+      "entry": "./dist/index.js",
+      "kind": "isolator"
+    }
+  },
   "dependencies": {
     "@moxxy/sdk": "workspace:*",
     "@moxxy/plugin-security": "workspace:*"

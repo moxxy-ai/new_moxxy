@@ -1,5 +1,5 @@
 import { Worker } from 'node:worker_threads';
-import type { Isolator } from '@moxxy/sdk';
+import { definePlugin, type Isolator, type Plugin } from '@moxxy/sdk';
 import {
   checkAllCaps,
   handleBrokerRequest,
@@ -304,6 +304,16 @@ export function createWorkerIsolator(opts: WorkerIsolatorOptions = {}): Isolator
 
 /** Default singleton. Use `createWorkerIsolator({...})` to tune limits. */
 export const workerIsolator: Isolator = createWorkerIsolator();
+
+/**
+ * Auto-discovery entry: a user-installed copy registers the isolator via
+ * `PluginSpec.isolators`. Inert until opted into with `security.isolator: 'worker'`.
+ */
+const plugin: Plugin = definePlugin({
+  name: '@moxxy/isolator-worker',
+  isolators: [workerIsolator],
+});
+export default plugin;
 
 // Re-export broker types from plugin-security for convenience.
 export {

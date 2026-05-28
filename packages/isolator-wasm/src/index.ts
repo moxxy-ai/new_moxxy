@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { Buffer } from 'node:buffer';
 import * as path from 'node:path';
-import type { CapabilitySpec, IsolatedToolCall, Isolator } from '@moxxy/sdk';
+import { definePlugin, type CapabilitySpec, type IsolatedToolCall, type Isolator, type Plugin } from '@moxxy/sdk';
 import { checkAllCaps, pathInScope, buildBrokerEnv } from '@moxxy/plugin-security';
 
 /**
@@ -489,3 +489,13 @@ export async function fetchWasmBytes(url: string): Promise<Uint8Array> {
 
 /** Default singleton. Use `createWasmIsolator({...})` to tune. */
 export const wasmIsolator: Isolator = createWasmIsolator();
+
+/**
+ * Auto-discovery entry: a user-installed copy registers the isolator via
+ * `PluginSpec.isolators`. Inert until opted into with `security.isolator: 'wasm'`.
+ */
+const plugin: Plugin = definePlugin({
+  name: '@moxxy/isolator-wasm',
+  isolators: [wasmIsolator],
+});
+export default plugin;

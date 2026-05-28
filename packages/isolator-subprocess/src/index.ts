@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import type { Isolator } from '@moxxy/sdk';
+import { definePlugin, type Isolator, type Plugin } from '@moxxy/sdk';
 import {
   checkAllCaps,
   handleBrokerRequest,
@@ -343,3 +343,13 @@ export function createSubprocessIsolator(opts: SubprocessIsolatorOptions = {}): 
 
 /** Default singleton. Use `createSubprocessIsolator({...})` to tune. */
 export const subprocessIsolator: Isolator = createSubprocessIsolator();
+
+/**
+ * Auto-discovery entry: a user-installed copy registers the isolator via
+ * `PluginSpec.isolators`. Inert until opted into with `security.isolator: 'subprocess'`.
+ */
+const plugin: Plugin = definePlugin({
+  name: '@moxxy/isolator-subprocess',
+  isolators: [subprocessIsolator],
+});
+export default plugin;

@@ -66,7 +66,7 @@ shows) report their real `package.json` version (+regression test in `discovery.
 register time) still carry their literal. Harmless — they're the framework's own packages; their
 "version" is the framework version. Could stamp from a known framework version if it ever matters.
 
-### 5. Make embedders & isolators first-class swappable blocks — ⚠️ EMBEDDERS DONE, ISOLATORS NEXT
+### 5. Make embedders & isolators first-class swappable blocks — ✅ DONE
 **Cross-cut 2.10 + user decision (make them exchangeable, not hardcoded).** The earlier "removed the
 vestigial manifest" change was superseded — instead of cementing them as hardcoded, both are being
 promoted to first-class contributable, registry-backed, swappable blocks.
@@ -82,11 +82,14 @@ CLI's `selectEmbedder` activates the configured one from the registry by name (l
 bundled first-party ones on demand so onnx still loads only when selected). A user can now install a
 custom `kind: 'embedder'` plugin and pick it via `embeddings.provider: '<name>'`.
 
-**Isolators — NEXT:** mirror the above. `Isolator` already lives in `@moxxy/sdk`; `PluginSpec.isolators`
-is already added. Remaining: bridge `PluginSpec.isolators` into `plugin-security`'s `IsolatorRegistry`
-(via the host/session) and restore the isolator manifests with `kind: 'isolator'`, keeping the
-opt-in-by-`security.isolator` semantics so a discovered isolator is NEVER auto-activated as the
-sandbox boundary.
+**Isolators — ✅ DONE:** added a core `IsolatorRegistry` (a plain collection — exported as
+`ContributedIsolatorRegistry`) populated by `PluginSpec.isolators` via host wiring, exposed as
+`session.isolators` (+registry test). After plugin discovery and BEFORE the security layer's `onInit`
+wraps tools, the CLI bridges `session.isolators` into `plugin-security`'s `IsolatorRegistry`. The
+three first-party isolators now contribute their `Isolator` + ship a discovery `definePlugin` entry +
+`kind: 'isolator'` manifest. Selection stays config-driven (`security.isolator`): a contributed
+isolator is registered-but-inert and never auto-activated, so installing one can't silently weaken
+the sandbox. A user can install a custom `kind: 'isolator'` plugin and opt in by name.
 
 ### 6. Add a tool/platform `MoxxyErrorCode`
 Flagged by the tools-builtin and computer-control fix agents (see Blocked §B2). `MoxxyErrorCode` is a
