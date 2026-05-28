@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState, type KeyboardEvent } from 'react';
+import { useVoiceRecorder } from '@/lib/voice';
 
 interface ComposerProps {
   readonly ready: boolean;
@@ -19,8 +20,26 @@ export function Composer({
 }: ComposerProps): JSX.Element {
   const [draft, setDraft] = useState('');
   const taRef = useRef<HTMLTextAreaElement>(null);
+  const voice = useVoiceRecorder();
   const disabled = !ready || activeTurnId !== null;
   const canSubmit = !disabled && draft.trim().length > 0;
+
+  const toggleMic = useCallback(async () => {
+    if (voice.state === 'recording') {
+      const text = await voice.stop();
+      if (text) {
+        // Append a space so the user can keep typing after a partial
+        // dictation without manual cursor placement.
+        setDraft((d) => (d ? `${d.replace(/\s+$/, '')} ${text}` : text));
+        // Focus the textarea so they can hit ⌘↵ immediately.
+        taRef.current?.focus();
+      }
+      return;
+    }
+    if (voice.state === 'idle') {
+      await voice.start();
+    }
+  }, [voice]);
 
   const submit = useCallback(() => {
     if (!canSubmit) return;
@@ -108,6 +127,31 @@ export function Composer({
           <span>⌘↵ to send · Esc to clear · Shift+↵ for newline</span>
         </div>
       </div>
+      <button
+        type="button"
+        data-testid="composer-mic"
+        data-state={voice.state}
+        aria-label={
+          voice.state === 'recording' ? 'stop recording' : 'start recording'
+        }
+        onClick={() => void toggleMic()}
+        disabled={disabled || voice.state === 'transcribing'}
+        style={{
+          padding: '0.5rem 0.6rem',
+          fontSize: '1rem',
+          color:
+            voice.state === 'recording'
+              ? 'var(--color-pink)'
+              : 'var(--color-text-dim)',
+          background: 'transparent',
+          border: '1px solid var(--color-border)',
+          borderRadius: 'var(--radius-block)',
+          opacity:
+            disabled || voice.state === 'transcribing' ? 0.4 : 1,
+        }}
+      >
+        {voice.state === 'recording' ? '⏹' : voice.state === 'transcribing' ? '…' : '🎤'}
+      </button>
       {activeTurnId === null ? (
         <button
           type="submit"

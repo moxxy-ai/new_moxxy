@@ -41,3 +41,20 @@ if (typeof navigator !== 'undefined' && navigator.mediaDevices === undefined) {
     },
   });
 }
+
+// jsdom's Blob misses `arrayBuffer()` in some versions; polyfill via
+// FileReader so the voice recorder's encoder path works in tests.
+if (
+  typeof Blob !== 'undefined' &&
+  typeof (Blob.prototype as { arrayBuffer?: unknown }).arrayBuffer !== 'function'
+) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (Blob.prototype as any).arrayBuffer = function arrayBuffer(): Promise<ArrayBuffer> {
+    return new Promise<ArrayBuffer>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsArrayBuffer(this as unknown as Blob);
+    });
+  };
+}

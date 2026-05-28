@@ -1,7 +1,14 @@
-import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Composer } from './composer';
+import { mockTauri } from '@/__mocks__/tauri';
+
+vi.mock('@/lib/tauri', () => import('@/__mocks__/tauri'));
+
+beforeEach(() => {
+  mockTauri.reset();
+});
 
 describe('<Composer />', () => {
   it('disables Send when not ready', () => {
@@ -117,5 +124,42 @@ describe('<Composer />', () => {
     const input = screen.getByTestId('composer-input');
     await userEvent.type(input, 'hello');
     expect(screen.getByTestId('composer-hint')).toHaveTextContent('5 chars');
+  });
+
+  it('mic button starts and stops a recording, appending the transcript', async () => {
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: {
+        getUserMedia: () =>
+          Promise.resolve({
+            getTracks: () => [{ stop: () => {} }],
+          } as unknown as MediaStream),
+      },
+    });
+    mockTauri.respond('transcribe', () => ({ text: 'dictated text' }));
+
+    render(
+      <Composer
+        ready
+        activeTurnId={null}
+        onSend={() => {}}
+        onAbort={() => {}}
+      />,
+    );
+    const mic = screen.getByTestId('composer-mic');
+    expect(mic).toHaveAttribute('data-state', 'idle');
+
+    await userEvent.click(mic);
+    await waitFor(() =>
+      expect(screen.getByTestId('composer-mic')).toHaveAttribute(
+        'data-state',
+        'recording',
+      ),
+    );
+
+    await userEvent.click(screen.getByTestId('composer-mic'));
+    await waitFor(() =>
+      expect(screen.getByTestId('composer-input')).toHaveValue('dictated text'),
+    );
   });
 });

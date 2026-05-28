@@ -227,6 +227,35 @@ impl RunnerBridge {
         Ok(self.inner.peer.request("runTurn", params).await?)
     }
 
+    /// Transcribe audio via the runner's active transcriber plugin.
+    /// Audio crosses Tauri IPC as base64 already (cheapest format the
+    /// webview can produce from a Blob), so we forward the same shape
+    /// onwards to the runner without a re-encode. The result is the
+    /// runner's `TranscriptionResult` shape — opaque JSON to us.
+    pub async fn transcribe(
+        &self,
+        audio_b64: String,
+        mime_type: Option<String>,
+    ) -> BridgeResult<Value> {
+        #[derive(Serialize)]
+        struct Args {
+            audio: String,
+            #[serde(rename = "mimeType", skip_serializing_if = "Option::is_none")]
+            mime_type: Option<String>,
+        }
+        Ok(self
+            .inner
+            .peer
+            .request(
+                "transcribe",
+                Args {
+                    audio: audio_b64,
+                    mime_type,
+                },
+            )
+            .await?)
+    }
+
     /// Abort a turn by id. Best-effort; returns `Ok` even if the runner
     /// has already moved on.
     pub async fn abort_turn(&self, turn_id: impl Into<String>) -> BridgeResult<()> {
@@ -549,6 +578,61 @@ mod tests {
         deadline("abort", bridge.abort_turn("T-42")).await.unwrap();
         let observed = deadline("sentinel", sentinel_rx.recv()).await.unwrap();
         assert_eq!(observed, "T-42");
+    }
+
+    #[tokio::test]
+    async fn transcribe_round_trips_audio_through_the_peer() {
+        let (transport, server) = PairedTransport::paired();
+        let (sentinel_tx, mut sentinel_rx) =
+            tokio::sync::mpsc::unbounded_channel::<(String, String)>();
+        tokio::spawn(run_fake_runner(server, move |frame, outbox| {
+            let id = frame["id"].as_u64().unwrap();
+            match frame["method"].as_str().unwrap() {
+                "attach" => {
+                    outbox.push(json!({
+                        "id": id,
+                        "result": {
+                            "sessionId": "sess-1",
+                            "protocolVersion": RUNNER_PROTOCOL_VERSION,
+                            "info": {}
+                        }
+                    }));
+                    false
+                }
+                "transcribe" => {
+                    let audio = frame["params"]["audio"].as_str().unwrap().to_string();
+                    let mime = frame["params"]["mimeType"]
+                        .as_str()
+                        .unwrap_or("")
+                        .to_string();
+                    let _ = sentinel_tx.send((audio, mime));
+                    outbox.push(json!({
+                        "id": id,
+                        "result": { "text": "hello world", "language": "en" }
+                    }));
+                    true
+                }
+                other => panic!("unexpected method {other}"),
+            }
+        }));
+
+        let (bridge, _rx) = deadline(
+            "connect",
+            RunnerBridge::connect(Arc::new(transport), "desktop"),
+        )
+        .await
+        .unwrap();
+        let result = deadline(
+            "transcribe",
+            bridge.transcribe("YWFh".into(), Some("audio/webm".into())),
+        )
+        .await
+        .unwrap();
+        assert_eq!(result["text"], "hello world");
+
+        let (audio, mime) = deadline("sentinel", sentinel_rx.recv()).await.unwrap();
+        assert_eq!(audio, "YWFh");
+        assert_eq!(mime, "audio/webm");
     }
 
     #[tokio::test]

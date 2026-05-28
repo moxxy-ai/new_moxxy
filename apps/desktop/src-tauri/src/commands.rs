@@ -101,6 +101,23 @@ pub async fn runner_ready(state: State<'_, AppState>) -> Result<bool, String> {
     Ok(guard.is_some())
 }
 
+/// Forward an already-base64-encoded audio blob to the runner's
+/// transcribe RPC. The JS side captures via MediaRecorder, encodes once,
+/// passes the string here; we forward without re-encoding so the audio
+/// crosses both IPC hops as the same compact format.
+#[tauri::command]
+pub async fn transcribe(
+    state: State<'_, AppState>,
+    audio_b64: String,
+    mime_type: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let bridge = clone_bridge(&state).await?;
+    bridge
+        .transcribe(audio_b64, mime_type)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 /// Open the native folder picker. Returns the absolute path the user
 /// chose, or `None` if they cancelled. Used by the "new desk" flow.
 /// The picker runs as a callback (Tauri's dialog API isn't `Future`-

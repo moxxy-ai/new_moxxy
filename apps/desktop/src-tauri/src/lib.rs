@@ -58,6 +58,7 @@ pub fn run() {
             commands::run_turn,
             commands::abort_turn,
             commands::runner_ready,
+            commands::transcribe,
             commands::desks_pick_folder,
         ])
         .run(tauri::generate_context!())
