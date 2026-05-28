@@ -1,26 +1,23 @@
 //! Startup orchestration. Spawns a background task that:
 //!
-//!   1. Boots the sidecar (`moxxy serve`).
-//!   2. Polls the transport until the runner socket accepts a connection
-//!      — or gives up after a timeout if the sidecar never came up.
-//!   3. Connects the [`RunnerBridge`], stashes it in `AppState`, and
-//!      pumps the bridge's broadcast events out as Tauri events.
-//!
-//! All of this lives off the main thread so the window opens immediately
-//! and shows a "starting runner…" state while connect is in flight.
-//! Failures emit a `runner.error` event the UI can surface.
+//!   1. Spawns the primary runner via the [`RunnerPool`].
+//!   2. Polls the runner's socket until it accepts a connection — or
+//!      gives up after a timeout.
+//!   3. Connects a [`RunnerBridge`], stashes it in the
+//!      [`BridgeRegistry`], pins the main window to the runner.
+//!   4. Pumps the bridge's broadcast events out as Tauri events
+//!      addressed to the main window.
 
-use std::sync::Arc;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Runtime};
 
+use moxxy_desktop_core::pool::RunnerKind;
 use moxxy_desktop_core::runner_bridge::{BridgeEvent, RunnerBridge};
-use moxxy_desktop_core::transport::{is_runner_up, RunnerTransport};
+use moxxy_desktop_core::transport::is_runner_up;
+use moxxy_desktop_core::windows::WindowId;
 
 use crate::app_state::AppState;
 
-/// Names of the Tauri events the UI listens to. Stable wire contract; do
-/// not rename without coordinating with the TS hooks.
 pub mod events {
     pub const SIDECAR_STATUS: &str = "sidecar.status";
     pub const RUNNER_READY: &str = "runner.ready";
@@ -31,14 +28,9 @@ pub mod events {
     pub const RUNNER_ERROR: &str = "runner.error";
 }
 
-/// Maximum time we'll wait for the runner socket to become connectable
-/// before we give up and emit `runner.error`. The actual runner usually
-/// binds in <500ms.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
 const POLL_INTERVAL: Duration = Duration::from_millis(120);
 
-/// Spawn the boot task. Call once from `setup()` after `AppState` is
-/// managed. Returns immediately; the work happens in the background.
 pub fn spawn<R: Runtime>(app: AppHandle<R>, state: AppState) {
     tauri::async_runtime::spawn(async move {
         if let Err(e) = run(app.clone(), state).await {
@@ -49,19 +41,18 @@ pub fn spawn<R: Runtime>(app: AppHandle<R>, state: AppState) {
 }
 
 async fn run<R: Runtime>(app: AppHandle<R>, state: AppState) -> Result<(), BootError> {
-    // 1. Start the sidecar.
-    state
-        .sidecar
-        .start()
+    // 1. Spawn the primary runner.
+    let handle = state
+        .pool
+        .spawn(RunnerKind::Primary)
         .await
         .map_err(|e| BootError::Sidecar(e.to_string()))?;
-    let _ = app.emit(events::SIDECAR_STATUS, state.sidecar.status());
+    let _ = app.emit(events::SIDECAR_STATUS, handle.status());
 
-    // 2. Wait until the runner socket accepts connections.
-    let transport: Arc<dyn RunnerTransport> = Arc::clone(&state.transport);
+    // 2. Wait until the socket accepts connections.
     let deadline = tokio::time::Instant::now() + CONNECT_TIMEOUT;
     loop {
-        if is_runner_up(transport.as_ref()).await {
+        if is_runner_up(handle.transport.as_ref()).await {
             break;
         }
         if tokio::time::Instant::now() >= deadline {
@@ -70,36 +61,37 @@ async fn run<R: Runtime>(app: AppHandle<R>, state: AppState) -> Result<(), BootE
         tokio::time::sleep(POLL_INTERVAL).await;
     }
 
-    // 3. Connect the bridge. The initial receiver predates attach so the
-    // runner's history replay lands on us, not the floor.
-    let (bridge, mut events_rx) = RunnerBridge::connect(transport, "desktop")
+    // 3. Connect and stash the bridge; pin the main window.
+    let (bridge, mut events_rx) = RunnerBridge::connect(handle.transport.clone(), "desktop")
         .await
         .map_err(|e| BootError::Connect(e.to_string()))?;
-
-    {
-        let mut slot = state.bridge.lock().await;
-        *slot = Some(bridge);
-    }
+    state.bridges.insert(handle.id.clone(), bridge);
+    state
+        .pin_window(WindowId::main(), handle.id.clone())
+        .await
+        .map_err(|e| BootError::Connect(format!("pin window: {e}")))?;
     let _ = app.emit(events::RUNNER_READY, true);
 
-    // 4. Pump events. Stays alive until either the broadcast channel
-    // closes (bridge dropped) or the recv loop is cancelled (app exit).
+    // 4. Pump events into the main window's event stream.
+    let main = WindowId::main();
     while let Ok(event) = events_rx.recv().await {
+        let label = main.as_str();
         match event {
             BridgeEvent::Event { event } => {
-                let _ = app.emit(events::RUNNER_EVENT, event);
+                let _ = app.emit_to(label, events::RUNNER_EVENT, event);
             }
             BridgeEvent::TurnComplete { turn_id, error } => {
-                let _ = app.emit(
+                let _ = app.emit_to(
+                    label,
                     events::RUNNER_TURN_COMPLETE,
                     serde_json::json!({ "turnId": turn_id, "error": error }),
                 );
             }
             BridgeEvent::InfoChanged { info } => {
-                let _ = app.emit(events::RUNNER_INFO_CHANGED, info);
+                let _ = app.emit_to(label, events::RUNNER_INFO_CHANGED, info);
             }
             BridgeEvent::Lagged { count } => {
-                let _ = app.emit(events::RUNNER_LAGGED, count);
+                let _ = app.emit_to(label, events::RUNNER_LAGGED, count);
             }
         }
     }

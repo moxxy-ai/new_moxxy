@@ -8,12 +8,22 @@ use tauri_plugin_dialog::DialogExt;
 use crate::app_state::AppState;
 use moxxy_desktop_core::desks::{Desk, DeskId};
 use moxxy_desktop_core::error::AppResult;
-use moxxy_desktop_core::runner_bridge::RunTurnParams;
+use moxxy_desktop_core::runner_bridge::{RunTurnParams, RunnerBridge};
 use moxxy_desktop_core::sidecar::SidecarStatus;
+use moxxy_desktop_core::windows::WindowId;
 
 #[tauri::command]
 pub fn sidecar_status(state: State<'_, AppState>) -> SidecarStatus {
-    state.sidecar.status()
+    // Coarse, primary-only status. Multi-runner detail is exposed via
+    // a dedicated `runners_list` command for the future debug panel.
+    let primary = state
+        .pool
+        .list()
+        .into_iter()
+        .find(|h| h.kind == moxxy_desktop_core::pool::RunnerKind::Primary);
+    primary
+        .map(|h| h.sidecar.status())
+        .unwrap_or(SidecarStatus::Starting)
 }
 
 #[tauri::command]
@@ -43,36 +53,40 @@ pub async fn desks_active(state: State<'_, AppState>) -> AppResult<Option<DeskId
     state.desks.active().await
 }
 
-/// Args for `run_turn`. Kept distinct from the core `RunTurnParams` so we
-/// can add IPC-only fields (e.g. window id, attachments by path) without
-/// touching the wire-facing struct.
+/// Args for `run_turn`. `window` lets a parallel-session window route
+/// its turn through its own runner; absent = the main window's runner.
 #[derive(Debug, Deserialize)]
 pub struct RunTurnArgs {
     pub prompt: String,
     #[serde(default)]
     pub model: Option<String>,
+    #[serde(default)]
+    pub window: Option<String>,
 }
 
-/// Take an owned Arc<Mutex<_>> handle before awaiting on the lock —
-/// otherwise the lock future borrows from `State<'_, _>`, which isn't
-/// `'static` and Tauri command futures must be.
-async fn clone_bridge(
+/// Resolve the bridge for a window label, falling back to the main
+/// window's pinned runner.
+async fn bridge_for(
     state: &AppState,
-) -> Result<moxxy_desktop_core::runner_bridge::RunnerBridge, String> {
-    let slot = state.bridge.clone();
-    let guard = slot.lock().await;
-    guard
-        .as_ref()
-        .cloned()
+    window: Option<String>,
+) -> Result<RunnerBridge, String> {
+    let window_id = match window {
+        Some(raw) => WindowId::new(raw).map_err(|e| e.to_string())?,
+        None => WindowId::main(),
+    };
+    let runner_id = state
+        .runner_for_window(&window_id)
+        .await
+        .ok_or_else(|| "no runner pinned to this window".to_string())?;
+    state
+        .bridges
+        .get(&runner_id)
         .ok_or_else(|| "runner not connected — try again in a moment".to_string())
 }
 
-/// Issue a turn to the connected primary runner. Returns the turn id;
-/// events stream out as `runner.event` Tauri events from the fan-out
-/// task wired up in `lib.rs` at boot.
 #[tauri::command]
 pub async fn run_turn(state: State<'_, AppState>, args: RunTurnArgs) -> Result<String, String> {
-    let bridge = clone_bridge(&state).await?;
+    let bridge = bridge_for(&state, args.window).await?;
     let result = bridge
         .run_turn(RunTurnParams {
             prompt: args.prompt,
@@ -84,44 +98,45 @@ pub async fn run_turn(state: State<'_, AppState>, args: RunTurnArgs) -> Result<S
     Ok(result.turn_id)
 }
 
-/// Abort an in-flight turn by id.
 #[tauri::command]
-pub async fn abort_turn(state: State<'_, AppState>, turn_id: String) -> Result<(), String> {
-    let bridge = clone_bridge(&state).await?;
+pub async fn abort_turn(
+    state: State<'_, AppState>,
+    turn_id: String,
+    window: Option<String>,
+) -> Result<(), String> {
+    let bridge = bridge_for(&state, window).await?;
     bridge.abort_turn(turn_id).await.map_err(|e| e.to_string())
 }
 
-/// True once the runner is attached and `run_turn` is callable.
-/// Tauri requires async commands with reference inputs to return a
-/// `Result`; the `Err` arm is unused here in practice.
 #[tauri::command]
-pub async fn runner_ready(state: State<'_, AppState>) -> Result<bool, String> {
-    let slot = state.bridge.clone();
-    let guard = slot.lock().await;
-    Ok(guard.is_some())
+pub async fn runner_ready(
+    state: State<'_, AppState>,
+    window: Option<String>,
+) -> Result<bool, String> {
+    let window_id = match window {
+        Some(raw) => WindowId::new(raw).map_err(|e| e.to_string())?,
+        None => WindowId::main(),
+    };
+    Ok(match state.runner_for_window(&window_id).await {
+        Some(id) => state.bridges.contains(&id),
+        None => false,
+    })
 }
 
-/// Forward an already-base64-encoded audio blob to the runner's
-/// transcribe RPC. The JS side captures via MediaRecorder, encodes once,
-/// passes the string here; we forward without re-encoding so the audio
-/// crosses both IPC hops as the same compact format.
 #[tauri::command]
 pub async fn transcribe(
     state: State<'_, AppState>,
     audio_b64: String,
     mime_type: Option<String>,
+    window: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let bridge = clone_bridge(&state).await?;
+    let bridge = bridge_for(&state, window).await?;
     bridge
         .transcribe(audio_b64, mime_type)
         .await
         .map_err(|e| e.to_string())
 }
 
-/// Open the native folder picker. Returns the absolute path the user
-/// chose, or `None` if they cancelled. Used by the "new desk" flow.
-/// The picker runs as a callback (Tauri's dialog API isn't `Future`-
-/// shaped) so we bridge through a oneshot.
 #[tauri::command]
 pub async fn desks_pick_folder<R: Runtime>(app: AppHandle<R>) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::FilePath;
