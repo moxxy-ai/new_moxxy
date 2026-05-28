@@ -58,6 +58,7 @@ pub fn run() {
             commands::run_turn,
             commands::abort_turn,
             commands::runner_ready,
+            commands::desks_pick_folder,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

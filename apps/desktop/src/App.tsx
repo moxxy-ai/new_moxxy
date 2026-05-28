@@ -1,16 +1,20 @@
 import { useState } from 'react';
 import { useSidecarStatus } from './lib/runner';
 import { useRunnerSession, type Block } from './lib/runner-session';
+import { useDesks } from './lib/desks';
+import { DeskSidebar } from './desks/desk-sidebar';
 
 export function App(): JSX.Element {
   const status = useSidecarStatus();
   const session = useRunnerSession();
+  const desks = useDesks();
   const [theme] = useState<'dark' | 'light'>('dark');
 
   return (
     <div className="app-shell" data-theme={theme}>
       <aside className="app-sidebar">
         <SidebarHeader status={status} />
+        <DeskSidebar api={desks} />
       </aside>
       <main className="app-main bp-grid-fade">
         {session.blocks.length === 0 ? (

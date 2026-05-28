@@ -2,7 +2,8 @@
 //! capability traits owned by [`AppState`].
 
 use serde::Deserialize;
-use tauri::State;
+use tauri::{AppHandle, Runtime, State};
+use tauri_plugin_dialog::DialogExt;
 
 use crate::app_state::AppState;
 use moxxy_desktop_core::desks::{Desk, DeskId};
@@ -98,4 +99,22 @@ pub async fn runner_ready(state: State<'_, AppState>) -> Result<bool, String> {
     let slot = state.bridge.clone();
     let guard = slot.lock().await;
     Ok(guard.is_some())
+}
+
+/// Open the native folder picker. Returns the absolute path the user
+/// chose, or `None` if they cancelled. Used by the "new desk" flow.
+/// The picker runs as a callback (Tauri's dialog API isn't `Future`-
+/// shaped) so we bridge through a oneshot.
+#[tauri::command]
+pub async fn desks_pick_folder<R: Runtime>(app: AppHandle<R>) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::FilePath;
+    let (tx, rx) = tokio::sync::oneshot::channel::<Option<FilePath>>();
+    app.dialog()
+        .file()
+        .set_title("Choose a folder for this desk")
+        .pick_folder(move |selected| {
+            let _ = tx.send(selected);
+        });
+    let selected = rx.await.map_err(|e| format!("picker cancelled: {e}"))?;
+    Ok(selected.map(|p| p.to_string()))
 }
