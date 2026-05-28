@@ -1,11 +1,4 @@
-import {
-  collectProviderStream,
-  runCompactionIfNeeded,
-  runElisionIfNeeded,
-  usageEventFields,
-  type ModeContext,
-  type ProviderMessage,
-} from '@moxxy/sdk';
+import { runSingleShotTurn, type ModeContext, type ProviderMessage } from '@moxxy/sdk';
 
 import { SYNTHESIS_SYSTEM_PROMPT } from './constants.js';
 
@@ -18,9 +11,6 @@ export async function collectSynthesis(
   ctx: ModeContext,
   inputBody: string,
 ): Promise<string | null> {
-  await runCompactionIfNeeded(ctx);
-  await runElisionIfNeeded(ctx);
-
   const messages: ProviderMessage[] = [
     {
       role: 'system',
@@ -31,41 +21,5 @@ export async function collectSynthesis(
       content: [{ type: 'text', text: inputBody }],
     },
   ];
-
-  await ctx.emit({
-    type: 'provider_request',
-    sessionId: ctx.sessionId,
-    turnId: ctx.turnId,
-    source: 'system',
-    provider: ctx.provider.name,
-    model: ctx.model,
-  });
-
-  const { text, usage, error } = await collectProviderStream(ctx, messages, {
-    includeTools: false,
-    maxTokens: 4096,
-  });
-  if (error) {
-    await ctx.emit({
-      type: 'error',
-      sessionId: ctx.sessionId,
-      turnId: ctx.turnId,
-      source: 'system',
-      kind: error.retryable ? 'retryable' : 'fatal',
-      message: error.message,
-    });
-    return null;
-  }
-
-  await ctx.emit({
-    type: 'provider_response',
-    sessionId: ctx.sessionId,
-    turnId: ctx.turnId,
-    source: 'system',
-    provider: ctx.provider.name,
-    model: ctx.model,
-    ...usageEventFields(usage),
-  });
-
-  return text;
+  return runSingleShotTurn(ctx, messages, { maxTokens: 4096 });
 }

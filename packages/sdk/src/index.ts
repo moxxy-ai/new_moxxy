@@ -162,6 +162,7 @@ export {
 } from './errors.js';
 export {
   collectProviderStream,
+  runSingleShotTurn,
   projectMessagesFromLog,
   projectMessages,
   buildSystemPromptWithSkills,

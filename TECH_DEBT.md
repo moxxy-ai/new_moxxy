@@ -91,12 +91,13 @@ so they differ only in routing. (Deferred — larger refactor, lower payoff than
 contract entirely. **Action:** hoist a `spawnCliTunnel({cmd,args,urlRegex})` helper; make webhooks
 consume registered `TunnelProviderDef`s instead of its bespoke `tunnel.ts`.
 
-### 9. `runSingleShotTurn` mode-helper
-**Cross-cut 1.9.** The ~40-line `emit provider_request → collectProviderStream({includeTools:false})
-→ emit response/error` block is duplicated across `mode-deep-research` (twice), `mode-plan-execute`,
-`mode-bmad`. **Action:** add `runSingleShotTurn(ctx, messages, opts)` to SDK `mode-helpers` and
-collapse the phases onto it (also fixes deep-research's skipped `runElisionIfNeeded` in one place).
-Deferred because it changes mode event-emission and warrants its own focused review.
+### 9. `runSingleShotTurn` mode-helper — ✅ DONE
+**Cross-cut 1.9.** Added `runSingleShotTurn(ctx, messages, { maxTokens? })` to SDK `mode-helpers`
+(compaction + elision → `provider_request` → `collectProviderStream({ includeTools: false })` →
+`error`/`provider_response`). Collapsed all four duplicated blocks onto it: `mode-deep-research`
+query + synthesis, `mode-plan-execute` plan, `mode-bmad` collect. As a side effect the planner/collect
+turns now run `runElisionIfNeeded` like every other turn (the consistency the finding wanted). All
+mode suites green.
 
 ### 10. Finish MoxxyError adoption / HTTP-status classification
 **Cross-cut 1.7, 1.13, 2.6.** The clear user-facing throws were converted. Remaining: oauth

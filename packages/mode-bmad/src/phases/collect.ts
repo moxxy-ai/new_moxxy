@@ -1,9 +1,7 @@
 import {
   buildSystemPromptWithSkills,
-  collectProviderStream,
   projectMessages,
-  runCompactionIfNeeded,
-  usageEventFields,
+  runSingleShotTurn,
   type ModeContext,
   type ProviderMessage,
 } from '@moxxy/sdk';
@@ -21,45 +19,8 @@ export async function collectPhase(
   artifactsSoFar: Artifacts,
   redraftFeedback: string | null,
 ): Promise<string | null> {
-  await runCompactionIfNeeded(ctx);
   const messages = buildPhaseMessages(ctx, phase, artifactsSoFar, redraftFeedback);
-
-  await ctx.emit({
-    type: 'provider_request',
-    sessionId: ctx.sessionId,
-    turnId: ctx.turnId,
-    source: 'system',
-    provider: ctx.provider.name,
-    model: ctx.model,
-  });
-
-  const { text, usage, error } = await collectProviderStream(ctx, messages, {
-    includeTools: false,
-    maxTokens: phase.maxTokens,
-  });
-  if (error) {
-    await ctx.emit({
-      type: 'error',
-      sessionId: ctx.sessionId,
-      turnId: ctx.turnId,
-      source: 'system',
-      kind: error.retryable ? 'retryable' : 'fatal',
-      message: error.message,
-    });
-    return null;
-  }
-
-  await ctx.emit({
-    type: 'provider_response',
-    sessionId: ctx.sessionId,
-    turnId: ctx.turnId,
-    source: 'system',
-    provider: ctx.provider.name,
-    model: ctx.model,
-    ...usageEventFields(usage),
-  });
-
-  return text;
+  return runSingleShotTurn(ctx, messages, { maxTokens: phase.maxTokens });
 }
 
 function buildPhaseMessages(

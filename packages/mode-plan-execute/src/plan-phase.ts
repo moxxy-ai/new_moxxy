@@ -1,8 +1,6 @@
 import {
   buildSystemPromptWithSkills,
-  collectProviderStream,
-  runCompactionIfNeeded,
-  usageEventFields,
+  runSingleShotTurn,
   type ModeContext,
   type ProviderMessage,
 } from '@moxxy/sdk';
@@ -18,47 +16,8 @@ export async function collectPlan(
   ctx: ModeContext,
   redraftFeedback: string | null,
 ): Promise<string | null> {
-  await runCompactionIfNeeded(ctx);
   const messages = buildPlannerMessages(ctx, redraftFeedback);
-
-  await ctx.emit({
-    type: 'provider_request',
-    sessionId: ctx.sessionId,
-    turnId: ctx.turnId,
-    source: 'system',
-    provider: ctx.provider.name,
-    model: ctx.model,
-  });
-
-  // Route through the shared helper so the planner call gets the same caching,
-  // onBeforeProviderCall hook, and usage capture as every other provider call.
-  const { text, usage, error } = await collectProviderStream(ctx, messages, {
-    includeTools: false,
-    maxTokens: 1024,
-  });
-  if (error) {
-    await ctx.emit({
-      type: 'error',
-      sessionId: ctx.sessionId,
-      turnId: ctx.turnId,
-      source: 'system',
-      kind: error.retryable ? 'retryable' : 'fatal',
-      message: error.message,
-    });
-    return null;
-  }
-
-  await ctx.emit({
-    type: 'provider_response',
-    sessionId: ctx.sessionId,
-    turnId: ctx.turnId,
-    source: 'system',
-    provider: ctx.provider.name,
-    model: ctx.model,
-    ...usageEventFields(usage),
-  });
-
-  return text;
+  return runSingleShotTurn(ctx, messages, { maxTokens: 1024 });
 }
 
 function buildPlannerMessages(

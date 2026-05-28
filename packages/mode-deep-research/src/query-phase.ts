@@ -1,9 +1,6 @@
 import {
   buildSystemPromptWithSkills,
-  collectProviderStream,
-  runCompactionIfNeeded,
-  runElisionIfNeeded,
-  usageEventFields,
+  runSingleShotTurn,
   type ModeContext,
   type ProviderMessage,
 } from '@moxxy/sdk';
@@ -28,7 +25,7 @@ export async function collectQueryPlan(
     QUERY_PLAN_SYSTEM_PROMPT,
     buildInitialUserMessages(ctx, redraftFeedback),
   );
-  return streamSingleShot(ctx, messages);
+  return runSingleShotTurn(ctx, messages, { maxTokens: 800 });
 }
 
 /**
@@ -46,52 +43,7 @@ export async function collectFollowupPlan(
     FOLLOWUP_PLAN_SYSTEM_PROMPT,
     buildFollowupUserMessages(originalPrompt, priorFindings),
   );
-  return streamSingleShot(ctx, messages);
-}
-
-async function streamSingleShot(
-  ctx: ModeContext,
-  messages: ProviderMessage[],
-): Promise<string | null> {
-  await runCompactionIfNeeded(ctx);
-  await runElisionIfNeeded(ctx);
-
-  await ctx.emit({
-    type: 'provider_request',
-    sessionId: ctx.sessionId,
-    turnId: ctx.turnId,
-    source: 'system',
-    provider: ctx.provider.name,
-    model: ctx.model,
-  });
-
-  const { text, usage, error } = await collectProviderStream(ctx, messages, {
-    includeTools: false,
-    maxTokens: 800,
-  });
-  if (error) {
-    await ctx.emit({
-      type: 'error',
-      sessionId: ctx.sessionId,
-      turnId: ctx.turnId,
-      source: 'system',
-      kind: error.retryable ? 'retryable' : 'fatal',
-      message: error.message,
-    });
-    return null;
-  }
-
-  await ctx.emit({
-    type: 'provider_response',
-    sessionId: ctx.sessionId,
-    turnId: ctx.turnId,
-    source: 'system',
-    provider: ctx.provider.name,
-    model: ctx.model,
-    ...usageEventFields(usage),
-  });
-
-  return text;
+  return runSingleShotTurn(ctx, messages, { maxTokens: 800 });
 }
 
 function buildPlannerMessages(
