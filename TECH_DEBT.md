@@ -30,20 +30,20 @@ reconciled `readyProviders` — contract says `ReadonlyArray<string>`, callers w
 set them via a typed setter on core's `Session` (not a cast), delete the `as unknown as` casts, and
 make the TUI/Telegram degrade gracefully when a `RemoteSession` leaves them undefined.
 
-### 2. Tests for security-critical code with zero coverage
-**Findings:** vault #10/#11, plugin-cli #5, plugin-mcp #14 (all **high**). **Risk:** mechanical but large.
-Deferred from this sweep (it explicitly excluded large new test suites). Add:
-- `packages/plugin-vault/src/keysource.test.ts` — the full key-resolution precedence (env → keytar →
-  disk → prompt), first-prompt persistence, keytar↔disk cross-backfill, `resolvedName`, and the
-  disk file being mode `0o600`. Assert env-derived keys are NOT persisted.
-- vault `store.ts` canary / legacy-vault / `VaultPassphraseError` paths (`store.ts:90-149`): wrong-passphrase
-  raises the friendly error w/ recovery hint; legacy (no-canary) vault backfills a canary and still verifies.
-- `packages/plugin-cli/src/components/chat/pair-events.test.ts` — the 356-LOC event-folding state machine
-  (`pairToolEvents`, `blocksEquivalent`, `isSettled`, `countToolCalls`): tool↔result pairing, orphan tool
-  calls across a turn boundary, skill grouping + assistant continuation, compact-tool live aggregation,
-  subagent lifecycle.
-- `packages/plugin-mcp/src/admin/*.test.ts` — `mcp_add_server` collision + persistence, `attachServerLazy`
-  /`getOrConnect` retry, `refreshServerCache` rollback, `mcp_remove_server` race, skill frontmatter.
+### 2. Tests for security-critical code with zero coverage — ✅ DONE
+**Findings:** vault #10/#11, plugin-cli #5, plugin-mcp #14 (all **high**). Added on this branch (+85 tests):
+- `plugin-vault/src/keysource.test.ts` + `store.canary.test.ts` (+17): full key-resolution precedence
+  (env→keytar→disk→prompt), env keys NOT persisted, keytar↔disk cross-backfill, `resolvedName`, disk-key
+  mode `0o600`; canary write/verify, wrong-passphrase `VaultPassphraseError` with recovery hint,
+  legacy-vault backfill.
+- `plugin-cli/src/components/chat/pair-events.test.ts` (+24): tool↔result pairing, orphan-at-turn-boundary
+  synthesis (the forever-pulsing-dot guard), skill grouping + continuation, compact live-aggregation,
+  subagent lifecycle, `isSettled`/`countToolCalls`/`blocksEquivalent`.
+- `plugin-mcp/src/admin/*.test.ts` (+44 across 6 files): config-io atomic round-trip + Zod-discard of
+  corrupt files, runtime collision/lazy/`getOrConnect` retry/`refreshServerCache` rollback, add dup-guard
+  + hot-attach + skill side-effect, remove, test, skill frontmatter YAML.
+
+No bugs surfaced — the security paths behave correctly under test.
 
 ### 3. Collapse the duplicate RFC 8628 device-flow in plugin-oauth
 **Finding:** oauth #12 (**high**). **Risk:** moderate. **Blocked** by the fix agent (see Blocked §B1).
