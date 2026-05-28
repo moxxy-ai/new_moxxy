@@ -1,5 +1,4 @@
 import { promises as fs } from 'node:fs';
-import * as path from 'node:path';
 import { type MoxxyConfig, moxxyConfigSchema } from '@moxxy/config';
 import { moxxyPath, writeFileAtomic } from '@moxxy/sdk';
 import { parse, stringify } from 'yaml';
@@ -49,6 +48,7 @@ export async function clearPluginState(
   const configPath = opts.configPath ?? defaultUserConfigPath();
   const config = await readUserConfig(configPath);
   if (!config.plugins || !(packageName in config.plugins)) return;
+
   const plugins = { ...config.plugins };
   delete plugins[packageName];
   await writeUserConfig(configPath, {
@@ -65,6 +65,7 @@ async function readUserConfig(configPath: string): Promise<MoxxyConfig> {
     if (isNotFound(err)) return {};
     throw err;
   }
+
   const parsed = parse(raw) ?? {};
   const result = moxxyConfigSchema.safeParse(parsed);
   if (!result.success) {
@@ -76,6 +77,7 @@ async function readUserConfig(configPath: string): Promise<MoxxyConfig> {
 async function writeUserConfig(configPath: string, config: MoxxyConfig): Promise<void> {
   const result = moxxyConfigSchema.safeParse(config);
   if (!result.success) throw new Error(`invalid moxxy user config: ${result.error.message}`);
+
   await writeFileAtomic(configPath, stringify(result.data));
 }
 

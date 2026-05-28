@@ -25,15 +25,15 @@
   "moxxy": {
     "plugin": {
       "entry": "./dist/index.js",
-      "kind": "command"
+      "kind": "cli"
     }
   },
   "dependencies": {
+    "@clack/prompts": "catalog:",
     "@moxxy/config": "workspace:*",
     "@moxxy/core": "workspace:*",
     "@moxxy/plugin-plugins-admin": "workspace:*",
     "@moxxy/sdk": "workspace:*",
-    "@clack/prompts": "catalog:",
     "yaml": "^2.6.0"
   },
   "devDependencies": {

@@ -6,7 +6,7 @@ import { parseArgv, type ParsedArgv } from './argv.js';
 import { runPromptCommand } from './commands/prompt.js';
 import { runTuiCommand } from './commands/tui.js';
 import { runSkillsCommand } from './commands/skills.js';
-import { runPluginsCommand } from './commands/plugins.js';
+import { runMarketplaceCommand } from './commands/marketplace.js';
 import { runChannelsCommand } from './commands/channels.js';
 import { runChannelByName } from './commands/run-channel.js';
 import { runInitCommand } from './commands/init.js';
@@ -17,7 +17,6 @@ import { runScheduleCommand } from './commands/schedule.js';
 import { runDoctorCommand } from './commands/doctor.js';
 import { runLoginCommand } from './commands/login.js';
 import { runResumeCommand } from './commands/resume.js';
-import { runOfficeCommand } from './commands/office.js';
 import { runServiceCommand } from './commands/service.js';
 import { runServeCommand } from './commands/serve.js';
 import { runSessionsCommand } from './commands/sessions.js';
@@ -43,8 +42,6 @@ const SECTIONS: ReadonlyArray<{ readonly title: string; readonly rows: ReadonlyA
     title: 'USAGE',
     rows: [
       ['moxxy', 'start the interactive TUI (default channel)'],
-      ['moxxy office', 'start Virtual Office + TUI (requires the UI plugin)'],
-      ['moxxy --office', 'shortcut for Virtual Office + TUI'],
       ['moxxy <channel>', 'start a registered channel by name (see `moxxy channels`)'],
       ['moxxy -p "…"', 'one-shot prompt to stdout'],
       ['moxxy <command> …', 'run a built-in subcommand (see below)'],
@@ -64,7 +61,6 @@ const SECTIONS: ReadonlyArray<{ readonly title: string; readonly rows: ReadonlyA
     rows: [
       ['tui', 'start the Ink TUI channel'],
       ['resume [-s <id>|<id>]', 'resume a persisted session (interactive picker if no id)'],
-      ['office [--session <id>]', 'start Virtual Office + TUI with the Office session picker'],
       ['channels', 'list registered channels + their subcommands'],
       ['channels <name>', 'start a channel by name (same as `moxxy <name>`)'],
       ['channels <name> <sub>', 'invoke a channel-defined subcommand'],
@@ -76,7 +72,7 @@ const SECTIONS: ReadonlyArray<{ readonly title: string; readonly rows: ReadonlyA
     rows: [
       ['sessions list|delete', 'list / remove persisted sessions'],
       ['skills list|new|audit', 'manage skill files'],
-      ['plugins', 'browse/install/manage optional plugins'],
+      ['marketplace', 'browse/install/manage optional plugins'],
       ['self-update status|rollback', 'inspect / roll back self-update transactions'],
       ['perms list|allow|deny|remove|clear|path', 'view / edit the permission policy'],
       ['memory list|audit|show|revert|prune-stale|path', 'curate long-term memory'],
@@ -90,7 +86,6 @@ const SECTIONS: ReadonlyArray<{ readonly title: string; readonly rows: ReadonlyA
     title: 'FLAGS',
     rows: [
       ['--prompt, -p "…"', 'one-shot input (alias of the positional `prompt` form)'],
-      ['--office', 'start Virtual Office + TUI instead of the default TUI'],
       ['--model <id>', 'override the default model for this invocation'],
       ['--output-format <fmt>', 'text | json | stream-json (one-shot output mode)'],
       ['--allow-tools, --allow-all', 'permission shortcuts for non-interactive runs'],
@@ -203,13 +198,12 @@ const COMMANDS: Record<string, CommandHandler> = {
   prompt: runPromptCommand,
   tui: runTuiCommand,
   resume: runResumeCommand,
-  office: runOfficeCommand,
   service: runServiceCommand,
   serve: runServeCommand,
   sessions: runSessionsCommand,
   security: runSecurityCommand,
   skills: runSkillsCommand,
-  plugins: runPluginsCommand,
+  marketplace: runMarketplaceCommand,
   channels: runChannelsCommand,
   'self-update': runSelfUpdateCommand,
 };

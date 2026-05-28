@@ -34,7 +34,7 @@ export const DEFAULT_PLUGIN_CATALOG: ReadonlyArray<PluginCatalogEntry> = [
     description: 'Pixel-art UI for running Moxxy with an office view and session picker.',
     packageName: '@moxxy/virtual-office-plugin',
     installSpec: 'github:moxxy-ai/virtual-office-plugin#main',
-    startCommand: 'moxxy office',
+    startCommand: 'moxxy marketplace open virtual-office',
     defaultPort: 17901,
   },
 ];

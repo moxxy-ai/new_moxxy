@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   startSessionSelectionServer,
+  isStartableUiPluginManifest,
   startUiPlugin,
   startUiPluginHost,
   startUiPluginHostWithSessionSelection,
@@ -62,6 +63,12 @@ async function writeFixture(): Promise<{ packagePath: string; envPath: string }>
 }
 
 describe('startUiPlugin', () => {
+  it('treats hybrid ui cli plugin manifests as startable UI plugins', () => {
+    expect(isStartableUiPluginManifest({ kind: 'ui' })).toBe(true);
+    expect(isStartableUiPluginManifest({ kind: ['ui', 'cli'] })).toBe(true);
+    expect(isStartableUiPluginManifest({ kind: 'cli' })).toBe(false);
+  });
+
   it('starts a ui plugin entry with the selected ui and bridge ports in env', async () => {
     const { packagePath, envPath } = await writeFixture();
 

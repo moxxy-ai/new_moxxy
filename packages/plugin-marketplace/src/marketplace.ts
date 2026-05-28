@@ -1,15 +1,15 @@
-import * as path from 'node:path';
 import { isCancel, select, spinner } from '@clack/prompts';
 import { discoverPlugins, silentLogger } from '@moxxy/core';
 import {
+  installPluginPackage,
+  removePluginPackage,
+  userPluginsDir,
   type InstallPluginPackageOptions,
   type InstallPluginPackageResult,
   type RemovePluginPackageOptions,
   type RemovePluginPackageResult,
-  installPluginPackage,
-  removePluginPackage,
-  userPluginsDir,
 } from '@moxxy/plugin-plugins-admin';
+import * as path from 'node:path';
 import {
   buildInstallSpec,
   buildMarketplaceActionOptions,
@@ -72,10 +72,14 @@ export interface RunMarketplaceCommandDeps {
   readonly writeErr?: (text: string) => void;
 }
 
-export function buildMarketplaceOpenArgv(argv: MarketplaceArgv, packageName: string): MarketplaceArgv {
+export function buildMarketplaceOpenArgv(
+  argv: MarketplaceArgv,
+  packageName: string,
+  openFlags: Readonly<Record<string, string | boolean>> = {},
+): MarketplaceArgv {
   return {
     command: 'marketplace',
-    flags: argv.flags,
+    flags: { ...openFlags, ...argv.flags },
     positional: ['open', packageName],
     ...(argv.passthrough ? { passthrough: [...argv.passthrough] } : {}),
   };
@@ -86,18 +90,21 @@ export async function runMarketplaceCommand(
   deps: RunMarketplaceCommandDeps = {},
 ): Promise<number> {
   const catalog = deps.catalog ?? DEFAULT_MARKETPLACE_CATALOG;
-  const writeOut = deps.writeOut ?? ((text: string) => process.stdout.write(text));
-  const writeErr = deps.writeErr ?? ((text: string) => process.stderr.write(text));
+  const writeOut = deps.writeOut ?? ((text) => process.stdout.write(text));
+  const writeErr = deps.writeErr ?? ((text) => process.stderr.write(text));
   const subcommand = argv.positional[0];
+
   if (hasHelpFlag(argv)) {
     writeOut(renderMarketplaceHelp());
     return 0;
   }
+
   if (!subcommand) {
     const interactive = deps.isInteractive ?? (() => Boolean(process.stdout.isTTY));
     if (interactive()) return runMarketplacePicker(argv, deps);
     return runMarketplaceList(catalog, deps);
   }
+
   switch (subcommand) {
     case 'list':
       return runMarketplaceList(catalog, deps);
@@ -148,7 +155,7 @@ async function runMarketplacePicker(
   deps: RunMarketplaceCommandDeps,
 ): Promise<number> {
   const catalog = deps.catalog ?? DEFAULT_MARKETPLACE_CATALOG;
-  const writeErr = deps.writeErr ?? ((text: string) => process.stderr.write(text));
+  const writeErr = deps.writeErr ?? ((text) => process.stderr.write(text));
   const installed = await (deps.loadInstalledPackageNames ?? loadInstalledPackageNames)();
   const disabled = await (deps.loadDisabledPackageNames ?? loadDisabledPackageNames)();
   const selectPlugin = deps.selectPlugin ?? defaultSelectPlugin;
@@ -160,12 +167,14 @@ async function runMarketplacePicker(
       disabledPackageNames: disabled,
     }),
   });
+
   if (isCancel(chosen) || typeof chosen !== 'string') return 0;
   const entry = resolveMarketplaceEntry(chosen, catalog);
   if (!entry) {
     writeErr(`error: unknown marketplace entry: ${chosen}\n`);
     return 1;
   }
+
   const selectAction = deps.selectAction ?? defaultSelectAction;
   const action = await selectAction({
     message: `Manage ${entry.label}`,
@@ -175,7 +184,9 @@ async function runMarketplacePicker(
       disabledPackageNames: disabled,
     }),
   });
+
   if (isCancel(action) || action === 'back') return 0;
+
   switch (action) {
     case 'install':
       return runMarketplaceAdd({ ...argv, positional: ['add', entry.id] }, catalog, deps);
@@ -184,23 +195,17 @@ async function runMarketplacePicker(
     case 'enable':
       return runMarketplaceEnable({ ...argv, positional: ['enable', entry.id] }, catalog, deps, true);
     case 'disable':
-      return runMarketplaceEnable(
-        { ...argv, positional: ['disable', entry.id] },
-        catalog,
-        deps,
-        false,
-      );
+      return runMarketplaceEnable({ ...argv, positional: ['disable', entry.id] }, catalog, deps, false);
     case 'remove':
       return runMarketplaceRemove({ ...argv, positional: ['remove', entry.id] }, catalog, deps);
   }
-  return 0;
 }
 
 async function runMarketplaceList(
   catalog: ReadonlyArray<MarketplaceCatalogEntry>,
   deps: RunMarketplaceCommandDeps,
 ): Promise<number> {
-  const writeOut = deps.writeOut ?? ((text: string) => process.stdout.write(text));
+  const writeOut = deps.writeOut ?? ((text) => process.stdout.write(text));
   const installed = await (deps.loadInstalledPackageNames ?? loadInstalledPackageNames)();
   const disabled = await (deps.loadDisabledPackageNames ?? loadDisabledPackageNames)();
   const rows = catalog.map((entry) => {
@@ -217,12 +222,13 @@ async function runMarketplaceAdd(
   deps: RunMarketplaceCommandDeps,
 ): Promise<number> {
   const target = argv.positional[1];
-  const writeOut = deps.writeOut ?? ((text: string) => process.stdout.write(text));
-  const writeErr = deps.writeErr ?? ((text: string) => process.stderr.write(text));
+  const writeOut = deps.writeOut ?? ((text) => process.stdout.write(text));
+  const writeErr = deps.writeErr ?? ((text) => process.stderr.write(text));
   if (!target) {
     writeErr('error: marketplace add requires a plugin id, package, GitHub spec, or path\n');
     return 2;
   }
+
   const spec = buildInstallSpec({
     target,
     version: stringFlag(argv, 'version'),
@@ -231,6 +237,7 @@ async function runMarketplaceAdd(
   });
   const entry = resolveMarketplaceEntry(target, catalog);
   const label = entry?.label ?? target;
+
   try {
     const install = deps.installPluginPackage ?? installPluginPackage;
     const result = await withMarketplaceProgress(
@@ -242,7 +249,9 @@ async function runMarketplaceAdd(
       },
       () => install({ packageName: spec }),
     );
-    writeOut(`installed ${entry?.packageName ?? spec}\nsource: ${result.installed}\nplugins dir: ${result.dir}\n`);
+    writeOut(
+      `installed ${entry?.packageName ?? spec}\nsource: ${result.installed}\nplugins dir: ${result.dir}\n`,
+    );
     return 0;
   } catch (err) {
     writeErr(`error: ${errorMessage(err)}\n`);
@@ -256,12 +265,13 @@ async function runMarketplaceRemove(
   deps: RunMarketplaceCommandDeps,
 ): Promise<number> {
   const target = argv.positional[1];
-  const writeOut = deps.writeOut ?? ((text: string) => process.stdout.write(text));
-  const writeErr = deps.writeErr ?? ((text: string) => process.stderr.write(text));
+  const writeOut = deps.writeOut ?? ((text) => process.stdout.write(text));
+  const writeErr = deps.writeErr ?? ((text) => process.stderr.write(text));
   if (!target) {
     writeErr('error: marketplace remove requires a plugin id or package name\n');
     return 2;
   }
+
   const packageName = resolveMarketplacePackageName(target, catalog);
   const label = resolveMarketplaceEntry(target, catalog)?.label ?? packageName;
   try {
@@ -295,14 +305,13 @@ async function runMarketplaceEnable(
   enabled: boolean,
 ): Promise<number> {
   const target = argv.positional[1];
-  const writeOut = deps.writeOut ?? ((text: string) => process.stdout.write(text));
-  const writeErr = deps.writeErr ?? ((text: string) => process.stderr.write(text));
+  const writeOut = deps.writeOut ?? ((text) => process.stdout.write(text));
+  const writeErr = deps.writeErr ?? ((text) => process.stderr.write(text));
   if (!target) {
-    writeErr(
-      `error: marketplace ${enabled ? 'enable' : 'disable'} requires a plugin id or package name\n`,
-    );
+    writeErr(`error: marketplace ${enabled ? 'enable' : 'disable'} requires a plugin id or package name\n`);
     return 2;
   }
+
   const packageName = resolveMarketplacePackageName(target, catalog);
   try {
     const setEnabled = deps.setPluginEnabled ?? setPluginEnabled;
@@ -321,12 +330,13 @@ async function runMarketplaceOpen(
   deps: RunMarketplaceCommandDeps,
 ): Promise<number> {
   const target = argv.positional[1];
-  const writeOut = deps.writeOut ?? ((text: string) => process.stdout.write(text));
-  const writeErr = deps.writeErr ?? ((text: string) => process.stderr.write(text));
+  const writeOut = deps.writeOut ?? ((text) => process.stdout.write(text));
+  const writeErr = deps.writeErr ?? ((text) => process.stderr.write(text));
   if (!target) {
     writeErr('error: marketplace open requires a plugin id or package name\n');
     return 2;
   }
+
   const entry = resolveMarketplaceEntry(target, catalog);
   const packageName = entry?.packageName ?? target;
   const disabled = await (deps.isPluginDisabled ?? isPluginDisabled)(packageName);
@@ -336,20 +346,20 @@ async function runMarketplaceOpen(
     );
     return 1;
   }
+
   if (!deps.startUiPlugin) {
-    writeOut(
-      entry?.startCommand ? `${entry.startCommand}\n` : `moxxy marketplace open ${packageName}\n`,
-    );
+    writeOut(entry?.startCommand ? `${entry.startCommand}\n` : `moxxy marketplace open ${packageName}\n`);
     return 0;
   }
-  return deps.startUiPlugin(buildMarketplaceOpenArgv(argv, packageName));
+
+  return deps.startUiPlugin(buildMarketplaceOpenArgv(argv, packageName, entry?.openFlags));
 }
 
 async function defaultSelectPlugin(input: {
   readonly message: string;
   readonly options: ReadonlyArray<MarketplaceOption>;
 }): Promise<string | symbol> {
-  return await select({
+  return await select<string>({
     message: input.message,
     options: input.options.map((option) => ({
       value: option.value,
@@ -363,7 +373,7 @@ async function defaultSelectAction(input: {
   readonly message: string;
   readonly options: ReadonlyArray<MarketplaceActionOption>;
 }): Promise<MarketplaceAction | symbol> {
-  return await select({
+  return await select<MarketplaceAction>({
     message: input.message,
     options: input.options.map((option) => ({
       value: option.value,
@@ -397,6 +407,7 @@ async function withMarketplaceProgress<T>(
   task: () => Promise<T>,
 ): Promise<T> {
   if (!shouldShowProgress(deps)) return await task();
+
   const progress = (deps.createSpinner ?? (() => spinner({ indicator: 'timer' })))();
   progress.start(messages.start);
   try {

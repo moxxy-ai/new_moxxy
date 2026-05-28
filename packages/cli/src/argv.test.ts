@@ -6,9 +6,9 @@ describe('parseArgv', () => {
     expect(parseArgv([])).toMatchObject({ command: 'tui' });
   });
 
-  it('--office maps to office shortcut command', () => {
+  it('--office does not map to a built-in office command', () => {
     expect(parseArgv(['--office'])).toMatchObject({
-      command: 'office',
+      command: 'tui',
       flags: { office: true },
     });
   });

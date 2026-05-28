@@ -8,8 +8,8 @@ import { discoverPlugins, readSessionIndex, silentLogger, type Session, type Ses
 import { HttpChannel } from '@moxxy/plugin-channel-http';
 import { TuiChannel } from '@moxxy/plugin-cli';
 import {
-  isPureUiPluginManifest,
   moxxyPackageSchema,
+  pluginKindList,
   type ResolvedPluginManifest,
   type ChannelHandle,
   type PermissionResolver,
@@ -20,13 +20,13 @@ import { bootSessionWithConfig, hasBoolFlag, helpRequested, stringFlag } from '.
 import { colors } from '../colors.js';
 import { printError } from '../errors.js';
 
-const HELP = `moxxy plugins start — start a UI plugin in the foreground
+const HELP = `moxxy marketplace open — start a UI plugin in the foreground
 
-  moxxy plugins start <package-or-path>
-  moxxy plugins start <package> --port 17901 --api-port 3737 --open
-  moxxy plugins start <package> --tui --open
-  moxxy plugins start <package> --session <id>
-  moxxy plugins start <package> --new-session
+  moxxy marketplace open <package-or-path>
+  moxxy marketplace open <package> --port 17901 --api-port 3737 --open
+  moxxy marketplace open <package> --tui --open
+  moxxy marketplace open <package> --session <id>
+  moxxy marketplace open <package> --new-session
 `;
 
 export interface StartUiPluginOptions {
@@ -101,6 +101,10 @@ export interface UiPluginSessionSelectionHostOptions extends StartUiPluginOption
     start(opts: { session: Session; model?: string }): Promise<ChannelHandle>;
   };
   readonly startUiProcess?: (opts: StartUiPluginOptions) => UiPluginProcessHandle;
+}
+
+export function isStartableUiPluginManifest(manifest: Pick<ResolvedPluginManifest, 'kind'>): boolean {
+  return pluginKindList(manifest.kind).includes('ui');
 }
 
 export async function startSessionSelectionServer(
@@ -528,8 +532,8 @@ async function resolveUiManifest(requested: string, cwd: string): Promise<Resolv
     extraPaths: [pluginsDir, path.join(pluginsDir, 'node_modules')],
   });
   const manifest = manifests.find((entry) => entry.packageName === requested);
-  if (!manifest) throw new Error(`UI plugin not found: ${requested}. Run \`moxxy plugins install ${requested}\` first.`);
-  if (!isPureUiPluginManifest(manifest)) throw new Error(`${requested} is not a pure UI plugin`);
+  if (!manifest) throw new Error(`UI plugin not found: ${requested}. Run \`moxxy marketplace add ${requested}\` first.`);
+  if (!isStartableUiPluginManifest(manifest)) throw new Error(`${requested} is not a UI plugin`);
   return manifest;
 }
 
@@ -550,7 +554,7 @@ async function readPackageManifest(packagePath: string): Promise<ResolvedPluginM
     packagePath,
     ...(parsed.requirements ? { requirements: parsed.requirements } : {}),
   };
-  if (!isPureUiPluginManifest(manifest)) throw new Error(`${pkg.name} is not a pure UI plugin`);
+  if (!isStartableUiPluginManifest(manifest)) throw new Error(`${pkg.name} is not a UI plugin`);
   return manifest;
 }
 

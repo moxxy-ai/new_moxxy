@@ -320,6 +320,9 @@ importers:
       '@moxxy/plugin-embeddings-transformers':
         specifier: workspace:*
         version: link:../plugin-embeddings-transformers
+      '@moxxy/plugin-marketplace':
+        specifier: workspace:*
+        version: link:../plugin-marketplace
       '@moxxy/plugin-mcp':
         specifier: workspace:*
         version: link:../plugin-mcp

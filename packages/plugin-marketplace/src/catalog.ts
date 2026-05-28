@@ -5,6 +5,7 @@ export interface MarketplaceCatalogEntry {
   readonly packageName: string;
   readonly installSpec: string;
   readonly startCommand?: string;
+  readonly openFlags?: Readonly<Record<string, string | boolean>>;
   readonly defaultPort?: number;
   readonly kind?: 'ui' | 'runtime' | 'cli';
 }
@@ -32,7 +33,8 @@ export const DEFAULT_MARKETPLACE_CATALOG: ReadonlyArray<MarketplaceCatalogEntry>
     description: 'Pixel-art UI for running Moxxy with an office view and session picker.',
     packageName: '@moxxy/virtual-office-plugin',
     installSpec: 'github:moxxy-ai/virtual-office-plugin#main',
-    startCommand: 'moxxy marketplace open virtual-office',
+    startCommand: 'moxxy marketplace open virtual-office --tui',
+    openFlags: { tui: true },
     defaultPort: 17901,
     kind: 'ui',
   },
@@ -72,6 +74,7 @@ export function buildMarketplaceActionOptions(input: {
   const installed = input.installedPackageNames.has(input.entry.packageName);
   const disabled = input.disabledPackageNames.has(input.entry.packageName);
   const options: MarketplaceActionOption[] = [];
+
   if (!installed) {
     options.push({
       value: 'install',
@@ -108,6 +111,7 @@ export function buildMarketplaceActionOptions(input: {
       hint: 'uninstall from ~/.moxxy/plugins',
     });
   }
+
   options.push({
     value: 'back',
     label: 'Back',

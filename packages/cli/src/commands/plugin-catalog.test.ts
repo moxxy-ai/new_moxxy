@@ -52,7 +52,7 @@ describe('plugin catalog', () => {
     expect(code).toBe(0);
     expect(installed).toEqual(['github:moxxy-ai/virtual-office-plugin#main']);
     expect(output.join('')).toContain('@moxxy/virtual-office-plugin');
-    expect(output.join('')).toContain('moxxy office');
+    expect(output.join('')).toContain('moxxy marketplace open virtual-office');
   });
 
   it('does not reinstall an already-installed catalog plugin', async () => {
@@ -72,6 +72,6 @@ describe('plugin catalog', () => {
     expect(code).toBe(0);
     expect(installed).toEqual([]);
     expect(output.join('')).toContain('already installed');
-    expect(output.join('')).toContain('moxxy office');
+    expect(output.join('')).toContain('moxxy marketplace open virtual-office');
   });
 });
