@@ -1,21 +1,38 @@
-use moxxy_desktop_lib::app_state::AppState;
-use moxxy_desktop_lib::desks::{json_store::JsonDeskStore, Desk, DeskId, DeskStore};
-use moxxy_desktop_lib::sidecar::{mock::MockSidecar, Sidecar, SidecarStatus};
-use moxxy_desktop_lib::transport::{mock::PairedTransport, RunnerTransport};
+//! Integration tests exercising the trait composition in core.
+//!
+//! The Tauri-aware AppState lives in the parent app crate; here we cover
+//! the same composition with an inline state struct that holds the same
+//! trait objects, so the contract is exercised without dragging Tauri
+//! into the test binary.
+
+use moxxy_desktop_core::desks::{json_store::JsonDeskStore, Desk, DeskId, DeskStore};
+use moxxy_desktop_core::sidecar::{mock::MockSidecar, Sidecar, SidecarStatus};
+use moxxy_desktop_core::transport::{mock::PairedTransport, RunnerTransport};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tempfile::TempDir;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+#[derive(Clone)]
+struct State {
+    desks: Arc<dyn DeskStore>,
+    sidecar: Arc<dyn Sidecar>,
+    transport: Arc<dyn RunnerTransport>,
+}
+
 #[tokio::test]
-async fn capability_traits_compose_through_app_state() {
+async fn capability_traits_compose_through_arc_trait_objects() {
     let tmp = TempDir::new().unwrap();
     let desks: Arc<dyn DeskStore> = Arc::new(JsonDeskStore::at(tmp.path().join("desks.json")));
     let sidecar = Arc::new(MockSidecar::with_status(SidecarStatus::Stopped));
     let (transport, mut server) = PairedTransport::paired();
     let transport: Arc<dyn RunnerTransport> = Arc::new(transport);
 
-    let state = AppState::for_testing(desks, sidecar.clone(), transport.clone());
+    let state = State {
+        desks: desks.clone(),
+        sidecar: sidecar.clone(),
+        transport: transport.clone(),
+    };
 
     sidecar.start().await.unwrap();
     assert_eq!(state.sidecar.status(), SidecarStatus::Running);

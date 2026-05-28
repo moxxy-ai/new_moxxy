@@ -1,13 +1,25 @@
+[workspace]
+members = ["crates/core"]
+# Bare `cargo test` / `cargo build` from this directory targets only the
+# core crate by default — Tauri's heavy dep tree is opt-in via either an
+# explicit `-p moxxy-desktop` or `pnpm tauri:dev`. Keeps the local
+# iteration loop sub-second.
+default-members = ["crates/core"]
+resolver = "2"
+
 [package]
 name = "moxxy-desktop"
 version = "0.0.1"
-description = "moxxy desktop — Tauri shell + sidecar supervisor for the moxxy runner"
+description = "moxxy desktop — Tauri shell that composes moxxy-desktop-core"
 authors = ["Michal Makowski"]
 edition = "2021"
 rust-version = "1.77"
 publish = false
 
 [lib]
+# Tauri 2 wants a cdylib + staticlib so it can be linked into mobile in
+# the future. The `_lib` suffix avoids a Windows linker collision with
+# the binary crate.
 name = "moxxy_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
@@ -15,6 +27,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2.0", features = [] }
 
 [dependencies]
+moxxy-desktop-core = { path = "crates/core" }
 tauri = { version = "2.0", features = [] }
 tauri-plugin-shell = "2.0"
 tauri-plugin-dialog = "2.0"
@@ -22,20 +35,13 @@ tauri-plugin-fs = "2.0"
 tauri-plugin-store = "2.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "io-util", "net", "time", "fs", "process"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync"] }
 async-trait = "0.1"
 thiserror = "2.0"
-anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dirs = "5"
 parking_lot = "0.12"
-uuid = { version = "1", features = ["v4", "serde"] }
-
-[dev-dependencies]
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "io-util", "net", "time", "fs", "process", "test-util"] }
-tempfile = "3"
-proptest = "1"
 
 [features]
 strict = []
@@ -46,3 +52,9 @@ codegen-units = 1
 lto = true
 opt-level = "s"
 strip = true
+
+# Sub-second link times on macOS via Apple's bundled lld. The default ld64
+# spends most of cargo test's wall time on relinks for large dep graphs.
+[profile.dev]
+debug = 1
+incremental = true

@@ -1,7 +1,7 @@
 //! Test double for [`Sidecar`].
 //!
 //! ```no_run
-//! use moxxy_desktop_lib::sidecar::{mock::MockSidecar, Sidecar, SidecarStatus};
+//! use moxxy_desktop_core::sidecar::{mock::MockSidecar, Sidecar, SidecarStatus};
 //! let sidecar = MockSidecar::new();
 //! sidecar.set_status(SidecarStatus::Running);
 //! assert!(sidecar.status().is_healthy());

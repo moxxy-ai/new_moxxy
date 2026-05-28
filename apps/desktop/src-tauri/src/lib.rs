@@ -1,11 +1,9 @@
 //! moxxy desktop — Tauri shell.
 //!
-//! Capability traits compose via [`app_state::AppState`]:
-//!   * [`sidecar::Sidecar`] — supervises a child process.
-//!   * [`transport::RunnerTransport`] — opens a duplex stream to it.
-//!   * [`desks::DeskStore`] — persists the user's workspaces.
-//!
-//! `commands::*` are the Tauri command handlers (the JS-callable surface).
+//! All capability traits + impls live in [`moxxy_desktop_core`]; this crate
+//! is a thin glue layer that wires them into Tauri. Keeping the heavy
+//! deps out of the core means `cargo test -p moxxy-desktop-core` runs in
+//! seconds instead of minutes.
 
 #![cfg_attr(feature = "strict", deny(warnings))]
 #![deny(unsafe_code)]
@@ -20,10 +18,10 @@
 
 pub mod app_state;
 pub mod commands;
-pub mod desks;
-pub mod error;
-pub mod sidecar;
-pub mod transport;
+
+// Re-export the core for downstream Tauri code that wants the traits in
+// the same path as before.
+pub use moxxy_desktop_core as core;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

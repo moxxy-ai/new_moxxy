@@ -1,0 +1,23 @@
+[package]
+name = "moxxy-desktop-core"
+version = "0.0.1"
+description = "Pure-Rust core for the moxxy desktop: traits, impls, JSON-RPC peer. No Tauri deps — tests compile in seconds."
+edition = "2021"
+rust-version = "1.77"
+publish = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "io-util", "net", "time", "fs", "process"] }
+async-trait = "0.1"
+thiserror = "2.0"
+tracing = "0.1"
+dirs = "5"
+parking_lot = "0.12"
+futures-util = "0.3"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["test-util"] }
+tempfile = "3"
+proptest = "1"
