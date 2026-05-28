@@ -127,7 +127,10 @@ export const ListPicker: React.FC<ListPickerProps> = ({
     if (query) return;
     const idx = filtered.findIndex((o) => o.current);
     if (idx > 0) setCursor(idx);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Intentionally narrow deps: react when the tab or source set
+    // changes, not on every keystroke (which would stomp the cursor
+    // as the user types). `query` and `filtered` are read but
+    // omitted on purpose.
   }, [activeTabId, sourceOptions]);
 
   useInput((input, key) => {
