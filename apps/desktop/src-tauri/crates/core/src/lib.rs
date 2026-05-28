@@ -18,5 +18,6 @@
 pub mod desks;
 pub mod error;
 pub mod jsonrpc;
+pub mod runner_bridge;
 pub mod sidecar;
 pub mod transport;
