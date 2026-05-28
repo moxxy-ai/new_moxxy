@@ -8,8 +8,8 @@ import { discoverPlugins, readSessionIndex, silentLogger, type Session, type Ses
 import { HttpChannel } from '@moxxy/plugin-channel-http';
 import { TuiChannel } from '@moxxy/plugin-cli';
 import {
+  isUiPluginManifest,
   moxxyPackageSchema,
-  pluginKindList,
   type ResolvedPluginManifest,
   type ChannelHandle,
   type PermissionResolver,
@@ -20,13 +20,16 @@ import { bootSessionWithConfig, hasBoolFlag, helpRequested, stringFlag } from '.
 import { colors } from '../colors.js';
 import { printError } from '../errors.js';
 
-const HELP = `moxxy marketplace open — start a UI plugin in the foreground
+const HELP = `moxxy ui open — start a UI plugin in the foreground
 
-  moxxy marketplace open <package-or-path>
-  moxxy marketplace open <package> --port 17901 --api-port 3737 --open
-  moxxy marketplace open <package> --tui --open
-  moxxy marketplace open <package> --session <id>
-  moxxy marketplace open <package> --new-session
+  moxxy ui open <package-or-path>
+  moxxy ui open <package> --port 17901 --api-port 3737 --open
+  moxxy ui open <package> --tui --open
+  moxxy ui open <package> --session <id>
+  moxxy ui open <package> --new-session
+  moxxy ui open <package> -- --theme dark --debug    forward args to UI
+
+Aliases: \`moxxy marketplace open …\` runs the same flow.
 `;
 
 export interface StartUiPluginOptions {
@@ -36,6 +39,8 @@ export interface StartUiPluginOptions {
   readonly token: string;
   readonly extraEnv?: Record<string, string | undefined>;
   readonly stdio?: StdioOptions;
+  /** Extra argv forwarded to the UI plugin child process (after entry). */
+  readonly extraArgs?: ReadonlyArray<string>;
 }
 
 export interface StartUiPluginResult {
@@ -104,7 +109,7 @@ export interface UiPluginSessionSelectionHostOptions extends StartUiPluginOption
 }
 
 export function isStartableUiPluginManifest(manifest: Pick<ResolvedPluginManifest, 'kind'>): boolean {
-  return pluginKindList(manifest.kind).includes('ui');
+  return isUiPluginManifest(manifest);
 }
 
 export async function startSessionSelectionServer(
@@ -208,14 +213,18 @@ export async function startSessionSelectionServer(
 
 export function startUiPluginProcess(opts: StartUiPluginOptions): UiPluginProcessHandle {
   const uiPort = opts.uiPort ?? opts.manifest.port ?? 17901;
+  const uiHost = opts.manifest.host ?? '127.0.0.1';
   const entry = path.resolve(opts.manifest.packagePath, opts.manifest.entry);
-  const child = spawn(process.execPath, [entry], {
+  const extraArgs = opts.extraArgs ? [...opts.extraArgs] : [];
+  const child = spawn(process.execPath, [entry, ...extraArgs], {
     cwd: opts.manifest.packagePath,
     env: {
       ...process.env,
       ...opts.extraEnv,
       PORT: String(uiPort),
+      HOST: uiHost,
       MOXXY_PLUGIN_PORT: String(uiPort),
+      MOXXY_PLUGIN_HOST: uiHost,
       MOXXY_API_URL: `http://127.0.0.1:${opts.apiPort}`,
       MOXXY_TOKEN: opts.token,
       MOXXY_PLUGIN_NAME: opts.manifest.packageName,
@@ -252,7 +261,9 @@ export async function startUiPlugin(opts: StartUiPluginOptions): Promise<StartUi
 export async function startUiPluginHost(opts: UiPluginHostOptions): Promise<StartUiPluginResult> {
   const out = opts.stdout ?? process.stdout;
   const uiPort = opts.uiPort ?? opts.manifest.port ?? 17901;
-  const uiUrl = `http://127.0.0.1:${uiPort}`;
+  const uiHost = opts.manifest.host ?? '127.0.0.1';
+  const uiUrl = `http://${uiHost}:${uiPort}`;
+  const label = opts.manifest.title ?? 'ui plugin';
   const handles: ChannelHandle[] = [];
   let uiProcess: UiPluginProcessHandle | null = null;
   let stopping = false;
@@ -293,9 +304,9 @@ export async function startUiPluginHost(opts: UiPluginHostOptions): Promise<Star
     }
 
     out.write(
-      `${colors.bold('virtual office')}  ${colors.dim(uiUrl)}\n` +
+      `${colors.bold(label)}  ${colors.dim(uiUrl)}\n` +
         `${colors.dim('bridge api: http://127.0.0.1:' + opts.apiPort)}\n` +
-        (opts.withTui ? `${colors.dim('tui: same session as virtual office')}\n` : ''),
+        (opts.withTui ? `${colors.dim('tui: same session as ' + label)}\n` : ''),
     );
 
     if (opts.open) openBrowser(uiUrl);
@@ -308,6 +319,7 @@ export async function startUiPluginHost(opts: UiPluginHostOptions): Promise<Star
       token: opts.token,
       extraEnv: opts.extraEnv,
       stdio: opts.stdio ?? (opts.withTui ? 'ignore' : 'inherit'),
+      ...(opts.extraArgs ? { extraArgs: opts.extraArgs } : {}),
     });
 
     const result = await Promise.race([
@@ -330,7 +342,9 @@ export async function startUiPluginHostWithSessionSelection(
 ): Promise<StartUiPluginResult> {
   const out = opts.stdout ?? process.stdout;
   const uiPort = opts.uiPort ?? opts.manifest.port ?? 17901;
-  const uiUrl = `http://127.0.0.1:${uiPort}`;
+  const uiHost = opts.manifest.host ?? '127.0.0.1';
+  const uiUrl = `http://${uiHost}:${uiPort}`;
+  const label = opts.manifest.title ?? 'ui plugin';
   const handles: ChannelHandle[] = [];
   let uiProcess: UiPluginProcessHandle | null = null;
   let session: Session | null = null;
@@ -356,9 +370,9 @@ export async function startUiPluginHostWithSessionSelection(
 
   try {
     out.write(
-      `${colors.bold('virtual office')}  ${colors.dim(uiUrl)}\n` +
+      `${colors.bold(label)}  ${colors.dim(uiUrl)}\n` +
         `${colors.dim('bridge api: http://127.0.0.1:' + opts.apiPort)}\n` +
-        `${colors.dim('session picker: waiting for Office selection')}\n`,
+        `${colors.dim('session picker: waiting for ' + label + ' selection')}\n`,
     );
 
     if (opts.open) openBrowser(uiUrl);
@@ -371,6 +385,7 @@ export async function startUiPluginHostWithSessionSelection(
       token: opts.token,
       extraEnv: opts.extraEnv,
       stdio: opts.stdio ?? (opts.withTui ? 'ignore' : 'inherit'),
+      ...(opts.extraArgs ? { extraArgs: opts.extraArgs } : {}),
     });
 
     const first = await Promise.race([
@@ -440,12 +455,18 @@ export async function runPluginStartCommand(argv: ParsedArgv): Promise<number> {
   let apiPort: number;
   let uiPort: number;
   try {
-    apiPort = parsePort(stringFlag(argv, 'api-port'), 3737);
+    apiPort = parsePort(stringFlag(argv, 'api-port'), manifest.apiPort ?? 3737);
     uiPort = parsePort(stringFlag(argv, 'port'), manifest.port ?? 17901);
   } catch (err) {
     printError(err instanceof Error ? err.message : String(err));
     return 1;
   }
+  // CLI flag wins over manifest; default = manifest.openInBrowser ?? true.
+  const openInBrowser = hasBoolFlag(argv, 'no-open')
+    ? false
+    : argv.flags.open === true
+      ? true
+      : manifest.openInBrowser ?? true;
   const token = randomBytes(24).toString('hex');
   const explicitSessionId = stringFlag(argv, 'session') ?? stringFlag(argv, 's');
   const forceNewSession = hasBoolFlag(argv, 'new-session');
@@ -474,6 +495,8 @@ export async function runPluginStartCommand(argv: ParsedArgv): Promise<number> {
     return session;
   };
 
+  const extraArgs = argv.passthrough.length > 0 ? argv.passthrough : undefined;
+
   try {
     if (!explicitSessionId && !forceNewSession) {
       const sessionPicker = await startSessionSelectionServer({
@@ -491,8 +514,9 @@ export async function runPluginStartCommand(argv: ParsedArgv): Promise<number> {
         withTui: hasBoolFlag(argv, 'tui'),
         preferBridgePermissions: !allowedTools,
         model: stringFlag(argv, 'model'),
-        open: argv.flags.open === true,
+        open: openInBrowser,
         handleSignals: true,
+        ...(extraArgs ? { extraArgs } : {}),
       });
       return result.exitCode;
     }
@@ -510,8 +534,9 @@ export async function runPluginStartCommand(argv: ParsedArgv): Promise<number> {
       withTui: hasBoolFlag(argv, 'tui'),
       preferBridgePermissions: !allowedTools,
       model: stringFlag(argv, 'model'),
-      open: argv.flags.open === true,
+      open: openInBrowser,
       handleSignals: true,
+      ...(extraArgs ? { extraArgs } : {}),
     });
     return result.exitCode;
   } catch (err) {

@@ -60,7 +60,7 @@ describe('pluginManifestSchema', () => {
     expect(pluginManifestSchema.parse({ entry: 'a', kind: 'transcriber' }).kind).toBe(
       'transcriber',
     );
-    expect(pluginManifestSchema.parse({ entry: 'a', kind: 'ui' }).kind).toBe('ui');
+    expect(pluginManifestSchema.parse({ entry: 'a', kind: 'ui', port: 17901 }).kind).toBe('ui');
     expect(pluginManifestSchema.parse({ entry: 'a', kind: ['agent', 'command'] }).kind).toEqual([
       'agent',
       'command',
@@ -77,10 +77,41 @@ describe('pluginManifestSchema', () => {
     expect(parsed.port).toBe(17901);
   });
 
+  it('accepts optional ui plugin properties (host, apiPort, openInBrowser, title)', () => {
+    const parsed = pluginManifestSchema.parse({
+      entry: './serve.js',
+      kind: 'ui',
+      port: 17901,
+      host: '0.0.0.0',
+      apiPort: 3737,
+      openInBrowser: false,
+      title: 'Virtual Office',
+    });
+    expect(parsed).toMatchObject({
+      host: '0.0.0.0',
+      apiPort: 3737,
+      openInBrowser: false,
+      title: 'Virtual Office',
+    });
+  });
+
+  it('rejects a ui manifest without a port', () => {
+    expect(() => pluginManifestSchema.parse({ entry: './serve.js', kind: 'ui' })).toThrow(/port/);
+    expect(() =>
+      pluginManifestSchema.parse({ entry: './serve.js', kind: ['ui', 'tools'] }),
+    ).toThrow(/port/);
+  });
+
   it('rejects invalid ui plugin ports', () => {
     for (const port of [0, 65536, 17901.5, '17901']) {
       expect(() => pluginManifestSchema.parse({ entry: 'a', kind: 'ui', port })).toThrow();
     }
+  });
+
+  it('rejects invalid bridge apiPort values', () => {
+    expect(() =>
+      pluginManifestSchema.parse({ entry: 'a', kind: 'ui', port: 17901, apiPort: 0 }),
+    ).toThrow();
   });
 
   it('rejects unknown kind', () => {

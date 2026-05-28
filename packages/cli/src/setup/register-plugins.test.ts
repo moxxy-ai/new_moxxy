@@ -93,6 +93,8 @@ describe('registerPlugins', () => {
   it('discovers pure ui plugins without importing their entry as a runtime plugin', async () => {
     const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'moxxy-register-ui-plugin-'));
     tempDirs.push(cwd);
+    const fakeHome = await fs.mkdtemp(path.join(os.tmpdir(), 'moxxy-register-ui-home-'));
+    tempDirs.push(fakeHome);
     const pkgDir = path.join(cwd, 'node_modules', '@moxxy', 'virtual-office-plugin');
     await fs.mkdir(pkgDir, { recursive: true });
     await fs.writeFile(
@@ -123,16 +125,27 @@ describe('registerPlugins', () => {
     };
     const session = new Session({ cwd, logger });
 
-    const result = await registerPlugins(
-      session,
-      {} as MoxxyConfig,
-      [],
-      cwd,
-      logger,
-    );
+    const prevHome = process.env.HOME;
+    const prevUserprofile = process.env.USERPROFILE;
+    process.env.HOME = fakeHome;
+    process.env.USERPROFILE = fakeHome;
+    try {
+      const result = await registerPlugins(
+        session,
+        {} as MoxxyConfig,
+        [],
+        cwd,
+        logger,
+      );
 
-    expect([...result.registered]).toEqual([]);
-    expect(session.pluginHost.list()).toEqual([]);
-    expect(warnings.join('\n')).not.toContain('failed to load plugin');
+      expect([...result.registered]).toEqual([]);
+      expect(session.pluginHost.list()).toEqual([]);
+      expect(warnings.join('\n')).not.toContain('failed to load plugin');
+    } finally {
+      if (prevHome === undefined) delete process.env.HOME;
+      else process.env.HOME = prevHome;
+      if (prevUserprofile === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = prevUserprofile;
+    }
   });
 });

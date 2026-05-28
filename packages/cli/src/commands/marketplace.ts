@@ -17,11 +17,18 @@ export function toParsedArgv(argv: MarketplaceArgv): ParsedArgv {
     command: argv.command,
     positional: [...argv.positional],
     flags,
+    passthrough: argv.passthrough ? [...argv.passthrough] : [],
   };
 }
 
 export async function runMarketplaceCommand(argv: ParsedArgv): Promise<number> {
-  return runMarketplaceBase(argv, {
-    startUiPlugin: (marketplaceArgv) => runPluginStartCommand(toParsedArgv(marketplaceArgv)),
+  const marketplaceArgv: MarketplaceArgv = {
+    command: argv.command,
+    positional: argv.positional,
+    flags: argv.flags,
+    passthrough: argv.passthrough,
+  };
+  return runMarketplaceBase(marketplaceArgv, {
+    startUiPlugin: (next) => runPluginStartCommand(toParsedArgv(next)),
   });
 }

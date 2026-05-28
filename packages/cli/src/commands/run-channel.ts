@@ -134,6 +134,7 @@ export async function runChannelSubcommand(
         command: argv.command,
         flags: { ...argv.flags, ...extraFlags },
         positional: [],
+        passthrough: [...argv.passthrough],
       };
       return runChannelByName(def.name, merged);
     },

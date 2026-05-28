@@ -52,10 +52,13 @@ async function writeFixture(): Promise<{ packagePath: string; envPath: string }>
       "import { writeFileSync } from 'node:fs';",
       "writeFileSync(process.env.ENV_PATH, JSON.stringify({",
       "  PORT: process.env.PORT,",
+      "  HOST: process.env.HOST,",
       "  MOXXY_PLUGIN_PORT: process.env.MOXXY_PLUGIN_PORT,",
+      "  MOXXY_PLUGIN_HOST: process.env.MOXXY_PLUGIN_HOST,",
       "  MOXXY_API_URL: process.env.MOXXY_API_URL,",
       "  MOXXY_TOKEN: process.env.MOXXY_TOKEN,",
-      "  MOXXY_PLUGIN_NAME: process.env.MOXXY_PLUGIN_NAME",
+      "  MOXXY_PLUGIN_NAME: process.env.MOXXY_PLUGIN_NAME,",
+      "  argv: process.argv.slice(2),",
       "}));",
     ].join('\n'),
   );
@@ -89,13 +92,43 @@ describe('startUiPlugin', () => {
 
     expect(result.exitCode).toBe(0);
     const env = JSON.parse(await fs.readFile(envPath, 'utf8'));
-    expect(env).toEqual({
+    expect(env).toMatchObject({
       PORT: '18000',
+      HOST: '127.0.0.1',
       MOXXY_PLUGIN_PORT: '18000',
+      MOXXY_PLUGIN_HOST: '127.0.0.1',
       MOXXY_API_URL: 'http://127.0.0.1:3737',
       MOXXY_TOKEN: 'test-token',
       MOXXY_PLUGIN_NAME: '@moxxy/virtual-office-fixture',
+      argv: [],
     });
+  });
+
+  it('forwards extraArgs and manifest host into the spawned UI plugin process', async () => {
+    const { packagePath, envPath } = await writeFixture();
+
+    const result = await startUiPlugin({
+      manifest: {
+        packageName: '@moxxy/virtual-office-fixture',
+        packageVersion: '1.0.0',
+        packagePath,
+        entry: './serve.js',
+        kind: 'ui',
+        port: 17901,
+        host: '0.0.0.0',
+      },
+      uiPort: 18000,
+      apiPort: 3737,
+      token: 'test-token',
+      extraEnv: { ENV_PATH: envPath },
+      extraArgs: ['--theme', 'dark', '--debug'],
+    });
+
+    expect(result.exitCode).toBe(0);
+    const env = JSON.parse(await fs.readFile(envPath, 'utf8'));
+    expect(env.HOST).toBe('0.0.0.0');
+    expect(env.MOXXY_PLUGIN_HOST).toBe('0.0.0.0');
+    expect(env.argv).toEqual(['--theme', 'dark', '--debug']);
   });
 
   it('can stop a long-running ui plugin process', async () => {

@@ -341,6 +341,7 @@ export class OfficeAgentRuntime {
       skills: this.session.skills,
       log: agent.log as unknown as EventLogReader,
       compactor: this.session.compactors.getActive(),
+      cacheStrategy: this.session.cacheStrategies.getActive(),
       permissions: this.session.resolver,
       ...(this.session.approvalResolver ? { approval: this.session.approvalResolver } : {}),
       hooks: this.session.dispatcher,

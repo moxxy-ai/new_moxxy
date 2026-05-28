@@ -55,14 +55,40 @@ export const skillFrontmatterSchema = z.object({
   schedule: skillScheduleSchema.optional(),
 });
 
-export const pluginManifestSchema = z.object({
-  entry: z.string().min(1),
-  kind: z
-    .union([pluginKindSchema, z.array(pluginKindSchema)])
-    .optional(),
-  port: z.number().int().min(1).max(65535).optional(),
-  skills: z.string().optional(),
-});
+const portSchema = z.number().int().min(1).max(65535);
+
+export const pluginManifestSchema = z
+  .object({
+    entry: z.string().min(1),
+    kind: z
+      .union([pluginKindSchema, z.array(pluginKindSchema)])
+      .optional(),
+    /** Bind port for UI plugins. Required when kind includes 'ui'. */
+    port: portSchema.optional(),
+    /** Bind host for UI plugins. Defaults to 127.0.0.1. */
+    host: z.string().min(1).optional(),
+    /** Suggested bridge (HTTP channel) port. Falls back to 3737. */
+    apiPort: portSchema.optional(),
+    /** Auto-open the UI in a browser on launch. Defaults to true. */
+    openInBrowser: z.boolean().optional(),
+    /** Human-readable display name for picker UIs. */
+    title: z.string().min(1).optional(),
+    skills: z.string().optional(),
+  })
+  .superRefine((value, ctx) => {
+    const kinds = Array.isArray(value.kind)
+      ? value.kind
+      : value.kind
+        ? [value.kind]
+        : [];
+    if (kinds.includes('ui') && value.port === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['port'],
+        message: "ui plugin manifest requires `port`",
+      });
+    }
+  });
 
 /**
  * Shape of a package's `moxxy` field in package.json.

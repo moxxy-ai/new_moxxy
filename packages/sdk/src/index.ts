@@ -281,9 +281,16 @@ export type {
   Plugin,
   PluginManifest,
   ResolvedPluginManifest,
+  UiPluginManifest,
+  ResolvedUiPluginManifest,
 } from './plugin.js';
 export type { PluginKind, PluginKindCarrier } from './plugin-kind.js';
-export { PLUGIN_KINDS, pluginKindList, isPureUiPluginManifest } from './plugin-kind.js';
+export {
+  PLUGIN_KINDS,
+  pluginKindList,
+  isPureUiPluginManifest,
+  isUiPluginManifest,
+} from './plugin-kind.js';
 
 export type {
   Channel,

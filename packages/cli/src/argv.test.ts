@@ -53,4 +53,19 @@ describe('parseArgv', () => {
   it('--version maps to version command', () => {
     expect(parseArgv(['--version'])).toMatchObject({ command: 'version' });
   });
+
+  it('captures argv after `--` as passthrough', () => {
+    expect(
+      parseArgv(['ui', 'open', 'virtual-office', '--port', '18000', '--', '--theme', 'dark', '-v']),
+    ).toMatchObject({
+      command: 'ui',
+      positional: ['open', 'virtual-office'],
+      flags: { port: '18000' },
+      passthrough: ['--theme', 'dark', '-v'],
+    });
+  });
+
+  it('passthrough is empty when no `--` separator is present', () => {
+    expect(parseArgv(['ui', 'list']).passthrough).toEqual([]);
+  });
 });

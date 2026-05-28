@@ -22,6 +22,7 @@ import { runServeCommand } from './commands/serve.js';
 import { runSessionsCommand } from './commands/sessions.js';
 import { runSecurityCommand } from './commands/security.js';
 import { runSelfUpdateCommand } from './commands/self-update.js';
+import { runUiCommand } from './commands/ui.js';
 import { setupSessionWithConfig } from './setup.js';
 import { renderLogo } from './logo.js';
 import { colors } from './colors.js';
@@ -72,6 +73,7 @@ const SECTIONS: ReadonlyArray<{ readonly title: string; readonly rows: ReadonlyA
     rows: [
       ['sessions list|delete', 'list / remove persisted sessions'],
       ['skills list|new|audit', 'manage skill files'],
+      ['ui [list|open <name>]', 'list / launch installed UI plugins'],
       ['marketplace', 'browse/install/manage optional plugins'],
       ['self-update status|rollback', 'inspect / roll back self-update transactions'],
       ['perms list|allow|deny|remove|clear|path', 'view / edit the permission policy'],
@@ -204,6 +206,7 @@ const COMMANDS: Record<string, CommandHandler> = {
   security: runSecurityCommand,
   skills: runSkillsCommand,
   marketplace: runMarketplaceCommand,
+  ui: runUiCommand,
   channels: runChannelsCommand,
   'self-update': runSelfUpdateCommand,
 };

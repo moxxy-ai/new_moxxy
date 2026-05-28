@@ -21,6 +21,23 @@ describe('marketplace CLI adapter', () => {
         open: true,
         port: '17901',
       },
+      passthrough: [],
+    });
+  });
+
+  it('forwards marketplace passthrough into the parsed argv', () => {
+    expect(
+      toParsedArgv({
+        command: 'marketplace',
+        positional: ['open', '@moxxy/virtual-office-plugin'],
+        flags: {},
+        passthrough: ['--theme', 'dark'],
+      }),
+    ).toEqual({
+      command: 'marketplace',
+      positional: ['open', '@moxxy/virtual-office-plugin'],
+      flags: {},
+      passthrough: ['--theme', 'dark'],
     });
   });
 });

@@ -34,3 +34,8 @@ export function isPureUiPluginManifest(manifest: PluginKindCarrier): boolean {
   const kinds = pluginKindList(manifest.kind);
   return kinds.length === 1 && kinds[0] === 'ui';
 }
+
+/** True when the manifest declares `kind: 'ui'` (alone or alongside others). */
+export function isUiPluginManifest(manifest: PluginKindCarrier): boolean {
+  return pluginKindList(manifest.kind).includes('ui');
+}
