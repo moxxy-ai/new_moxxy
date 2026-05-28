@@ -20,11 +20,28 @@ export const EventLine: React.FC<{ event: MoxxyEvent }> = ({ event }) => {
       // Highlighted echo bar: bold prompt glyph + the user text, then a
       // dim horizontal rule under it. Matches the Grok-style "pinned
       // user prompt" treatment without needing a full bordered box.
+      //
+      // Layout note: glyph and body live in separate flex columns (same
+      // pattern as AssistantBlock). A naked `<Box><Text>› </Text><Text bold>…
+      // </Text></Box>` lets Ink's default `flexShrink: 1` on `<Text>`
+      // squash the prompt glyph's trailing space at narrow widths and
+      // mis-indent wrapped continuation lines.
+      //
+      // Display normalization: collapse runs of blank lines in the body
+      // to a single line break. Pasted prose often carries paragraph
+      // breaks (`\n\n+`); rendering them verbatim leaves an empty row
+      // mid-bar that looks like a layout bug. The actual `event.text`
+      // and what the model receives are untouched — this only tightens
+      // the echo render.
       return (
         <Box flexDirection="column" marginTop={1}>
-          <Box>
-            <Text>{`${Glyphs.prompt} `}</Text>
-            <Text bold>{event.text}</Text>
+          <Box flexDirection="row">
+            <Box flexDirection="column" marginRight={1} flexShrink={0}>
+              <Text>{Glyphs.prompt}</Text>
+            </Box>
+            <Box flexDirection="column" flexGrow={1}>
+              <Text bold>{collapseBlankLines(event.text)}</Text>
+            </Box>
           </Box>
           <Text dimColor>{'─'.repeat(Math.min(60, event.text.length + 2))}</Text>
         </Box>
@@ -74,6 +91,17 @@ export const EventLine: React.FC<{ event: MoxxyEvent }> = ({ event }) => {
       return null;
   }
 };
+
+/**
+ * Display-only newline normalization for the user-prompt echo bar.
+ * Drops blank lines (two or more newlines, optionally containing only
+ * whitespace, collapse to a single `\n`) while preserving the user's
+ * intentional single-line breaks. Leading/trailing whitespace is
+ * trimmed so a stray paste-end blank doesn't push the rule down a row.
+ */
+export function collapseBlankLines(text: string): string {
+  return text.replace(/\n[ \t]*\n+/g, '\n').replace(/^\s+|\s+$/g, '');
+}
 
 export function formatCompactionEvent(event: Extract<MoxxyEvent, { type: 'compaction' }>): string {
   if (event.tokensSaved <= 0 || event.summary.trim().length === 0) {

@@ -53,12 +53,15 @@ export function parseInputChunk(chunk: string, ctx: ParseCtx): string {
     if (ctx.inPaste) {
       const endIdx = chunk.indexOf(PASTE_END, i);
       if (endIdx < 0) {
-        const data = chunk.slice(i).replace(/\r/g, '\n');
+        // Collapse CRLF (Windows / many copy sources) to a single LF
+        // FIRST so we don't turn it into the double `\n\n` that bare
+        // `\r` → `\n` would. Bare `\r` (classic Mac) still maps to LF.
+        const data = chunk.slice(i).replace(/\r\n?/g, '\n');
         ctx.pasteAccum.text += data;
         ctx.dispatch({ type: 'paste-append', data });
         return '';
       }
-      const inner = chunk.slice(i, endIdx).replace(/\r/g, '\n');
+      const inner = chunk.slice(i, endIdx).replace(/\r\n?/g, '\n');
       if (inner) {
         ctx.pasteAccum.text += inner;
         ctx.dispatch({ type: 'paste-append', data: inner });
