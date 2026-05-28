@@ -81,7 +81,6 @@ describe('auto-consolidation nudge hook', () => {
 
   it('threshold:0 disables the nudge entirely', async () => {
     const store = new MemoryStore({ dir: tmp, embedder: null });
-    await fillMemories(store, 100);
     const plugin = buildMemoryConsolidatePlugin(store, () => stubProvider, { autoNudgeThreshold: 0 });
     // With threshold 0, no hooks are registered at all
     expect(plugin.hooks?.onBeforeProviderCall).toBeUndefined();
