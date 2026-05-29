@@ -148,6 +148,7 @@ export function registerIpcHandlers(pool: RunnerPool, desks: DeskStore): void {
       pool.setActive(active.id);
     }
   });
+  handle('desks.rename', async ({ id, name }) => desks.rename(id, name));
   handle('desks.pickFolder', async () => {
     const window =
       BrowserWindowApi.getFocusedWindow() ?? BrowserWindowApi.getAllWindows()[0];

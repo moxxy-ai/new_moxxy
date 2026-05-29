@@ -82,10 +82,12 @@ export function useChat(workspaceId: string | null): UseChat {
       if (!workspaceId) return;
       const trimmed = prompt.trim();
       if (!trimmed) return;
+      const model = chatStore.getModel(workspaceId);
       try {
         const { turnId } = await api().invoke('session.runTurn', {
           workspaceId,
           prompt: trimmed,
+          ...(model ? { model } : {}),
         });
         chatStore.dispatch(workspaceId, {
           type: 'send_started',

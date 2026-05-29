@@ -137,6 +137,8 @@ export class RemoteSession implements ClientSession {
   readonly transcribers: TranscribersClientView;
   readonly requirements: RequirementsClientView;
   readonly permissions: PermissionsClientView;
+  readonly mcpAdmin: McpAdminClientView;
+  readonly workflows: WorkflowsClientView;
   /**
    * Turns that completed before their `runTurn` stream was registered. A fast
    * turn can finish on the runner before the client processes the `runTurn`
@@ -199,6 +201,8 @@ export class RemoteSession implements ClientSession {
     this.transcribers = this.makeTranscribersView();
     this.requirements = { check: () => ({ ready: false, issues: [] }) };
     this.permissions = this.makePermissionsView();
+    this.mcpAdmin = this.makeMcpAdminView();
+    this.workflows = this.makeWorkflowsView();
   }
 
   /**
@@ -433,6 +437,70 @@ export class RemoteSession implements ClientSession {
       },
     };
   }
+
+  private makeMcpAdminView(): McpAdminClientView {
+    return {
+      listServers: () =>
+        this.peer.request<ReadonlyArray<McpServerStatus>>(
+          RunnerMethod.McpListServers,
+        ),
+      enableAndAttach: (name) =>
+        this.peer.request<{ toolNames: ReadonlyArray<string> } | null>(
+          RunnerMethod.McpEnableAndAttach,
+          { name },
+        ),
+      detach: (name) =>
+        this.peer.request<boolean>(RunnerMethod.McpDetach, { name }),
+    };
+  }
+
+  private makeWorkflowsView(): WorkflowsClientView {
+    return {
+      list: () =>
+        this.peer.request<ReadonlyArray<WorkflowSummary>>(
+          RunnerMethod.WorkflowList,
+        ),
+      setEnabled: async (name, enabled) => {
+        await this.peer.request(RunnerMethod.WorkflowSetEnabled, {
+          name,
+          enabled,
+        });
+      },
+      run: (name) =>
+        this.peer.request<WorkflowRunResult>(RunnerMethod.WorkflowRun, { name }),
+    };
+  }
+}
+
+interface McpServerStatus {
+  readonly name: string;
+  readonly enabled: boolean;
+  readonly connected: boolean;
+}
+interface McpAdminClientView {
+  listServers(): Promise<ReadonlyArray<McpServerStatus>>;
+  enableAndAttach(name: string): Promise<{ toolNames: ReadonlyArray<string> } | null>;
+  detach(name: string): Promise<boolean>;
+}
+
+interface WorkflowSummary {
+  readonly name: string;
+  readonly description: string;
+  readonly enabled: boolean;
+  readonly scope: string;
+  readonly steps: number;
+  readonly triggers: string;
+}
+interface WorkflowRunResult {
+  readonly ok: boolean;
+  readonly output: string;
+  readonly error?: string;
+  readonly steps: ReadonlyArray<{ readonly id: string; readonly status: string; readonly error?: string }>;
+}
+interface WorkflowsClientView {
+  list(): Promise<ReadonlyArray<WorkflowSummary>>;
+  setEnabled(name: string, enabled: boolean): Promise<void>;
+  run(name: string): Promise<WorkflowRunResult>;
 }
 
 // --- snapshot -> display-object reconstruction --------------------------------

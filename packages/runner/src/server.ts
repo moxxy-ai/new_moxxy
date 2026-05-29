@@ -24,12 +24,16 @@ import {
   abortParamsSchema,
   attachParamsSchema,
   commandRunParamsSchema,
+  mcpDetachParamsSchema,
+  mcpEnableAndAttachParamsSchema,
   modeSetActiveParamsSchema,
   permissionAddAllowParamsSchema,
   providerSetActiveParamsSchema,
   runTurnParamsSchema,
   setResolverParamsSchema,
   transcribeParamsSchema,
+  workflowRunParamsSchema,
+  workflowSetEnabledParamsSchema,
   type AttachResult,
   type CommandRunResult,
   type RunTurnResult,
@@ -128,6 +132,16 @@ export class RunnerServer {
     peer.handle(RunnerMethod.PermissionAddAllow, (raw) => this.handlePermissionAddAllow(raw));
     peer.handle(RunnerMethod.CommandRun, (raw) => this.handleCommandRun(client, raw));
     peer.handle(RunnerMethod.Transcribe, (raw) => this.handleTranscribe(raw));
+    peer.handle(RunnerMethod.McpListServers, () => this.handleMcpListServers());
+    peer.handle(RunnerMethod.McpEnableAndAttach, (raw) =>
+      this.handleMcpEnableAndAttach(raw),
+    );
+    peer.handle(RunnerMethod.McpDetach, (raw) => this.handleMcpDetach(raw));
+    peer.handle(RunnerMethod.WorkflowList, () => this.handleWorkflowList());
+    peer.handle(RunnerMethod.WorkflowSetEnabled, (raw) =>
+      this.handleWorkflowSetEnabled(raw),
+    );
+    peer.handle(RunnerMethod.WorkflowRun, (raw) => this.handleWorkflowRun(raw));
 
     peer.onClose(() => this.onDisconnect(client));
   }
@@ -283,6 +297,52 @@ export class RunnerServer {
       ...(params.language ? { language: params.language } : {}),
       ...(params.prompt ? { prompt: params.prompt } : {}),
     });
+  }
+
+  // --- MCP (delegates to session.mcpAdmin if the plugin is loaded) ----------
+
+  private async handleMcpListServers(): Promise<unknown[]> {
+    const admin = this.session.mcpAdmin;
+    if (!admin) return [];
+    return [...(await admin.listServers())];
+  }
+
+  private async handleMcpEnableAndAttach(
+    raw: unknown,
+  ): Promise<{ toolNames: ReadonlyArray<string> } | null> {
+    const params = mcpEnableAndAttachParamsSchema.parse(raw);
+    const admin = this.session.mcpAdmin;
+    if (!admin) throw new Error('mcp admin not available on this runner');
+    return admin.enableAndAttach(params.name);
+  }
+
+  private async handleMcpDetach(raw: unknown): Promise<boolean> {
+    const params = mcpDetachParamsSchema.parse(raw);
+    const admin = this.session.mcpAdmin;
+    if (!admin) throw new Error('mcp admin not available on this runner');
+    return admin.detach(params.name);
+  }
+
+  // --- Workflows (delegates to session.workflows if the plugin is loaded) ---
+
+  private async handleWorkflowList(): Promise<unknown[]> {
+    const view = this.session.workflows;
+    if (!view) return [];
+    return [...(await view.list())];
+  }
+
+  private async handleWorkflowSetEnabled(raw: unknown): Promise<void> {
+    const params = workflowSetEnabledParamsSchema.parse(raw);
+    const view = this.session.workflows;
+    if (!view) throw new Error('workflows plugin not loaded');
+    await view.setEnabled(params.name, params.enabled);
+  }
+
+  private async handleWorkflowRun(raw: unknown): Promise<unknown> {
+    const params = workflowRunParamsSchema.parse(raw);
+    const view = this.session.workflows;
+    if (!view) throw new Error('workflows plugin not loaded');
+    return view.run(params.name);
   }
 
   private broadcastInfo(): void {

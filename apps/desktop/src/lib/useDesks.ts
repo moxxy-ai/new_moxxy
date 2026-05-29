@@ -16,6 +16,7 @@ export interface UseDesks {
   readonly remove: (id: string) => Promise<void>;
   readonly setActive: (id: string) => Promise<void>;
   readonly pickFolder: () => Promise<string | null>;
+  readonly rename: (id: string, name: string) => Promise<void>;
 }
 
 const EMPTY: DesksOverview = { desks: [], activeId: null };
@@ -98,6 +99,18 @@ export function useDesks(): UseDesks {
     [overview.activeId, refresh],
   );
 
+  const rename = useCallback(
+    async (id: string, name: string): Promise<void> => {
+      try {
+        await api().invoke('desks.rename', { id, name });
+        await refresh();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [refresh],
+  );
+
   return {
     desks: overview.desks,
     activeId: overview.activeId,
@@ -108,5 +121,6 @@ export function useDesks(): UseDesks {
     remove,
     setActive,
     pickFolder,
+    rename,
   };
 }

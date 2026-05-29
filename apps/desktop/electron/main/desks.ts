@@ -114,6 +114,17 @@ export class DeskStore {
     doc.activeId = id;
     await this.save(doc);
   }
+
+  async rename(id: string, name: string): Promise<Desk> {
+    const trimmed = name.trim();
+    if (!trimmed) throw new Error('name must not be empty');
+    const doc = await this.load();
+    const desk = doc.desks.find((d) => d.id === id);
+    if (!desk) throw new Error(`unknown desk: ${id}`);
+    desk.name = trimmed;
+    await this.save(doc);
+    return desk;
+  }
 }
 
 function emptyDoc(): DeskDoc {

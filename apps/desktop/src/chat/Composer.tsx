@@ -7,11 +7,13 @@ import {
 } from 'react';
 import { Icon } from '@/lib/Icon';
 import { api } from '@/lib/api';
+import { AgentPicker } from './AgentPicker';
 
 interface ComposerProps {
   readonly ready: boolean;
   readonly sending: boolean;
   readonly activeTurnId: string | null;
+  readonly workspaceId: string;
   readonly onSend: (prompt: string) => void;
   readonly onAbort: () => void;
 }
@@ -39,6 +41,7 @@ export function Composer({
   ready,
   sending,
   activeTurnId,
+  workspaceId,
   onSend,
   onAbort,
 }: ComposerProps): JSX.Element {
@@ -181,7 +184,8 @@ export function Composer({
           outline: 'none',
         }}
       />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        <AgentPicker workspaceId={workspaceId} disabled={!ready || inFlight} />
         <ToolChip label="Attach file" onClick={() => void onAttach()}>
           <Icon name="attach" size={16} />
           <span>Attach</span>

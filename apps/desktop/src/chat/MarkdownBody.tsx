@@ -129,9 +129,19 @@ const components: Components = {
   ),
 };
 
-export function MarkdownBody({ text }: { readonly text: string }): JSX.Element {
+export function MarkdownBody({
+  text,
+  streaming = false,
+}: {
+  readonly text: string;
+  /** When true, attaches a blinking cursor via CSS ::after to the last
+   *  rendered block so the tail of the streaming text doesn't jump to
+   *  a new line. */
+  readonly streaming?: boolean;
+}): JSX.Element {
   return (
     <div
+      className={streaming ? 'markdown-body streaming' : 'markdown-body'}
       style={{
         fontSize: 14.5,
         lineHeight: 1.7,

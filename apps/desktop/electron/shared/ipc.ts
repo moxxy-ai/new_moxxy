@@ -217,6 +217,7 @@ export interface IpcCommands {
   'desks.create': (args: { name: string; cwd: string }) => Promise<Desk>;
   'desks.remove': (args: { id: string }) => Promise<void>;
   'desks.setActive': (args: { id: string }) => Promise<void>;
+  'desks.rename': (args: { id: string; name: string }) => Promise<Desk>;
   /** Open a native folder picker; resolves to the absolute path or null
    *  if the user cancelled. */
   'desks.pickFolder': () => Promise<string | null>;

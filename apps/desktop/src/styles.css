@@ -181,7 +181,12 @@ code, kbd, pre, .mono { font-family: var(--font-mono); }
 
 /* --- Streaming cursor (assistant tail) ------------------------- */
 
-.streaming-cursor {
+/* Streaming cursor: attached as ::after to the LAST child of the
+ * markdown body so it sits inline with the tail of the text rather
+ * than wrapping to a new line. The :last-child target picks whatever
+ * block element ended the stream (paragraph, list item, heading…). */
+.markdown-body.streaming > *:last-child::after {
+  content: '';
   display: inline-block;
   vertical-align: -2px;
   width: 7px;
@@ -190,4 +195,24 @@ code, kbd, pre, .mono { font-family: var(--font-mono); }
   background: var(--color-primary);
   border-radius: 2px;
   animation: moxxy-cursor 1s steps(2, end) infinite;
+}
+/* Lists end with <li>; the cursor should still trail the LAST li's
+ * text rather than appearing under it. */
+.markdown-body.streaming > ul:last-child > li:last-child::after,
+.markdown-body.streaming > ol:last-child > li:last-child::after {
+  content: '';
+  display: inline-block;
+  vertical-align: -2px;
+  width: 7px;
+  height: 14px;
+  margin-left: 3px;
+  background: var(--color-primary);
+  border-radius: 2px;
+  animation: moxxy-cursor 1s steps(2, end) infinite;
+}
+/* Hide the outer cursor on the parent <ul>/<ol> so it doesn't
+ * double up with the <li> one. */
+.markdown-body.streaming > ul:last-child::after,
+.markdown-body.streaming > ol:last-child::after {
+  content: none;
 }

@@ -80,9 +80,6 @@ export function ContextRail({ mode, provider, onClose }: Props): JSX.Element {
                 : 'Pick a provider in Settings.'}
             </div>
           </div>
-          <SmallButton aria-label="Configure">
-            <Icon name="sliders" size={14} />
-          </SmallButton>
         </div>
       </Card>
 

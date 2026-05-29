@@ -16,8 +16,13 @@ import type {
  * Wire contract between the runner (server) and thin clients. Bumped when an
  * incompatible change lands; `attach` exchanges versions so a stale client
  * fails loudly instead of misbehaving.
+ *
+ * v2: adds mcp.* and workflow.* method families so a thin client can drive
+ * the MCP-server admin + workflows panels remotely. Both families degrade
+ * cleanly when the corresponding plugin isn't loaded on the runner — the
+ * server returns an empty list / `null` rather than throwing.
  */
-export const RUNNER_PROTOCOL_VERSION = 1;
+export const RUNNER_PROTOCOL_VERSION = 2;
 
 /** Request methods. Client->server unless noted. */
 export const RunnerMethod = {
@@ -41,6 +46,18 @@ export const RunnerMethod = {
   CommandRun: 'command.run',
   /** client->server: transcribe audio using the runner's active transcriber. */
   Transcribe: 'transcribe',
+  /** client->server: list every MCP server the runner knows about. */
+  McpListServers: 'mcp.listServers',
+  /** client->server: enable an MCP server + attach its tools. */
+  McpEnableAndAttach: 'mcp.enableAndAttach',
+  /** client->server: detach an MCP server. */
+  McpDetach: 'mcp.detach',
+  /** client->server: list all workflows registered on the runner. */
+  WorkflowList: 'workflow.list',
+  /** client->server: enable/disable a workflow. */
+  WorkflowSetEnabled: 'workflow.setEnabled',
+  /** client->server: run a workflow now. */
+  WorkflowRun: 'workflow.run',
   /** server->client: ask this client to decide a tool-call permission. */
   PermissionCheck: 'permission.check',
   /** server->client: ask this client to confirm an approval checkpoint. */
@@ -127,6 +144,21 @@ export interface TranscribeParams {
   readonly prompt?: string;
 }
 export type TranscribeResult = TranscriptionResult;
+
+export interface McpEnableAndAttachParams {
+  readonly name: string;
+}
+export interface McpDetachParams {
+  readonly name: string;
+}
+
+export interface WorkflowSetEnabledParams {
+  readonly name: string;
+  readonly enabled: boolean;
+}
+export interface WorkflowRunParams {
+  readonly name: string;
+}
 
 export interface PermissionCheckParams {
   readonly turnId: string;
@@ -217,3 +249,12 @@ export const transcribeParamsSchema = z.object({
   language: z.string().optional(),
   prompt: z.string().optional(),
 });
+
+export const mcpEnableAndAttachParamsSchema = z.object({ name: z.string() });
+export const mcpDetachParamsSchema = z.object({ name: z.string() });
+
+export const workflowSetEnabledParamsSchema = z.object({
+  name: z.string(),
+  enabled: z.boolean(),
+});
+export const workflowRunParamsSchema = z.object({ name: z.string() });

@@ -86,8 +86,7 @@ function AssistantBlock({
       <div style={{ flex: 1, minWidth: 0 }}>
         <Header streaming={streaming} />
         <div style={{ marginTop: 6 }}>
-          <MarkdownBody text={text} />
-          {streaming && <span aria-hidden className="streaming-cursor" />}
+          <MarkdownBody text={text} streaming={streaming} />
         </div>
         {stopReason && stopReason !== 'end_turn' && (
           <div
@@ -103,7 +102,7 @@ function AssistantBlock({
             stop: {stopReason.replace(/_/g, ' ')}
           </div>
         )}
-        {!streaming && <ActionRow />}
+        {!streaming && <ActionRow text={text} />}
       </div>
     </div>
   );
@@ -169,7 +168,14 @@ function Header({ streaming }: { readonly streaming: boolean }): JSX.Element {
   );
 }
 
-function ActionRow(): JSX.Element {
+function ActionRow({ text }: { readonly text: string }): JSX.Element {
+  const onCopy = async (): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      /* swallow; rare on Electron */
+    }
+  };
   return (
     <div
       style={{
@@ -179,17 +185,8 @@ function ActionRow(): JSX.Element {
         color: 'var(--color-text-dim)',
       }}
     >
-      <IconBtn label="Copy">
+      <IconBtn label="Copy" onClick={() => void onCopy()}>
         <Icon name="copy" size={15} />
-      </IconBtn>
-      <IconBtn label="Good response">
-        <Icon name="thumbs-up" size={15} />
-      </IconBtn>
-      <IconBtn label="Bad response">
-        <Icon name="thumbs-down" size={15} />
-      </IconBtn>
-      <IconBtn label="More">
-        <Icon name="more" size={15} />
       </IconBtn>
     </div>
   );
@@ -198,14 +195,17 @@ function ActionRow(): JSX.Element {
 function IconBtn({
   children,
   label,
+  onClick,
 }: {
   readonly children: React.ReactNode;
   readonly label: string;
+  readonly onClick?: () => void;
 }): JSX.Element {
   return (
     <button
       type="button"
       aria-label={label}
+      onClick={onClick}
       style={{
         width: 28,
         height: 28,

@@ -20,11 +20,16 @@ import {
 
 interface InternalChat extends ChatState {
   lastSeenSeq: number;
+  /** Per-workspace model override. The runner exposes runTurn(prompt,
+   *  {model}) per-turn; we sticky it client-side so the user can pick
+   *  once in the configure modal and have it apply to every send. */
+  model: string | null;
 }
 
 const blankChat = (): InternalChat => ({
   ...initialChatState,
   lastSeenSeq: 0,
+  model: null,
 });
 
 class ChatStore {
@@ -62,6 +67,19 @@ class ChatStore {
    *  this is the first reference. */
   getChat(workspaceId: string): ChatState {
     return this.ensure(workspaceId);
+  }
+
+  /** Selected model override for this workspace, or null if the
+   *  runner's default should be used. */
+  getModel(workspaceId: string): string | null {
+    return this.chats.get(workspaceId)?.model ?? null;
+  }
+
+  setModel(workspaceId: string, model: string | null): void {
+    const cur = this.ensure(workspaceId);
+    if (cur.model === model) return;
+    cur.model = model;
+    this.emit();
   }
 
   /** True when there are events past the last time the user opened
