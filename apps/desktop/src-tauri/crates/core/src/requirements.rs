@@ -23,9 +23,10 @@ pub enum RequirementKind {
     /// The bundled `moxxy` CLI binary — installed globally via npm or
     /// shipped inside the app's resources.
     MoxxyCli,
-    /// At least one provider has credentials in `~/.moxxy/config.yaml`
-    /// (or wherever the user keeps them). The runner won't accept turns
-    /// until this lands.
+    /// Deprecated — kept for serde compatibility with any older
+    /// payload still in flight. The desktop no longer reports on
+    /// provider configuration via the requirements channel; the
+    /// runner is queried directly via the bridge instead.
     ProviderKey,
 }
 

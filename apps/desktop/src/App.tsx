@@ -4,12 +4,14 @@ import { useRunnerSession } from './lib/runner-session';
 import { useDesks } from './lib/desks';
 import { useWindows } from './lib/windows';
 import { useRequirements } from './lib/requirements';
+import { useRunnerInfo } from './lib/runner-info';
 import { isMainWindow } from './lib/window-context';
 import { DeskSidebar } from './desks/desk-sidebar';
 import { Composer, Transcript } from './chat';
 import { SchedulePanel } from './schedules';
 import { SettingsPanel } from './settings';
 import { RequirementsScreen } from './requirements';
+import { InitWizard } from './onboarding';
 
 type View = 'chat' | 'schedules' | 'settings';
 
@@ -19,15 +21,14 @@ export function App(): JSX.Element {
   const desks = useDesks();
   const windows = useWindows();
   const requirements = useRequirements();
+  const runner = useRunnerInfo();
   const [theme] = useState<'dark' | 'light'>('dark');
   const [view, setView] = useState<View>('chat');
   const showWindowControls = isMainWindow();
 
-  // While the system isn't ready (Node missing, moxxy CLI not on
-  // PATH, no provider config), block the main UI with the setup
-  // screen — it's the only sane state for the user to land on.
-  // Only the main window guards on requirements; session windows
-  // assume their parent already cleared this.
+  // Layer 1 — system requirements (Node + moxxy CLI). If they're not
+  // installed there's nothing for the runner to even attach to, so
+  // the wizard takes the screen.
   const blockOnRequirements =
     isMainWindow() &&
     requirements.status !== null &&
@@ -38,6 +39,29 @@ export function App(): JSX.Element {
       <div className="app-shell" data-theme={theme} style={{ gridTemplateColumns: '1fr' }}>
         <main className="app-main bp-grid-fade">
           <RequirementsScreen api={requirements} />
+        </main>
+      </div>
+    );
+  }
+
+  // Layer 2 — provider configuration. The runner is the authority:
+  // once it attaches we read its SessionInfo, and if no provider is
+  // active we run the inline init wizard (the in-app equivalent of
+  // `moxxy init`). Only gate on this once we know the runner is
+  // attached AND we've at least probed its info, so we don't flash
+  // the wizard during the boot moment.
+  const probedInfo = runner.info !== null;
+  const needsInit =
+    isMainWindow() &&
+    session.ready &&
+    probedInfo &&
+    !runner.info?.activeProvider;
+
+  if (needsInit) {
+    return (
+      <div className="app-shell" data-theme={theme} style={{ gridTemplateColumns: '1fr' }}>
+        <main className="app-main bp-grid-fade">
+          <InitWizard info={runner.info} onComplete={() => void runner.refresh()} />
         </main>
       </div>
     );

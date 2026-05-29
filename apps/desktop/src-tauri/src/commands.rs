@@ -112,6 +112,54 @@ pub async fn abort_turn(
     bridge.abort_turn(turn_id).await.map_err(|e| e.to_string())
 }
 
+/// Ask the runner for its current SessionInfo. Returns `null` until
+/// the bridge attaches; once it has, the wizard layer reads the
+/// `activeProvider` / `activeMode` fields to decide whether to render
+/// the inline init UI.
+#[tauri::command]
+pub async fn runner_info(state: State<'_, AppState>) -> Result<Option<serde_json::Value>, String> {
+    let slot = state.bridges.clone();
+    let bridge = {
+        let main = moxxy_desktop_core::windows::WindowId::main();
+        let runner = match state.runner_for_window(&main).await {
+            Some(r) => r,
+            None => return Ok(None),
+        };
+        match slot.get(&runner) {
+            Some(b) => b,
+            None => return Ok(None),
+        }
+    };
+    let info = bridge.get_info().await.map_err(|e| e.to_string())?;
+    Ok(Some(info))
+}
+
+/// Switch the runner's active provider. The runner resolves the
+/// credential from the vault, so the matching `<NAME>_API_KEY` must
+/// already exist there (call `settings_set_api_key` first if not).
+#[tauri::command]
+pub async fn runner_set_provider(
+    state: State<'_, AppState>,
+    provider: String,
+    config: Option<serde_json::Value>,
+) -> Result<(), String> {
+    let bridge = bridge_for(&state, None).await?;
+    bridge
+        .provider_set_active(provider, config)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Switch the runner's active mode.
+#[tauri::command]
+pub async fn runner_set_mode(
+    state: State<'_, AppState>,
+    mode: String,
+) -> Result<(), String> {
+    let bridge = bridge_for(&state, None).await?;
+    bridge.mode_set_active(mode).await.map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub async fn runner_ready(
     state: State<'_, AppState>,
@@ -326,16 +374,12 @@ pub struct ProvidersOverview {
 
 #[tauri::command]
 pub async fn settings_providers_list() -> ProvidersOverview {
-    let moxxy_dir = dirs::home_dir()
-        .map(|h| h.join(".moxxy"))
-        .unwrap_or_else(|| std::path::PathBuf::from("."));
-    let known = moxxy_desktop_core::settings::read_provider_status(
-        &moxxy_dir.join("config.yaml"),
+    let home = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+    let known = moxxy_desktop_core::settings::read_provider_status(&home).await;
+    let custom = moxxy_desktop_core::settings::read_custom_providers(
+        &home.join(".moxxy").join("providers.json"),
     )
     .await;
-    let custom =
-        moxxy_desktop_core::settings::read_custom_providers(&moxxy_dir.join("providers.json"))
-            .await;
     ProvidersOverview { known, custom }
 }
 

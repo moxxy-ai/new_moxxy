@@ -22,6 +22,85 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+/// Where the moxxy CLI reads its config from, in priority order. Mirrors
+/// `packages/config/src/loader.ts` — both the user-level paths AND the
+/// project-level paths the loader walks up from cwd.
+///
+/// `moxxy init` writes `moxxy.config.yaml` to whichever directory was
+/// `process.cwd()` when it ran — most commonly the user's home dir, so
+/// `~/moxxy.config.yaml` (NOT `~/.moxxy/config.yaml`) is the typical
+/// landing spot. We probe every documented extension because the CLI
+/// accepts all of them.
+pub const CONFIG_EXTENSIONS: &[&str] = &["yaml", "yml", "ts", "js", "mjs", "cjs"];
+
+/// Resolve every config file moxxy would consider, in load order. Used
+/// for the requirements check's "did the user run init yet" signal.
+pub fn config_search_paths(home: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    // `~/moxxy.config.{ext}` — where moxxy init lands when cwd is $HOME.
+    for ext in CONFIG_EXTENSIONS {
+        out.push(home.join(format!("moxxy.config.{ext}")));
+    }
+    // `~/.moxxy/config.{ext}` — the explicit user-global path.
+    for ext in CONFIG_EXTENSIONS {
+        out.push(home.join(".moxxy").join(format!("config.{ext}")));
+    }
+    out
+}
+
+/// Return the first config file the moxxy loader would find under
+/// `home`, if any.
+pub async fn locate_user_config(home: &Path) -> Option<PathBuf> {
+    for path in config_search_paths(home) {
+        if tokio::fs::metadata(&path).await.is_ok() {
+            return Some(path);
+        }
+    }
+    None
+}
+
+/// Active picks `~/.moxxy/preferences.json` records — the runner reads
+/// these on boot to remember the last provider/model the user chose
+/// via `/provider` / `/model` slash commands. A populated `provider_name`
+/// is concrete proof that the user has at least started using moxxy.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Preferences {
+    #[serde(rename = "providerName", default)]
+    pub provider_name: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub mode: Option<String>,
+    #[serde(rename = "loopStrategy", default)]
+    pub loop_strategy: Option<String>,
+}
+
+pub async fn read_preferences(home: &Path) -> Preferences {
+    let path = home.join(".moxxy").join("preferences.json");
+    match tokio::fs::read(&path).await {
+        Ok(bytes) => serde_json::from_slice(&bytes).unwrap_or_default(),
+        Err(_) => Preferences::default(),
+    }
+}
+
+/// Names of the vault entries (just the keys — the secrets stay
+/// encrypted). Lets us check whether `<PROVIDER>_API_KEY` exists without
+/// shelling out to the CLI or doing any KDF work.
+pub async fn vault_entry_names(home: &Path) -> Vec<String> {
+    let path = home.join(".moxxy").join("vault.json");
+    let bytes = match tokio::fs::read(&path).await {
+        Ok(b) => b,
+        Err(_) => return Vec::new(),
+    };
+    let Ok(doc) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+        return Vec::new();
+    };
+    doc["entries"]
+        .as_object()
+        .map(|o| o.keys().cloned().collect())
+        .unwrap_or_default()
+}
+
 /// A provider entry as the desktop settings panel sees it. The CLI
 /// expects richer config (model lists, auth methods, etc.) but for
 /// onboarding we surface just the basics.
@@ -43,22 +122,32 @@ pub fn known_providers() -> Vec<&'static str> {
     vec!["anthropic", "openai", "openai-codex"]
 }
 
-/// Inspect `~/.moxxy/config.yaml` for which providers already have a
-/// `${vault:…}` reference set. We do a textual scan — cheap, robust
-/// against the file being hand-edited, and good enough for the
-/// onboarding signal.
-pub async fn read_provider_status(path: &Path) -> Vec<ProviderConfig> {
-    let body = tokio::fs::read_to_string(path).await.unwrap_or_default();
+/// Per-provider "configured" status. A provider is considered
+/// configured when EITHER:
+///   - any of the moxxy config files (user-global or home-root) has a
+///     `${vault:NAME_API_KEY}` reference for it, OR
+///   - the vault has an entry under that key (the runner picks the
+///     value up via the same env-var contract `provider_add` uses).
+/// The second branch is what catches users who pasted a key via the
+/// TUI but never wrote a YAML stanza.
+pub async fn read_provider_status(home: &Path) -> Vec<ProviderConfig> {
+    let mut bodies: Vec<String> = Vec::new();
+    for path in config_search_paths(home) {
+        if let Ok(body) = tokio::fs::read_to_string(&path).await {
+            bodies.push(body);
+        }
+    }
+    let vault_keys = vault_entry_names(home).await;
     known_providers()
         .into_iter()
         .map(|name| {
-            let vault_ref = format!("${{vault:{}}}", vault_key_for(name));
+            let vault_key = vault_key_for(name);
+            let vault_ref = format!("${{vault:{vault_key}}}");
+            let in_config = bodies.iter().any(|b| b.contains(&vault_ref));
+            let in_vault = vault_keys.iter().any(|k| k == &vault_key);
             ProviderConfig {
                 name: name.to_string(),
-                // A provider is "configured" when its `<NAME>_API_KEY`
-                // vault reference appears anywhere in the file. Simpler
-                // and more accurate than YAML-aware scanning.
-                configured: body.contains(&vault_ref),
+                configured: in_config || in_vault,
             }
         })
         .collect()
@@ -276,35 +365,133 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn read_provider_status_finds_configured_entries() {
+    async fn read_provider_status_finds_yaml_at_home_root() {
+        // `moxxy init` writes to <cwd>/moxxy.config.yaml — when cwd is
+        // $HOME, that lands at ~/moxxy.config.yaml. The desktop must
+        // see that file just like the runner does.
         let tmp = TempDir::new().unwrap();
-        let path = tmp.path().join("config.yaml");
+        let path = tmp.path().join("moxxy.config.yaml");
         let body = r"
-providers:
-  anthropic:
+provider:
+  name: anthropic
+  config:
     apiKey: ${vault:ANTHROPIC_API_KEY}
-  openai:
-    apiKey: ${vault:OPENAI_API_KEY}
 ";
         tokio::fs::write(&path, body).await.unwrap();
-        let status = read_provider_status(&path).await;
+        let status = read_provider_status(tmp.path()).await;
         let anthropic = status.iter().find(|p| p.name == "anthropic").unwrap();
-        let openai = status.iter().find(|p| p.name == "openai").unwrap();
         let codex = status.iter().find(|p| p.name == "openai-codex").unwrap();
         assert!(anthropic.configured);
-        assert!(openai.configured);
         assert!(!codex.configured);
     }
 
     #[tokio::test]
-    async fn read_provider_status_handles_missing_file() {
+    async fn read_provider_status_finds_yaml_under_moxxy_dir() {
         let tmp = TempDir::new().unwrap();
-        let path = tmp.path().join("nope.yaml");
-        let status = read_provider_status(&path).await;
+        let dir = tmp.path().join(".moxxy");
+        tokio::fs::create_dir_all(&dir).await.unwrap();
+        let body = "provider:\n  name: openai\n  config:\n    apiKey: ${vault:OPENAI_API_KEY}\n";
+        tokio::fs::write(dir.join("config.yaml"), body).await.unwrap();
+        let status = read_provider_status(tmp.path()).await;
+        let openai = status.iter().find(|p| p.name == "openai").unwrap();
+        assert!(openai.configured);
+    }
+
+    #[tokio::test]
+    async fn read_provider_status_uses_vault_entry_as_proof() {
+        // A user who pasted a key via the TUI but never wrote a YAML
+        // stanza still has the runner find it. The desktop should
+        // mirror that — pure vault entry counts as "configured".
+        let tmp = TempDir::new().unwrap();
+        let moxxy_dir = tmp.path().join(".moxxy");
+        tokio::fs::create_dir_all(&moxxy_dir).await.unwrap();
+        let vault = serde_json::json!({
+            "version": 1,
+            "entries": {
+                "ANTHROPIC_API_KEY": { "iv": "x", "ciphertext": "y", "authTag": "z" }
+            }
+        });
+        tokio::fs::write(moxxy_dir.join("vault.json"), vault.to_string())
+            .await
+            .unwrap();
+        let status = read_provider_status(tmp.path()).await;
+        let anthropic = status.iter().find(|p| p.name == "anthropic").unwrap();
+        assert!(anthropic.configured);
+    }
+
+    #[tokio::test]
+    async fn read_provider_status_handles_a_blank_home() {
+        let tmp = TempDir::new().unwrap();
+        let status = read_provider_status(tmp.path()).await;
         assert_eq!(status.len(), 3);
         for s in status {
             assert!(!s.configured);
         }
+    }
+
+    #[tokio::test]
+    async fn locate_user_config_finds_home_root_yaml() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("moxxy.config.yaml");
+        tokio::fs::write(&path, "provider: foo\n").await.unwrap();
+        let found = locate_user_config(tmp.path()).await.unwrap();
+        assert_eq!(found, path);
+    }
+
+    #[tokio::test]
+    async fn locate_user_config_walks_all_extensions() {
+        for ext in ["yml", "ts", "mjs"] {
+            let tmp = TempDir::new().unwrap();
+            let path = tmp.path().join(format!("moxxy.config.{ext}"));
+            tokio::fs::write(&path, "x").await.unwrap();
+            let found = locate_user_config(tmp.path()).await.unwrap();
+            assert_eq!(found, path);
+        }
+    }
+
+    #[tokio::test]
+    async fn read_preferences_returns_default_when_missing() {
+        let tmp = TempDir::new().unwrap();
+        let prefs = read_preferences(tmp.path()).await;
+        assert!(prefs.provider_name.is_none());
+    }
+
+    #[tokio::test]
+    async fn read_preferences_parses_the_runner_shape() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path().join(".moxxy");
+        tokio::fs::create_dir_all(&dir).await.unwrap();
+        let body = serde_json::json!({
+            "providerName": "openai-codex",
+            "model": "gpt-5.5",
+            "mode": "tool-use",
+            "loopStrategy": "tool-use",
+        });
+        tokio::fs::write(dir.join("preferences.json"), body.to_string())
+            .await
+            .unwrap();
+        let prefs = read_preferences(tmp.path()).await;
+        assert_eq!(prefs.provider_name.as_deref(), Some("openai-codex"));
+        assert_eq!(prefs.model.as_deref(), Some("gpt-5.5"));
+    }
+
+    #[tokio::test]
+    async fn vault_entry_names_lists_keys_without_decryption() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path().join(".moxxy");
+        tokio::fs::create_dir_all(&dir).await.unwrap();
+        let body = serde_json::json!({
+            "entries": {
+                "ANTHROPIC_API_KEY": {},
+                "OPENAI_API_KEY": {}
+            }
+        });
+        tokio::fs::write(dir.join("vault.json"), body.to_string())
+            .await
+            .unwrap();
+        let mut names = vault_entry_names(tmp.path()).await;
+        names.sort();
+        assert_eq!(names, vec!["ANTHROPIC_API_KEY", "OPENAI_API_KEY"]);
     }
 
     #[test]

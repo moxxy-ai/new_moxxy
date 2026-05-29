@@ -227,6 +227,84 @@ impl RunnerBridge {
         Ok(self.inner.peer.request("runTurn", params).await?)
     }
 
+    /// Fetch the current SessionInfo snapshot — provider, mode, plugin
+    /// list, etc. The desktop reads this after attach to decide whether
+    /// to show the inline init wizard.
+    pub async fn get_info(&self) -> BridgeResult<Value> {
+        Ok(self.inner.peer.request("getInfo", serde_json::json!({})).await?)
+    }
+
+    /// Switch the active provider. The runner resolves credentials via
+    /// its own resolver (vault), so this works as long as the matching
+    /// `<NAME>_API_KEY` is already in the vault.
+    pub async fn provider_set_active(
+        &self,
+        name: impl Into<String>,
+        config: Option<Value>,
+    ) -> BridgeResult<()> {
+        #[derive(Serialize)]
+        struct Args {
+            name: String,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            config: Option<Value>,
+        }
+        let _: Value = self
+            .inner
+            .peer
+            .request(
+                "provider.setActive",
+                Args {
+                    name: name.into(),
+                    config,
+                },
+            )
+            .await?;
+        Ok(())
+    }
+
+    /// Switch the active mode (e.g. `"tool-use"`, `"plan-execute"`).
+    pub async fn mode_set_active(&self, name: impl Into<String>) -> BridgeResult<()> {
+        #[derive(Serialize)]
+        struct Args {
+            name: String,
+        }
+        let _: Value = self
+            .inner
+            .peer
+            .request("mode.setActive", Args { name: name.into() })
+            .await?;
+        Ok(())
+    }
+
+    /// Run a registered slash command on the runner — same surface as
+    /// the TUI exposes via `/...` input. The runner's CommandOutput is
+    /// forwarded as opaque JSON.
+    pub async fn command_run(
+        &self,
+        name: impl Into<String>,
+        args: impl Into<String>,
+        channel: impl Into<String>,
+    ) -> BridgeResult<Value> {
+        #[derive(Serialize)]
+        struct Args {
+            name: String,
+            args: String,
+            channel: String,
+        }
+        Ok(self
+            .inner
+            .peer
+            .request(
+                "command.run",
+                Args {
+                    name: name.into(),
+                    args: args.into(),
+                    channel: channel.into(),
+                },
+            )
+            .await?)
+    }
+
     /// Transcribe audio via the runner's active transcriber plugin.
     /// Audio crosses Tauri IPC as base64 already (cheapest format the
     /// webview can produce from a Blob), so we forward the same shape
