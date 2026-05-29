@@ -1,15 +1,23 @@
-//! Provider configuration read/written to `~/.moxxy/config.yaml`.
+//! Provider + custom-provider configuration shared with the moxxy CLI.
 //!
-//! The moxxy CLI is authoritative for the schema; the desktop surfaces
-//! a small subset (the provider block) so the user can paste an API key
-//! during onboarding without learning YAML. For richer plugin / skill
-//! configuration the user opens the file in their editor.
+//! The CLI is authoritative for the schema. The desktop reads + writes
+//! the same on-disk files it uses (the project-local `moxxy.config.yaml`
+//! also feeds into the CLI's loader when a desk's cwd contains one):
 //!
-//! We avoid pulling in a full YAML library here — the file we touch
-//! is small enough (≤200 lines in practice) that a one-line `providers`
-//! block append, plus a regex-based key replace, is enough for v1.
-//! When a deeper edit is wanted, the user gets a clear "open in editor"
-//! affordance instead.
+//!   * `~/.moxxy/config.yaml` — user-global config (`provider:` block
+//!     using `${vault:NAME}` placeholders).
+//!   * `~/.moxxy/vault.json`  — encrypted secrets, owned by the CLI's
+//!     vault plugin. We never touch it directly; the desktop pipes
+//!     secrets through `moxxy vault set <NAME>` so the CLI's KDF,
+//!     keychain, and rotation logic stays in one place.
+//!   * `~/.moxxy/providers.json` — custom OpenAI-compatible providers
+//!     registered at runtime via the `provider_add` tool.
+//!
+//! When the user adds their first provider key, the desktop also writes
+//! a minimal `provider:` stanza to `~/.moxxy/config.yaml` if one isn't
+//! there yet — without that, the runner has no idea the key exists.
+//! We avoid pulling in a YAML library: the stanza is fixed shape so
+//! a literal-string append is fine, and the upsert is idempotent.
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -78,6 +86,182 @@ pub fn vault_set_command(cli_entry: &Path, provider: &str) -> (PathBuf, Vec<Stri
             key,
         ],
     )
+}
+
+/// Ensure `config.yaml` declares `provider: { name, model, config: {
+/// apiKey: ${vault:NAME_API_KEY} } }`. If a `provider:` block already
+/// exists we leave the file alone — the user may have hand-tuned it
+/// and we'd rather lose UX consistency than blow away their model
+/// list or fallbacks. Returns `true` if the file was modified.
+pub async fn ensure_provider_in_config(
+    path: &Path,
+    provider: &str,
+    model: Option<&str>,
+) -> crate::error::AppResult<bool> {
+    let existing = tokio::fs::read_to_string(path).await.unwrap_or_default();
+    if has_top_level_provider_block(&existing) {
+        return Ok(false);
+    }
+    let key = vault_key_for(provider);
+    let model = model.unwrap_or_else(|| default_model_for(provider));
+    let stanza = format!(
+        "\n# Added by moxxy desktop. Edit freely — the CLI loader\n# picks up any changes on next runner start.\nprovider:\n  name: {provider}\n  model: {model}\n  config:\n    apiKey: ${{vault:{key}}}\n",
+    );
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+    let mut body = existing;
+    if !body.is_empty() && !body.ends_with('\n') {
+        body.push('\n');
+    }
+    body.push_str(&stanza);
+    // Atomic write so a crash mid-rewrite can't half-truncate the file.
+    let tmp = path.with_extension("yaml.tmp");
+    tokio::fs::write(&tmp, body).await?;
+    tokio::fs::rename(&tmp, path).await?;
+    Ok(true)
+}
+
+/// True when `body` already has a top-level `provider:` key. Loose
+/// scan — we only need to gate the auto-append above.
+fn has_top_level_provider_block(body: &str) -> bool {
+    body.lines().any(|line| {
+        let trimmed = line.trim_end();
+        trimmed.starts_with("provider:") && !trimmed.contains(' ')
+            || trimmed == "provider:"
+            || trimmed.starts_with("provider: ")
+    })
+}
+
+fn default_model_for(provider: &str) -> &'static str {
+    // Sensible defaults that the runner accepts out of the box. Users
+    // can swap freely in the YAML afterwards.
+    match provider {
+        "anthropic" => "claude-opus-4-7",
+        "openai" => "gpt-5",
+        "openai-codex" => "gpt-5-codex",
+        _ => "claude-opus-4-7",
+    }
+}
+
+// --- Custom providers (`~/.moxxy/providers.json`) ----------------------------
+
+/// A custom OpenAI-compatible provider registered via the runner's
+/// `provider_add` tool. Mirrors `packages/plugin-provider-admin`'s
+/// stored shape so the desktop can surface them alongside the curated
+/// list.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CustomProvider {
+    pub name: String,
+    #[serde(rename = "baseURL")]
+    pub base_url: String,
+    #[serde(rename = "defaultModel", default, skip_serializing_if = "Option::is_none")]
+    pub default_model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    #[serde(rename = "envVar", default, skip_serializing_if = "Option::is_none")]
+    pub env_var: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct CustomProvidersDoc {
+    #[serde(default)]
+    version: u32,
+    #[serde(default)]
+    providers: Vec<CustomProvider>,
+}
+
+pub async fn read_custom_providers(path: &Path) -> Vec<CustomProvider> {
+    let body = match tokio::fs::read(path).await {
+        Ok(b) => b,
+        Err(_) => return Vec::new(),
+    };
+    serde_json::from_slice::<CustomProvidersDoc>(&body)
+        .map(|d| d.providers)
+        .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod ensure_tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[tokio::test]
+    async fn writes_a_stanza_when_config_is_empty() {
+        let tmp = TempDir::new().unwrap();
+        let p = tmp.path().join("config.yaml");
+        let wrote = ensure_provider_in_config(&p, "anthropic", None).await.unwrap();
+        assert!(wrote);
+        let body = tokio::fs::read_to_string(&p).await.unwrap();
+        assert!(body.contains("provider:"));
+        assert!(body.contains("name: anthropic"));
+        assert!(body.contains("apiKey: ${vault:ANTHROPIC_API_KEY}"));
+    }
+
+    #[tokio::test]
+    async fn leaves_existing_provider_block_alone() {
+        let tmp = TempDir::new().unwrap();
+        let p = tmp.path().join("config.yaml");
+        let pre = "provider:\n  name: openai\n  model: gpt-5\n";
+        tokio::fs::write(&p, pre).await.unwrap();
+        let wrote = ensure_provider_in_config(&p, "anthropic", None).await.unwrap();
+        assert!(!wrote);
+        let body = tokio::fs::read_to_string(&p).await.unwrap();
+        assert_eq!(body, pre);
+    }
+
+    #[tokio::test]
+    async fn appends_to_existing_non_provider_content() {
+        let tmp = TempDir::new().unwrap();
+        let p = tmp.path().join("config.yaml");
+        let pre = "mode: tool-use\n";
+        tokio::fs::write(&p, pre).await.unwrap();
+        ensure_provider_in_config(&p, "openai", Some("gpt-4o")).await.unwrap();
+        let body = tokio::fs::read_to_string(&p).await.unwrap();
+        assert!(body.starts_with("mode: tool-use"));
+        assert!(body.contains("name: openai"));
+        assert!(body.contains("model: gpt-4o"));
+    }
+
+    #[tokio::test]
+    async fn creates_parent_directory() {
+        let tmp = TempDir::new().unwrap();
+        let p = tmp.path().join("nested/dir/config.yaml");
+        let wrote = ensure_provider_in_config(&p, "anthropic", None).await.unwrap();
+        assert!(wrote);
+        assert!(p.exists());
+    }
+
+    #[tokio::test]
+    async fn custom_providers_returns_empty_for_missing_file() {
+        let tmp = TempDir::new().unwrap();
+        let p = tmp.path().join("providers.json");
+        let list = read_custom_providers(&p).await;
+        assert!(list.is_empty());
+    }
+
+    #[tokio::test]
+    async fn custom_providers_parses_a_real_doc() {
+        let tmp = TempDir::new().unwrap();
+        let p = tmp.path().join("providers.json");
+        let body = serde_json::json!({
+            "version": 1,
+            "providers": [
+                {
+                    "name": "deepseek",
+                    "kind": "openai-compat",
+                    "baseURL": "https://api.deepseek.com/v1",
+                    "defaultModel": "deepseek-chat",
+                    "envVar": "DEEPSEEK_API_KEY"
+                }
+            ]
+        });
+        tokio::fs::write(&p, body.to_string()).await.unwrap();
+        let list = read_custom_providers(&p).await;
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].name, "deepseek");
+        assert_eq!(list[0].base_url, "https://api.deepseek.com/v1");
+    }
 }
 
 #[cfg(test)]

@@ -105,10 +105,11 @@ fn find_monorepo_cli() -> Option<std::path::PathBuf> {
 }
 
 async fn check_provider() -> RequirementCheck {
-    // Cheap heuristic: ~/.moxxy/config.yaml exists and isn't empty. The
-    // CLI does the real schema validation when it loads; we just want a
-    // tri-state here for the wizard ("Add your first provider" vs
-    // "We see a config, ready to launch").
+    // The CLI's `moxxy init` writes the API key into the vault and
+    // adds a `${vault:NAME_API_KEY}` reference to ~/.moxxy/config.yaml.
+    // We mirror that pair: a config file that names at least one
+    // provider AND a vault file with at least one entry. Either alone
+    // is the wizard-incomplete state.
     let home = match dirs::home_dir() {
         Some(h) => h,
         None => {
@@ -121,25 +122,40 @@ async fn check_provider() -> RequirementCheck {
         }
     };
     let cfg = home.join(".moxxy").join("config.yaml");
-    let has_config = tokio::fs::metadata(&cfg)
+    let vault = home.join(".moxxy").join("vault.json");
+    let cfg_body = tokio::fs::read_to_string(&cfg).await.unwrap_or_default();
+    let has_provider_ref = cfg_body.contains("${vault:") || cfg_body.contains("provider:");
+    let vault_has_entries = tokio::fs::read(&vault)
         .await
-        .map(|m| m.len() > 0)
+        .map(|b| {
+            serde_json::from_slice::<serde_json::Value>(&b)
+                .map(|v| v["entries"].as_object().map(|o| !o.is_empty()).unwrap_or(false))
+                .unwrap_or(false)
+        })
         .unwrap_or(false);
-    if has_config {
+
+    if has_provider_ref && vault_has_entries {
         RequirementCheck {
             kind: RequirementKind::ProviderKey,
             satisfied: true,
-            detail: Some(format!("{} present", cfg.display())),
+            detail: Some("provider configured (config + vault)".into()),
             install: None,
         }
     } else {
+        let detail = if !cfg.exists() {
+            format!("{} missing", cfg.display())
+        } else if !has_provider_ref {
+            "config.yaml has no provider block — add one in Settings".into()
+        } else {
+            "vault has no API key — paste one in Settings → Providers".into()
+        };
         RequirementCheck {
             kind: RequirementKind::ProviderKey,
             satisfied: false,
-            detail: Some(format!("{} not present", cfg.display())),
+            detail: Some(detail),
             install: Some(InstallHint::OpenUrl {
                 url: "https://moxxy.ai/docs/quickstart".into(),
-                label: "How to add a provider".into(),
+                label: "Open setup guide…".into(),
             }),
         }
     }

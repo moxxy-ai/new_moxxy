@@ -6,8 +6,21 @@ export interface ProviderConfig {
   readonly configured: boolean;
 }
 
+export interface CustomProvider {
+  readonly name: string;
+  readonly baseURL: string;
+  readonly defaultModel?: string;
+  readonly kind?: string;
+  readonly envVar?: string;
+}
+
+export interface ProvidersOverview {
+  readonly known: ReadonlyArray<ProviderConfig>;
+  readonly custom: ReadonlyArray<CustomProvider>;
+}
+
 export interface SettingsApi {
-  readonly providers: ReadonlyArray<ProviderConfig>;
+  readonly providers: ProvidersOverview;
   readonly skills: ReadonlyArray<string>;
   readonly loading: boolean;
   readonly error: string | null;
@@ -23,8 +36,10 @@ export interface SettingsApi {
  * stale state. Errors are captured in `error`; mutating calls also
  * return a boolean for the caller to drive optimistic UI.
  */
+const EMPTY_PROVIDERS: ProvidersOverview = { known: [], custom: [] };
+
 export function useSettings(): SettingsApi {
-  const [providers, setProviders] = useState<ReadonlyArray<ProviderConfig>>([]);
+  const [providers, setProviders] = useState<ProvidersOverview>(EMPTY_PROVIDERS);
   const [skills, setSkills] = useState<ReadonlyArray<string>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -33,10 +48,13 @@ export function useSettings(): SettingsApi {
     setLoading(true);
     try {
       const [p, s] = await Promise.all([
-        invoke<ProviderConfig[]>('settings_providers_list'),
+        invoke<ProvidersOverview>('settings_providers_list'),
         invoke<string[]>('settings_skills_list').catch(() => []),
       ]);
-      setProviders(p);
+      setProviders({
+        known: Array.isArray(p?.known) ? p.known : [],
+        custom: Array.isArray(p?.custom) ? p.custom : [],
+      });
       setSkills(s);
       setError(null);
     } catch (e) {

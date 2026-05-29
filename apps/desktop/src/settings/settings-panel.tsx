@@ -86,21 +86,92 @@ export function SettingsPanel({ api }: SettingsPanelProps): JSX.Element {
 
 function ProvidersPane({ api }: { readonly api: SettingsApi }): JSX.Element {
   return (
-    <ul
-      role="list"
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <section>
+        <SectionHeader>Built-in</SectionHeader>
+        <ul
+          role="list"
+          style={{
+            listStyle: 'none',
+            margin: 0,
+            padding: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.5rem',
+          }}
+        >
+          {api.providers.known.map((p) => (
+            <ProviderRow key={p.name} provider={p} api={api} />
+          ))}
+        </ul>
+      </section>
+      {api.providers.custom.length > 0 && (
+        <section>
+          <SectionHeader>Custom (from ~/.moxxy/providers.json)</SectionHeader>
+          <ul
+            role="list"
+            style={{
+              listStyle: 'none',
+              margin: 0,
+              padding: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.5rem',
+            }}
+          >
+            {api.providers.custom.map((p) => (
+              <li
+                key={p.name}
+                data-testid={`custom-provider-${p.name}`}
+                style={{
+                  padding: '0.6rem 0.8rem',
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--color-bg-card)',
+                  borderRadius: 'var(--radius-block)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.2rem',
+                }}
+              >
+                <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>
+                  {p.name}
+                </span>
+                <span
+                  className="mono"
+                  style={{
+                    fontSize: '0.7rem',
+                    color: 'var(--color-text-dim)',
+                  }}
+                >
+                  {p.baseURL}
+                  {p.defaultModel ? ` · ${p.defaultModel}` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function SectionHeader({
+  children,
+}: {
+  readonly children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <h2
       style={{
-        listStyle: 'none',
-        margin: 0,
-        padding: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '0.5rem',
+        margin: '0 0 0.4rem',
+        fontSize: '0.7rem',
+        color: 'var(--color-text-dim)',
+        textTransform: 'uppercase',
+        letterSpacing: '0.08em',
       }}
     >
-      {api.providers.map((p) => (
-        <ProviderRow key={p.name} provider={p} api={api} />
-      ))}
-    </ul>
+      {children}
+    </h2>
   );
 }
 

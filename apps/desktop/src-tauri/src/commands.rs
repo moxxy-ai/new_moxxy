@@ -313,12 +313,30 @@ pub fn schedules_validate_cron(expr: String) -> bool {
 
 // ---- Settings (providers + skills) -------------------------------------------
 
+#[derive(Debug, serde::Serialize)]
+pub struct ProvidersOverview {
+    /// Curated providers (anthropic, openai, openai-codex) with a
+    /// "configured" flag based on whether `${vault:NAME_API_KEY}` is
+    /// referenced in `~/.moxxy/config.yaml`.
+    pub known: Vec<moxxy_desktop_core::settings::ProviderConfig>,
+    /// Custom OpenAI-compatible providers registered via the runner's
+    /// `provider_add` tool. Read from `~/.moxxy/providers.json`.
+    pub custom: Vec<moxxy_desktop_core::settings::CustomProvider>,
+}
+
 #[tauri::command]
-pub async fn settings_providers_list() -> Vec<moxxy_desktop_core::settings::ProviderConfig> {
-    let path = dirs::home_dir()
-        .map(|h| h.join(".moxxy").join("config.yaml"))
-        .unwrap_or_else(|| std::path::PathBuf::from("config.yaml"));
-    moxxy_desktop_core::settings::read_provider_status(&path).await
+pub async fn settings_providers_list() -> ProvidersOverview {
+    let moxxy_dir = dirs::home_dir()
+        .map(|h| h.join(".moxxy"))
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
+    let known = moxxy_desktop_core::settings::read_provider_status(
+        &moxxy_dir.join("config.yaml"),
+    )
+    .await;
+    let custom =
+        moxxy_desktop_core::settings::read_custom_providers(&moxxy_dir.join("providers.json"))
+            .await;
+    ProvidersOverview { known, custom }
 }
 
 /// Hand off an API key to the moxxy vault via the CLI's own `vault set`
@@ -364,6 +382,18 @@ pub async fn settings_set_api_key(provider: String, secret: String) -> Result<()
     if !status.success() {
         return Err(format!("vault set exited {}", status.code().unwrap_or(-1)));
     }
+
+    // Make sure the runner can actually USE this key — append a
+    // minimal `provider:` block to ~/.moxxy/config.yaml when none
+    // exists. Without this, vault has the secret but the runner has
+    // no idea it's there.
+    if let Some(home) = dirs::home_dir() {
+        let cfg = home.join(".moxxy").join("config.yaml");
+        let _ = moxxy_desktop_core::settings::ensure_provider_in_config(
+            &cfg, &provider, None,
+        )
+        .await;
+    }
     Ok(())
 }
 
@@ -383,6 +413,11 @@ pub async fn settings_skills_list() -> Result<Vec<String>, String> {
     let dir = dirs::home_dir()
         .map(|h| h.join(".moxxy").join("skills"))
         .ok_or_else(|| "no home directory".to_string())?;
+    if !dir.exists() {
+        // Empty (or never-created) skills dir is a normal state on
+        // first launch — return an empty list rather than erroring.
+        return Ok(Vec::new());
+    }
     let mut entries = tokio::fs::read_dir(&dir).await.map_err(|e| e.to_string())?;
     let mut names = Vec::new();
     while let Some(entry) = entries.next_entry().await.map_err(|e| e.to_string())? {
