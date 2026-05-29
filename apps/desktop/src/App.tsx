@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useSidecarStatus, type SidecarStatus } from './lib/runner';
+import { useSidecarStatus, useBootStage, type SidecarStatus } from './lib/runner';
 import { useRunnerSession } from './lib/runner-session';
 import { useDesks } from './lib/desks';
 import { useWindows } from './lib/windows';
@@ -232,6 +232,7 @@ function EmptyState({
   readonly status: SidecarStatus;
   readonly ready: boolean;
 }): JSX.Element {
+  const stage = useBootStage();
   return (
     <div className="empty-state">
       <div>
@@ -247,6 +248,21 @@ function EmptyState({
                 ? 'Starting the local runner…'
                 : 'Runner offline — open the dev panel to inspect logs.'}
         </p>
+        {!ready && stage && (
+          <p
+            className="mono"
+            style={{
+              marginTop: '0.5rem',
+              fontSize: '0.7rem',
+              color: 'var(--color-text-dim)',
+              textTransform: 'lowercase',
+              letterSpacing: '0.04em',
+            }}
+            data-testid="boot-stage"
+          >
+            · {stage}
+          </p>
+        )}
       </div>
     </div>
   );

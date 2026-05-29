@@ -524,12 +524,11 @@ pub async fn requirements_install<R: Runtime>(
             crate::requirements::run_install_command(&app, program, args).await
         }
         InstallHint::OpenUrl { url, .. } => {
-            // Open in the default browser. Tauri-plugin-shell exposes
-            // this; we fall back to the OS opener if the plugin call
-            // fails for any reason.
-            use tauri_plugin_shell::ShellExt;
-            app.shell()
-                .open(url, None)
+            // Open in the default browser. tauri-plugin-opener is the
+            // 2.x replacement for the deprecated shell::open path.
+            use tauri_plugin_opener::OpenerExt;
+            app.opener()
+                .open_url(url, None::<&str>)
                 .map_err(|e| e.to_string())?;
             Ok(0)
         }

@@ -7,6 +7,23 @@ import { invoke, subscribe } from './tauri';
  */
 export type SidecarStatus = 'starting' | 'running' | 'crashed' | 'stopped';
 
+/**
+ * The boot task emits a free-form one-liner via `boot.stage` so the
+ * UI can show progress ("adopting existing runner" / "starting moxxy
+ * serve" / "waiting for runner" / "attaching bridge" / "runner ready").
+ * Useful as the empty-state hint while the runner is coming up.
+ */
+export function useBootStage(): string | null {
+  const [stage, setStage] = useState<string | null>(null);
+  useEffect(() => {
+    const unsub = subscribe<string>('boot.stage', setStage);
+    return () => {
+      void unsub.then((fn) => fn());
+    };
+  }, []);
+  return stage;
+}
+
 const VALID_STATUSES: ReadonlySet<SidecarStatus> = new Set([
   'starting',
   'running',
