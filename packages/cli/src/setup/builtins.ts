@@ -163,24 +163,7 @@ export function buildBuiltinsCore(args: BuildBuiltinsArgs): BuiltBuiltinsCore {
     { name: '@moxxy/compactor-summarize', plugin: summarizeCompactorPlugin },
     { name: '@moxxy/cache-strategy-stable-prefix', plugin: stablePrefixCacheStrategyPlugin },
     { name: '@moxxy/plugin-vault', plugin: vaultPlugin },
-    {
-      name: '@moxxy/plugin-stt-whisper',
-      // Pull OPENAI_API_KEY from the host vault on first transcribe.
-      // Same lookup the OpenAI provider uses (canonical key
-      // 'OPENAI_API_KEY'). Resolver returns undefined when the vault
-      // doesn't have the key; the OpenAI SDK then falls back to the
-      // env var and finally throws — handled by the runner's
-      // candidate fallback in handleTranscribe.
-      plugin: buildWhisperPlugin({
-        apiKeyResolver: async () => {
-          try {
-            return (await vault.get('OPENAI_API_KEY')) ?? undefined;
-          } catch {
-            return undefined;
-          }
-        },
-      }),
-    },
+    { name: '@moxxy/plugin-stt-whisper', plugin: buildWhisperPlugin() },
     {
       name: '@moxxy/plugin-stt-whisper-codex',
       plugin: buildWhisperCodexPlugin({ vault }),

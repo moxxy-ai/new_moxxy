@@ -27,18 +27,6 @@ export interface BuildWhisperPluginOptions {
    * still override per-`setActive(name, config)`.
    */
   readonly defaults?: Omit<WhisperTranscriberOptions, 'client'>;
-  /**
-   * Async resolver for the OpenAI API key. Pulled lazily on first
-   * transcribe so the plugin "just works" against a moxxy vault
-   * (or any other secrets store) without forcing the host to
-   * pre-resolve the key at boot.
-   *
-   * Typical host wiring:
-   *   buildWhisperPlugin({
-   *     apiKeyResolver: () => vault.get('OPENAI_API_KEY'),
-   *   })
-   */
-  readonly apiKeyResolver?: () => Promise<string | undefined>;
 }
 
 /**
@@ -69,17 +57,6 @@ export function buildWhisperPlugin(opts: BuildWhisperPluginOptions = {}): Plugin
             ...(opts.defaults ?? {}),
             ...(config as WhisperTranscriberOptions),
             model,
-            // Per-call config overrides take precedence; otherwise
-            // fall back to the build-time resolver so the host's
-            // vault wiring is honoured.
-            ...((config as WhisperTranscriberOptions).apiKeyResolver ||
-            opts.apiKeyResolver
-              ? {
-                  apiKeyResolver:
-                    (config as WhisperTranscriberOptions).apiKeyResolver ??
-                    opts.apiKeyResolver,
-                }
-              : {}),
           };
           return new WhisperTranscriber(merged);
         },
