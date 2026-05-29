@@ -35,7 +35,10 @@ export function App(): JSX.Element {
   const phase = snapshot?.phase;
   const [forceWizard, setForceWizard] = useState(false);
   const [view, setView] = useState<View>('chat');
-  const [railOpen, setRailOpen] = useState(true);
+  // Context rail starts collapsed — the chat surface is what matters
+  // on first launch; the user can open the rail when they want to
+  // browse files / inspect the workspace.
+  const [railOpen, setRailOpen] = useState(false);
   const [lastConnected, setLastConnected] = useState<typeof phase>(undefined);
   // Local flag that flips the moment the user clicks "Open my
   // workspaces" in the FirstRunWizard, so we don't re-render the
