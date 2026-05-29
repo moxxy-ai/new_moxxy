@@ -152,7 +152,7 @@ export class RunnerSupervisor extends EventEmitter {
       this.session = null;
     }
     if (this.child) {
-      this.child.kill();
+      await terminateChild(this.child);
       this.child = null;
     }
   }
@@ -210,7 +210,9 @@ export class RunnerSupervisor extends EventEmitter {
       });
     }
 
-    await this.waitForSocket();
+    // Pass the spawned child (null when adopting) so a serve that dies
+    // before binding fails fast instead of waiting out the 20 s poll.
+    await this.waitForSocket(this.child);
 
     this.setPhase({
       phase: 'attaching',
@@ -376,10 +378,18 @@ export class RunnerSupervisor extends EventEmitter {
     }
   }
 
-  private async waitForSocket(): Promise<void> {
+  private async waitForSocket(child: ChildProcess | null = null): Promise<void> {
     const deadline = Date.now() + SOCKET_WAIT_MS;
     while (Date.now() < deadline) {
       if (await this.probeSocket()) return;
+      // The serve we spawned died before binding — no point polling for
+      // 20 s; surface it now so the run loop retries / reports.
+      if (child && (child.exitCode !== null || child.signalCode !== null)) {
+        throw new Error(
+          `moxxy serve exited before binding ${this.socketPath} ` +
+            `(code=${child.exitCode} signal=${child.signalCode})`,
+        );
+      }
       await sleep(SOCKET_POLL_MS);
     }
     throw new Error(
@@ -428,4 +438,36 @@ function displayPath(cli: CliInvocation): string {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+const SIGKILL_GRACE_MS = 2_000;
+
+/**
+ * SIGTERM the child, then SIGKILL if it hasn't exited within the grace
+ * window — so a wedged `moxxy serve` can't survive as a zombie holding
+ * the socket after the desktop quits. Resolves once the child is gone or
+ * the grace elapses.
+ */
+function terminateChild(child: ChildProcess): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(() => {
+      try {
+        if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+      } catch {
+        /* already dead */
+      }
+      resolve();
+    }, SIGKILL_GRACE_MS);
+    child.once('exit', () => {
+      clearTimeout(timer);
+      resolve();
+    });
+    try {
+      child.kill('SIGTERM');
+    } catch {
+      clearTimeout(timer);
+      resolve();
+    }
+  });
 }

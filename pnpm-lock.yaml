@@ -89,6 +89,9 @@ importers:
       '@moxxy/chat-model':
         specifier: workspace:*
         version: link:../../packages/chat-model
+      '@moxxy/desktop-host':
+        specifier: workspace:*
+        version: link:../../packages/desktop-host
       '@moxxy/desktop-ipc-contract':
         specifier: workspace:*
         version: link:../../packages/desktop-ipc-contract
@@ -537,6 +540,43 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 22.19.18
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vitest:
+        specifier: 'catalog:'
+        version: 2.1.9(@types/node@22.19.18)(jsdom@25.0.1)
+
+  packages/desktop-host:
+    dependencies:
+      '@moxxy/desktop-ipc-contract':
+        specifier: workspace:*
+        version: link:../desktop-ipc-contract
+      '@moxxy/plugin-stt-whisper-codex':
+        specifier: workspace:*
+        version: link:../plugin-stt-whisper-codex
+      '@moxxy/plugin-vault':
+        specifier: workspace:*
+        version: link:../plugin-vault
+      '@moxxy/runner':
+        specifier: workspace:*
+        version: link:../runner
+      '@moxxy/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+    devDependencies:
+      '@moxxy/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/tsconfig
+      '@moxxy/vitest-preset':
+        specifier: workspace:*
+        version: link:../../tooling/vitest-preset
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.19.18
+      electron:
+        specifier: ^33.2.1
+        version: 33.4.11
       typescript:
         specifier: 'catalog:'
         version: 5.9.3

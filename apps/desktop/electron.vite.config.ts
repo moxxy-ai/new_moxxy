@@ -16,6 +16,7 @@ const BUNDLED_WORKSPACE_DEPS = [
   '@moxxy/plugin-vault',
   '@moxxy/plugin-stt-whisper-codex',
   '@moxxy/desktop-ipc-contract',
+  '@moxxy/desktop-host',
 ];
 
 /**

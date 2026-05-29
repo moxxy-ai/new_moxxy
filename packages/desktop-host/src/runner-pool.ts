@@ -100,6 +100,7 @@ export class RunnerPool extends EventEmitter {
       if (this.activeId) this.emit('active', this.activeId);
     }
     await entry.supervisor.stop().catch(() => undefined);
+    entry.supervisor.removeAllListeners();
   }
 
   /** Tear down every supervised runner. Awaited from `before-quit`. */
@@ -108,7 +109,12 @@ export class RunnerPool extends EventEmitter {
     this.entries.clear();
     this.activeId = null;
     await Promise.all(
-      all.map((e) => e.supervisor.stop().catch(() => undefined)),
+      all.map((e) =>
+        e.supervisor
+          .stop()
+          .catch(() => undefined)
+          .finally(() => e.supervisor.removeAllListeners()),
+      ),
     );
   }
 }

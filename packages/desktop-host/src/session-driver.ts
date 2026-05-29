@@ -3,10 +3,10 @@
  *
  *   - Mirrors every event the runner emits onto the
  *     `runner.event` IPC channel.
- *   - Owns the per-turn lifecycle so the renderer can `runTurn`,
- *     `abortTurn`, and (later) `setProvider` / `setMode` through
- *     simple typed commands, without ever holding an AsyncIterable
- *     itself.
+ *   - Owns the per-turn lifecycle so the renderer can `runTurn` /
+ *     `abortTurn` through simple typed commands, without ever holding an
+ *     AsyncIterable itself. (Provider/mode switches go straight to the
+ *     RemoteSession in the IPC layer — not through the driver.)
  *
  * One driver per connected session — recreated whenever the
  * supervisor transitions back into `connected`.
@@ -15,7 +15,6 @@
 import { randomUUID } from 'node:crypto';
 import type { BrowserWindow } from 'electron';
 
-import type { MoxxyEvent } from '@moxxy/sdk';
 import type { RemoteSession } from '@moxxy/runner';
 
 import type { IpcEvents } from '@moxxy/desktop-ipc-contract';
@@ -63,6 +62,9 @@ export class SessionDriver {
     this.windows.add(win);
     const cleanup = (): void => {
       this.windows.delete(win);
+      // Also drop the 'closed' listener so detaching a still-open window
+      // (e.g. the focus widget re-binding) doesn't leak it.
+      win.removeListener('closed', cleanup);
     };
     win.once('closed', cleanup);
     return cleanup;
@@ -131,19 +133,6 @@ export class SessionDriver {
 
   abortTurn(turnId: string): void {
     this.turns.get(turnId)?.controller.abort();
-  }
-
-  /** Snapshot of the runner's SessionInfo. */
-  getInfo(): unknown {
-    return this.session.getInfo();
-  }
-
-  async setProvider(name: string): Promise<void> {
-    this.session.providers.setActive(name);
-  }
-
-  async setMode(name: string): Promise<void> {
-    this.session.modes.setActive(name);
   }
 
   dispose(): void {

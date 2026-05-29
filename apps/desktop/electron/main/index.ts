@@ -17,19 +17,22 @@ app.setName('MoxxyAI Workspaces');
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { RunnerPool, UNBOUND_ID } from './runner-pool';
-import { bindWindow, registerIpcHandlers } from './ipc';
-import { DeskStore } from './desks';
-import { sweepStaleSockets } from './sweep-sockets';
 import {
+  RunnerPool,
+  UNBOUND_ID,
+  bindWindow,
+  registerIpcHandlers,
+  DeskStore,
+  sweepStaleSockets,
   bindMainWindowMinimize,
   closeFocusWindow,
   resizeFocusWindow,
   showFocusWindow,
   toggleFocusWindow,
-} from './focus-window';
+  installContentSecurityPolicy,
+  lockDownNavigation,
+} from '@moxxy/desktop-host';
 import { ipcMain, Tray, Menu, nativeImage, globalShortcut, session } from 'electron';
-import { installContentSecurityPolicy, lockDownNavigation } from './security';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
