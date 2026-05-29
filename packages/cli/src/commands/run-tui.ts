@@ -22,7 +22,60 @@ import {
   type RemoteSession,
   type RunnerServer,
 } from '@moxxy/runner';
+import { existsSync, unlinkSync } from 'node:fs';
+import { Socket } from 'node:net';
+import { spawn } from 'node:child_process';
 import { setupSession, setupSessionWithConfig, type BootStep } from '../setup.js';
+
+/** Best-effort recovery for "I had an older `moxxy serve` running
+ *  at v1 and the new client is v2" scenarios. Kill whatever PID is
+ *  holding the socket, then unlink the socket file so the next
+ *  spawn binds cleanly. macOS / Linux only — lsof on Windows is
+ *  out of scope here. */
+async function killStaleRunnerAt(socketPath: string): Promise<void> {
+  if (!existsSync(socketPath)) return;
+  const pid = await new Promise<number | null>((resolve) => {
+    if (process.platform === 'win32') return resolve(null);
+    let out = '';
+    try {
+      const child = spawn('lsof', ['-t', socketPath], {
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+      child.stdout.on('data', (b) => {
+        out += b.toString();
+      });
+      child.on('error', () => resolve(null));
+      child.on('close', () => {
+        const parsed = parseInt(out.trim().split('\n')[0] ?? '', 10);
+        resolve(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
+      });
+    } catch {
+      resolve(null);
+    }
+  });
+  if (pid && pid !== process.pid) {
+    try {
+      process.kill(pid, 'SIGTERM');
+    } catch {
+      /* ignore */
+    }
+    await new Promise((r) => setTimeout(r, 400));
+    try {
+      process.kill(pid, 0);
+      process.kill(pid, 'SIGKILL');
+    } catch {
+      /* already dead */
+    }
+  }
+  // Drain any lingering socket file so the self-host bind doesn't
+  // EADDRINUSE.
+  try {
+    unlinkSync(socketPath);
+  } catch {
+    /* may already be gone */
+  }
+  void Socket; // kept for parity with the desktop sweep helper.
+}
 import { argvToSetupOptions, hasBoolFlag, stringFlag } from '../argv-helpers.js';
 import { chooseClientMode } from './client-mode.js';
 import type { ParsedArgv } from '../argv.js';
@@ -53,12 +106,12 @@ export async function runTuiWithBootstrap(
 ): Promise<number> {
   const standalone = hasBoolFlag(argv, 'standalone');
   const mode = chooseClientMode({ standalone, runnerUp: standalone ? false : await isRunnerUp() });
-  if (mode === 'attach') return await runAttachedTui(argv);
+  if (mode === 'attach') return await runAttachedTui(argv, tuiOpts);
   return await runSelfHostedTui(argv, tuiOpts, mode === 'standalone');
 }
 
 /** Thin-client mode: drive a `RemoteSession` against the running runner. */
-async function runAttachedTui(argv: ParsedArgv): Promise<number> {
+async function runAttachedTui(argv: ParsedArgv, tuiOpts: RunTuiOpts): Promise<number> {
   let promptHandler:
     | ((call: PendingToolCall, ctx: PermissionContext) => Promise<PermissionDecision>)
     | null = null;
@@ -74,7 +127,19 @@ async function runAttachedTui(argv: ParsedArgv): Promise<number> {
   try {
     remote = await connectRemoteSession({ role: 'tui' });
   } catch (err) {
-    process.stderr.write(`failed to attach to the runner at ${runnerSocketPath()}: ${errMsg(err)}\n`);
+    const msg = errMsg(err);
+    // A stale `moxxy serve` from a previous (older) install can hold
+    // the socket open at a lower protocol version. Detect that and
+    // recover by killing the stale daemon, then fall through to
+    // self-host mode so the user isn't stranded.
+    if (/protocol mismatch/i.test(msg)) {
+      process.stderr.write(
+        `stale runner detected at ${runnerSocketPath()} (${msg}); killing it and self-hosting.\n`,
+      );
+      await killStaleRunnerAt(runnerSocketPath()).catch(() => undefined);
+      return await runSelfHostedTui(argv, tuiOpts, false);
+    }
+    process.stderr.write(`failed to attach to the runner at ${runnerSocketPath()}: ${msg}\n`);
     return 1;
   }
   // Register as the resolver for the turns this client starts.

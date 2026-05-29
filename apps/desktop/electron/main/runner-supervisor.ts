@@ -215,10 +215,28 @@ export class RunnerSupervisor extends EventEmitter {
       phase: 'attaching',
       socket: this.socketPath,
     });
-    const session = await connectRemoteSession({
-      role: 'desktop',
-      socketPath: this.socketPath,
-    });
+    let session: RemoteSession;
+    try {
+      session = await connectRemoteSession({
+        role: 'desktop',
+        socketPath: this.socketPath,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // A previously-installed older moxxy may have left a v1 daemon
+      // bound to ~/.moxxy/serve.sock. The desktop's client is v2 →
+      // mismatch. Kill the foreign daemon, sweep the socket, and let
+      // the run loop respin so we spawn our own bundled serve.
+      if (/protocol mismatch/i.test(msg)) {
+        this.pushLog(
+          'stderr',
+          `protocol mismatch on attach (${msg}); killing stale runner and respawning`,
+        );
+        await this.killForeignRunner();
+        throw new Error(`stale runner replaced (${msg})`);
+      }
+      throw err;
+    }
     this.session = session;
 
     const info = session.getInfo();
@@ -311,6 +329,50 @@ export class RunnerSupervisor extends EventEmitter {
     proc.stdout?.on('data', (chunk) => this.consumeLog('stdout', chunk));
     proc.stderr?.on('data', (chunk) => this.consumeLog('stderr', chunk));
     return proc;
+  }
+
+  /** Find and SIGTERM whatever process is bound to our socket, then
+   *  unlink the file so the next spawn binds cleanly. macOS / Linux. */
+  private async killForeignRunner(): Promise<void> {
+    if (process.platform === 'win32') return;
+    const pid = await new Promise<number | null>((resolve) => {
+      let out = '';
+      try {
+        const child = spawn('lsof', ['-t', this.socketPath], {
+          stdio: ['ignore', 'pipe', 'ignore'],
+        });
+        child.stdout.on('data', (b) => {
+          out += b.toString();
+        });
+        child.on('error', () => resolve(null));
+        child.on('close', () => {
+          const parsed = parseInt(out.trim().split('\n')[0] ?? '', 10);
+          resolve(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
+        });
+      } catch {
+        resolve(null);
+      }
+    });
+    if (pid && pid !== process.pid) {
+      try {
+        process.kill(pid, 'SIGTERM');
+      } catch {
+        /* ignore */
+      }
+      await new Promise((r) => setTimeout(r, 400));
+      try {
+        process.kill(pid, 0);
+        process.kill(pid, 'SIGKILL');
+      } catch {
+        /* already dead */
+      }
+    }
+    try {
+      const fs = await import('node:fs');
+      fs.unlinkSync(this.socketPath);
+    } catch {
+      /* fine */
+    }
   }
 
   private async waitForSocket(): Promise<void> {
