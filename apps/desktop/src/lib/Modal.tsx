@@ -13,6 +13,7 @@
  */
 
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
 
 interface ModalProps {
@@ -36,7 +37,13 @@ export function Modal({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  return (
+  // Portal the modal to document.body so it never lives inside a
+  // parent <form>. Nested forms in the same DOM subtree cause the
+  // inner form's submit to bubble up to the outer one — that was
+  // reloading the app when the CommandPalette stepper's Next button
+  // was clicked inside the Composer's form.
+  if (typeof document === 'undefined') return <></>;
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
@@ -90,8 +97,9 @@ export function Modal({
         </header>
         {children}
       </div>
-    </div>
-  );
+    </div>,
+    document.body,
+  ) as JSX.Element;
 }
 
 interface ConfirmProps {

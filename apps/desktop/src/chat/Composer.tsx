@@ -7,8 +7,9 @@ import {
 } from 'react';
 import { Icon } from '@/lib/Icon';
 import { api } from '@/lib/api';
+import { chatStore } from '@/lib/chatStore';
 import { AgentPicker } from './AgentPicker';
-import { CommandPalette } from './CommandPalette';
+import { CommandPalette, stepsForCommand, type ArgStep } from './CommandPalette';
 
 interface ComposerProps {
   readonly ready: boolean;
@@ -50,6 +51,18 @@ export function Composer({
   const [voice, setVoice] = useState<VoiceState>({ kind: 'idle' });
   const [hasTranscriber, setHasTranscriber] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  /** Active in-line command. While present the textarea collects the
+   *  current arg's value rather than a normal prompt; sending runs
+   *  the command via session.runCommand and exits command mode. */
+  const [command, setCommand] = useState<{
+    readonly name: string;
+    readonly steps: ReadonlyArray<ArgStep>;
+    readonly values: ReadonlyArray<string>;
+    /** Index of the step currently being collected. Equal to
+     *  `steps.length` when all args are gathered and the next Enter
+     *  runs the command. */
+    readonly stepIndex: number;
+  } | null>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const inFlight = activeTurnId !== null || sending;
   const canSubmit = ready && !inFlight && draft.trim().length > 0;
@@ -71,11 +84,83 @@ export function Composer({
     };
   }, [ready]);
 
+  const runCommand = useCallback(
+    async (
+      cmd: typeof command,
+      finalArg: string,
+    ): Promise<void> => {
+      if (!cmd) return;
+      const finalValues = [...cmd.values, finalArg];
+      const argString = finalValues
+        .map((v) => (/^[A-Za-z0-9_\-./@]+$/.test(v) ? v : `"${v.replace(/"/g, '\\"')}"`))
+        .join(' ');
+      const commandLine = argString ? `/${cmd.name} ${argString}` : `/${cmd.name}`;
+      chatStore.dispatch(workspaceId, { type: 'command_invoked', commandLine });
+      try {
+        const result = await api().invoke('session.runCommand', {
+          workspaceId,
+          name: cmd.name,
+          args: argString,
+        });
+        if (result.kind === 'text' && result.text) {
+          chatStore.dispatch(workspaceId, {
+            type: 'command_result',
+            text: result.text,
+            tone: 'info',
+          });
+        } else if (result.kind === 'error') {
+          chatStore.dispatch(workspaceId, {
+            type: 'command_result',
+            text: result.message ?? 'command failed',
+            tone: 'error',
+          });
+        } else if (result.kind === 'session-action') {
+          if (result.action === 'clear') chatStore.clear(workspaceId);
+          if (result.notice) {
+            chatStore.dispatch(workspaceId, {
+              type: 'command_result',
+              text: result.notice,
+              tone: 'info',
+            });
+          }
+        }
+      } catch (e) {
+        chatStore.dispatch(workspaceId, {
+          type: 'command_result',
+          text: e instanceof Error ? e.message : String(e),
+          tone: 'error',
+        });
+      } finally {
+        setCommand(null);
+        setDraft('');
+        window.setTimeout(() => taRef.current?.focus(), 0);
+      }
+    },
+    [workspaceId],
+  );
+
   const submit = useCallback(() => {
+    if (command) {
+      const value = draft.trim();
+      if (!value && command.steps[command.stepIndex]) return;
+      // Either we still have more steps OR this was the last one.
+      if (command.stepIndex + 1 < command.steps.length) {
+        setCommand({
+          ...command,
+          values: [...command.values, value],
+          stepIndex: command.stepIndex + 1,
+        });
+        setDraft('');
+        return;
+      }
+      // Last step (or zero-arg command via free-form fallback).
+      void runCommand(command, value);
+      return;
+    }
     if (!canSubmit) return;
     onSend(draft);
     setDraft('');
-  }, [canSubmit, draft, onSend]);
+  }, [command, draft, canSubmit, onSend, runCommand]);
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): void => {
     // Enter alone submits; Shift+Enter inserts a newline (the browser
@@ -88,7 +173,23 @@ export function Composer({
     }
     if (e.key === 'Escape') {
       e.preventDefault();
+      if (command) setCommand(null);
       setDraft('');
+    }
+    if (e.key === 'Backspace' && draft.length === 0 && command) {
+      // Backspace at the empty start of the input pops back through
+      // command chip + collected args, the way Discord / Slack does.
+      e.preventDefault();
+      if (command.values.length > 0) {
+        setCommand({
+          ...command,
+          values: command.values.slice(0, -1),
+          stepIndex: command.stepIndex - 1,
+        });
+        setDraft(command.values[command.values.length - 1] ?? '');
+      } else {
+        setCommand(null);
+      }
     }
   };
 
@@ -163,29 +264,67 @@ export function Composer({
         gap: 10,
       }}
     >
-      <textarea
-        ref={taRef}
-        data-testid="composer-input"
-        aria-label="prompt"
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={onKeyDown}
-        placeholder={ready ? 'Send a message to the agent…' : 'Waiting for runner…'}
-        disabled={!ready || inFlight}
-        rows={Math.min(8, Math.max(1, draft.split('\n').length))}
-        style={{
-          width: '100%',
-          resize: 'none',
-          padding: '4px 6px 6px',
-          fontSize: 14.5,
-          lineHeight: 1.55,
-          color: 'var(--color-text)',
-          background: 'transparent',
-          border: 'none',
-          fontFamily: 'inherit',
-          outline: 'none',
-        }}
-      />
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, flexWrap: 'wrap' }}>
+        {command && (
+          <CommandChip
+            commandName={command.name}
+            values={command.values}
+            steps={command.steps}
+            onCancel={() => {
+              setCommand(null);
+              setDraft('');
+              window.setTimeout(() => taRef.current?.focus(), 0);
+            }}
+          />
+        )}
+        <textarea
+          ref={taRef}
+          data-testid="composer-input"
+          aria-label={
+            command
+              ? command.stepIndex < command.steps.length
+                ? command.steps[command.stepIndex]!.label
+                : 'press enter to run'
+              : 'prompt'
+          }
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder={
+            command
+              ? command.steps[command.stepIndex]?.placeholder ??
+                'Press Enter to run'
+              : ready
+                ? 'Send a message to the agent…'
+                : 'Waiting for runner…'
+          }
+          disabled={!ready || (inFlight && !command)}
+          rows={Math.min(8, Math.max(1, draft.split('\n').length))}
+          style={{
+            flex: 1,
+            minWidth: 120,
+            resize: 'none',
+            padding: command ? '8px 10px' : '4px 6px 6px',
+            fontSize: 14.5,
+            lineHeight: 1.55,
+            color: 'var(--color-text)',
+            background: 'transparent',
+            border: 'none',
+            fontFamily:
+              command && command.steps[command.stepIndex]?.secret
+                ? 'inherit'
+                : command
+                  ? 'var(--font-mono)'
+                  : 'inherit',
+            outline: 'none',
+            // Render secret-step values as bullets so over-the-
+            // shoulder snooping doesn't catch the typed token.
+            ...(command && command.steps[command.stepIndex]?.secret
+              ? { WebkitTextSecurity: 'disc' as never }
+              : {}),
+          }}
+        />
+      </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         <AgentPicker workspaceId={workspaceId} disabled={!ready || inFlight} />
         <ToolChip label="Commands" onClick={() => setCommandPaletteOpen(true)}>
@@ -258,13 +397,16 @@ export function Composer({
         <CommandPalette
           workspaceId={workspaceId}
           onClose={() => setCommandPaletteOpen(false)}
-          onPick={(text) => {
-            setDraft((d) => {
-              const sep = d.length === 0 || d.endsWith('\n') ? '' : '\n';
-              return `${d}${sep}${text}`;
+          onPick={(cmd) => {
+            const steps = stepsForCommand(cmd.name);
+            setCommand({
+              name: cmd.name,
+              steps,
+              values: [],
+              stepIndex: 0,
             });
+            setDraft('');
             setCommandPaletteOpen(false);
-            // Refocus the textarea for immediate typing.
             window.setTimeout(() => taRef.current?.focus(), 0);
           }}
         />
@@ -355,6 +497,82 @@ function ToolChip({
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * Inline pill at the start of the input that shows which slash
+ * command is in progress + the args collected so far. Click × to
+ * exit command mode; backspace at empty input does the same.
+ */
+function CommandChip({
+  commandName,
+  values,
+  steps,
+  onCancel,
+}: {
+  readonly commandName: string;
+  readonly values: ReadonlyArray<string>;
+  readonly steps: ReadonlyArray<ArgStep>;
+  readonly onCancel: () => void;
+}): JSX.Element {
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '4px 6px 4px 10px',
+        background: 'var(--color-primary-soft)',
+        border: '1px solid var(--color-primary)',
+        color: 'var(--color-primary-strong)',
+        borderRadius: 999,
+        fontSize: 12.5,
+        fontFamily: 'var(--font-mono)',
+        fontWeight: 700,
+        maxWidth: '100%',
+        flexShrink: 0,
+      }}
+    >
+      <span>/{commandName}</span>
+      {values.map((v, i) => (
+        <span
+          key={i}
+          style={{
+            padding: '1px 7px',
+            background: '#fff',
+            border: '1px solid var(--color-primary-soft)',
+            color: 'var(--color-text)',
+            borderRadius: 999,
+            fontSize: 11.5,
+            fontWeight: 600,
+            maxWidth: 220,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          {steps[i]?.secret ? '•••' : v}
+        </span>
+      ))}
+      <button
+        type="button"
+        aria-label="Cancel command"
+        onClick={onCancel}
+        style={{
+          width: 18,
+          height: 18,
+          borderRadius: '50%',
+          background: 'rgba(236, 72, 153, 0.15)',
+          color: 'var(--color-primary-strong)',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Icon name="x" size={11} />
+      </button>
+    </span>
   );
 }
 

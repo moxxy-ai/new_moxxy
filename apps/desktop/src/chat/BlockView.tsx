@@ -38,6 +38,13 @@ export function BlockView({ block }: { readonly block: Block }): JSX.Element {
       );
     case 'system':
       return <SystemBlock text={block.text} tone={block.tone} />;
+    case 'skill_marker':
+      // Skill markers are handled by Transcript's grouping logic and
+      // bundled into a SkillGroupView; if one slips through ungrouped
+      // (no surrounding tool calls) fall back to a quiet system note.
+      return (
+        <SystemBlock text={`skill ${block.name} (${block.reason.replace(/_/g, ' ')})`} tone="info" />
+      );
   }
 }
 

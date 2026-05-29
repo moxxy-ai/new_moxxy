@@ -116,6 +116,21 @@ export function registerIpcHandlers(pool: RunnerPool, desks: DeskStore): void {
     session.modes.setActive(mode);
     await waitForSessionState(session, (info) => info.activeMode === mode);
   });
+  handle('session.runCommand', async ({ workspaceId, name, args }) => {
+    const session = mustRemote(pool, workspaceId);
+    const def = session.commands.get(name);
+    if (!def) return { kind: 'error', message: `unknown command: /${name}` } as const;
+    // The runner doesn't care about the channel name beyond logging,
+    // but some command handlers gate behaviour on it. "desktop"
+    // mirrors the TUI's "tui" convention and keeps things grep-able.
+    const result = await def.handler({
+      channel: 'desktop',
+      sessionId: session.getInfo().sessionId,
+      args,
+      session: session as unknown as Parameters<typeof def.handler>[0]['session'],
+    });
+    return result;
+  });
   handle('session.hasTranscriber', async () => {
     const sup = pool.active();
     const session = sup?.remote();

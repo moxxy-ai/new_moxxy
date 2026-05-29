@@ -56,6 +56,10 @@ export type ChatAction =
   | { type: 'send_started'; turnId: string; prompt: string }
   | { type: 'send_failed'; message: string }
   | { type: 'turn_complete'; turnId: string; error: string | null }
+  /** Surface the result of a slash command (text / error / notice)
+   *  alongside the user's command line as system blocks. */
+  | { type: 'command_invoked'; commandLine: string }
+  | { type: 'command_result'; text: string; tone: 'info' | 'error' }
   | { type: 'clear' };
 
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
@@ -79,6 +83,26 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     }
     case 'send_failed':
       return { ...state, sending: false, error: action.message };
+    case 'command_invoked': {
+      // Render the command line as a user-style block so the chat
+      // shows what was run. Mono-ish styling happens in the view.
+      const block: Block = {
+        kind: 'user',
+        id: `u-${state.seq}`,
+        text: action.commandLine,
+      };
+      return { ...state, blocks: [...state.blocks, block], seq: state.seq + 1 };
+    }
+    case 'command_result': {
+      if (!action.text.trim()) return state;
+      const block: Block = {
+        kind: 'system',
+        id: `s-${state.seq}`,
+        text: action.text,
+        tone: action.tone,
+      };
+      return { ...state, blocks: [...state.blocks, block], seq: state.seq + 1 };
+    }
     case 'turn_complete': {
       const next = closeStreamingAssistant(state.blocks);
       return {

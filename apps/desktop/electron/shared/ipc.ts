@@ -261,6 +261,20 @@ export interface IpcCommands {
   }) => Promise<void>;
   /** Switch the active mode. */
   'session.setMode': (args: { workspaceId?: string; mode: string }) => Promise<void>;
+  /** Run a slash command on the workspace's runner. The runner returns
+   *  a CommandOutput (text / session-action / noop / error) which the
+   *  caller renders inline in the transcript. */
+  'session.runCommand': (args: {
+    workspaceId?: string;
+    name: string;
+    args: string;
+  }) => Promise<{
+    readonly kind: 'text' | 'session-action' | 'noop' | 'error';
+    readonly text?: string;
+    readonly action?: 'new' | 'clear' | 'exit';
+    readonly notice?: string;
+    readonly message?: string;
+  }>;
   /** True when the runner has an active transcriber plugin. UI uses
    *  this to enable/disable the mic button. */
   'session.hasTranscriber': () => Promise<boolean>;
