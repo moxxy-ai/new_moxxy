@@ -130,21 +130,39 @@ const brandedClerkAppearance = {
       border: 'none',
       padding: 0,
     },
-    main: { width: '100%', gap: 12 },
+    main: { width: '100%', gap: 14, padding: 0 },
     form: { width: '100%', gap: 12 },
+    // Header is hidden via title/subtitle styles below, but the
+    // container still reserves its padding — collapse it so the OAuth
+    // row sits flush with the card top.
+    header: { display: 'none', padding: 0, margin: 0 },
+    // The field hint ("Example format: name@example.com") rendered
+    // BELOW the input was floating over the Continue button. Drop it
+    // — the placeholder + autocomplete is enough.
+    formFieldHintText: { display: 'none' },
+    formFieldInfoText: { display: 'none' },
+    formFieldSuccessText: { display: 'none' },
+    formFieldRow: { gap: 6 },
+    formFieldAction: { color: 'var(--color-primary-strong)' },
     headerTitle: { display: 'none' },
     headerSubtitle: { display: 'none' },
     logoBox: { display: 'none' },
     footer: { display: 'none' },
     footerAction: { display: 'none' },
+    socialButtons: { gap: 8 },
     socialButtonsBlockButton: {
       border: '1px solid var(--color-card-border)',
       background: '#fff',
       color: 'var(--color-text)',
       fontWeight: 600,
       borderRadius: 10,
+      boxShadow: 'none',
+      // Clerk's default ::after produces a subtle inner highlight that
+      // looks like a second border on light theme — kill it.
+      '&::after': { display: 'none' },
     },
     socialButtonsBlockButtonText: { fontWeight: 600 },
+    socialButtonsBlockButtonArrow: { display: 'none' },
     dividerLine: { background: 'var(--color-card-border)' },
     dividerText: {
       color: 'var(--color-text-dim)',
