@@ -115,12 +115,23 @@ const brandedClerkAppearance = {
   },
   elements: {
     rootBox: { width: '100%' },
+    cardBox: {
+      width: '100%',
+      maxWidth: 'none',
+      boxShadow: 'none',
+      border: 'none',
+      background: 'transparent',
+    },
     card: {
+      width: '100%',
+      maxWidth: 'none',
       background: 'transparent',
       boxShadow: 'none',
       border: 'none',
       padding: 0,
     },
+    main: { width: '100%', gap: 12 },
+    form: { width: '100%', gap: 12 },
     headerTitle: { display: 'none' },
     headerSubtitle: { display: 'none' },
     logoBox: { display: 'none' },
@@ -393,7 +404,14 @@ function AuthStep({
       <SignedIn>
         <SignedInPanel onNext={onNext} />
       </SignedIn>
-      <Nav onBack={onBack} onNext={onNext} nextLabel="Skip" />
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+        <button type="button" onClick={onBack} style={secondaryBtnStyle}>
+          Back
+        </button>
+        <button type="button" onClick={onNext} style={secondaryBtnStyle}>
+          Skip sign-in
+        </button>
+      </div>
     </StepCard>
   );
 }
