@@ -28,15 +28,23 @@ interface ActiveTurn {
 export class SessionDriver {
   private readonly turns = new Map<string, ActiveTurn>();
   private readonly disposes: Array<() => void> = [];
+  /** Every window subscribed to this driver's events. Mutated by
+   *  attachWindow / detachWindow so secondary surfaces (focus widget,
+   *  future tray pop-up, etc.) receive the same `runner.event` and
+   *  `turn.complete` stream as the primary window. */
+  private readonly windows = new Set<BrowserWindow>();
 
   constructor(
-    private readonly session: RemoteSession,
-    private readonly window: BrowserWindow,
+    session: RemoteSession,
+    primaryWindow: BrowserWindow,
     /** Workspace id this driver was created for. Stamped on every
      *  event so the renderer can route it to the right per-workspace
      *  chat state. */
     private readonly workspaceId: string,
   ) {
+    this.session = session;
+    this.windows.add(primaryWindow);
+
     // Mirror every event the runner emits.
     const logUnsub = session.log.subscribe((event) => {
       this.send('runner.event', { workspaceId, event });
@@ -48,6 +56,19 @@ export class SessionDriver {
     session.onClose(() => {
       this.dispose();
     });
+  }
+
+  private readonly session: RemoteSession;
+
+  /** Subscribe a secondary window so it receives every `runner.event`
+   *  and `turn.complete` this driver emits. Returns an unsubscribe. */
+  attachWindow(win: BrowserWindow): () => void {
+    this.windows.add(win);
+    const cleanup = (): void => {
+      this.windows.delete(win);
+    };
+    win.once('closed', cleanup);
+    return cleanup;
   }
 
   /**
@@ -144,7 +165,13 @@ export class SessionDriver {
   // ---- internals ----
 
   private send<K extends keyof IpcEvents>(channel: K, payload: IpcEvents[K]): void {
-    if (this.window.isDestroyed()) return;
-    this.window.webContents.send(channel, payload);
+    for (const win of this.windows) {
+      if (win.isDestroyed()) continue;
+      try {
+        win.webContents.send(channel, payload);
+      } catch {
+        // Renderer can vanish mid-broadcast; nothing to do.
+      }
+    }
   }
 }

@@ -361,18 +361,40 @@ export function bindWindow(
   // Maintain one SessionDriver per workspace for the lifetime of its
   // active RemoteSession.
   const localDrivers = new Map<string, SessionDriver>();
+  // For SECONDARY bindings (focus widget): we don't own the driver,
+  // we just attach our window to whichever driver is already in the
+  // global registry. Keep the unsubs so the close handler can drop
+  // us from the broadcast set without affecting the primary's driver.
+  const attachUnsubs = new Map<string, () => void>();
 
   const ensureDriverFor = (id: string, sup: RunnerSupervisor): void => {
     const session = sup.remote();
-    const existing = localDrivers.get(id);
-    if (existing) existing.dispose();
+    if (claimGlobal) {
+      // Primary: own the driver as before.
+      const existing = localDrivers.get(id);
+      if (existing) existing.dispose();
+      if (session) {
+        const driver = new SessionDriver(session, window, id);
+        localDrivers.set(id, driver);
+        drivers.set(id, driver);
+      } else {
+        localDrivers.delete(id);
+        drivers.delete(id);
+      }
+      return;
+    }
+
+    // Secondary: don't create our own driver — that would split the
+    // runner event stream into two pumps. Instead, attach our window
+    // to the existing driver so we receive its broadcast.
+    attachUnsubs.get(id)?.();
+    attachUnsubs.delete(id);
     if (session) {
-      const driver = new SessionDriver(session, window, id);
-      localDrivers.set(id, driver);
-      if (claimGlobal) drivers.set(id, driver);
-    } else {
-      localDrivers.delete(id);
-      if (claimGlobal) drivers.delete(id);
+      const existing = drivers.get(id);
+      if (existing) attachUnsubs.set(id, existing.attachWindow(window));
+      // If the primary's driver hasn't been built yet, the secondary
+      // will pick it up on the next pool change (we re-run this fn
+      // every time the supervisor flips state).
     }
   };
 
@@ -383,11 +405,18 @@ export function bindWindow(
     send('connection.changed', { workspaceId: id, phase });
     if (phase.phase === 'connected') ensureDriverFor(id, sup);
     else {
-      const existing = localDrivers.get(id);
-      if (existing) {
-        existing.dispose();
-        localDrivers.delete(id);
-        drivers.delete(id);
+      // Primary tears down its own driver on disconnect; secondary
+      // just drops its attachment.
+      if (claimGlobal) {
+        const existing = localDrivers.get(id);
+        if (existing) {
+          existing.dispose();
+          localDrivers.delete(id);
+          drivers.delete(id);
+        }
+      } else {
+        attachUnsubs.get(id)?.();
+        attachUnsubs.delete(id);
       }
     }
   };
@@ -406,9 +435,16 @@ export function bindWindow(
     pool.off('change', onPoolChange);
     for (const driver of localDrivers.values()) driver.dispose();
     localDrivers.clear();
-    // Only the primary window owns the global driver map; secondary
-    // surfaces must not wipe it on close, that would orphan the main
-    // window's RPCs.
+    // Secondary windows drop their attachments; the primary's driver
+    // keeps running for the main window.
+    for (const fn of attachUnsubs.values()) {
+      try {
+        fn();
+      } catch {
+        /* ignore */
+      }
+    }
+    attachUnsubs.clear();
     if (claimGlobal) drivers.clear();
   };
 }

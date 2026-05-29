@@ -171,7 +171,7 @@ async function createWindow(): Promise<void> {
       );
       const icon = raw.isEmpty()
         ? nativeImage.createEmpty()
-        : raw.resize({ width: 18, height: 18, quality: 'best' });
+        : raw.resize({ width: 22, height: 22, quality: 'best' });
       // Do NOT setTemplateImage on a colored avatar — the alpha is
       // a near-solid rectangle, which AppKit tints to a featureless
       // blob (or, on some versions, drops to invisible). Render the
@@ -195,6 +195,11 @@ async function createWindow(): Promise<void> {
       };
       trayInstance.setContextMenu(
         Menu.buildFromTemplate([
+          // Heading row — disabled item that just labels the menu so
+          // the user knows which app this tray belongs to. macOS dims
+          // disabled items so it reads as a header.
+          { label: 'MoxxyAI Workspaces', enabled: false },
+          { type: 'separator' },
           { label: 'Open main window', click: openMainAndCloseFocus },
           { label: 'Toggle focus mode', click: () => void toggleFocusWindow(focusOpts) },
           { type: 'separator' },

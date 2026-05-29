@@ -55,6 +55,9 @@ function FocusContent({ workspaceId }: { readonly workspaceId: string | null }):
     void api().invoke('focus.resize', { width, height }).catch(() => undefined);
   }, [mode]);
 
+  // Show whichever block (user OR assistant) is most recent — that's
+  // what the user actually wants reflected: their own message right
+  // after they hit send, then the response when it streams back.
   const latest = useSyncExternalStore(
     chatStore.subscribe,
     () => {
@@ -62,7 +65,12 @@ function FocusContent({ workspaceId }: { readonly workspaceId: string | null }):
       const blocks = chatStore.getChat(workspaceId).blocks;
       for (let i = blocks.length - 1; i >= 0; i--) {
         const b = blocks[i]!;
-        if (b.kind === 'assistant' && b.text.trim().length > 0) return b.text;
+        if (b.kind === 'assistant' && b.text.trim().length > 0) {
+          return { who: 'assistant' as const, text: b.text };
+        }
+        if (b.kind === 'user' && b.text.trim().length > 0) {
+          return { who: 'user' as const, text: b.text };
+        }
       }
       return null;
     },
@@ -97,6 +105,11 @@ function FocusContent({ workspaceId }: { readonly workspaceId: string | null }):
       onSend={(p) => void chat.send(p)}
     />
   );
+}
+
+interface LatestBlock {
+  readonly who: 'user' | 'assistant';
+  readonly text: string;
 }
 
 // --- dot (small floating logo) --------------------------------------------
@@ -220,7 +233,7 @@ function TextMode({
   readonly workspaceId: string | null;
   readonly onBack: () => void;
   readonly sending: boolean;
-  readonly latest: string | null;
+  readonly latest: LatestBlock | null;
   readonly onSend: (prompt: string) => void;
 }): JSX.Element {
   const [draft, setDraft] = useState('');
@@ -428,9 +441,36 @@ function StatusLine({
   latest,
   sending,
 }: {
-  readonly latest: string | null;
+  readonly latest: LatestBlock | null;
   readonly sending: boolean;
 }): JSX.Element {
+  // If we have a most-recent block, surface it whether or not a turn
+  // is in flight — the user wants to see their own message right
+  // after they sent it. The "thinking…" dots become the prefix so the
+  // running state is still visually distinct.
+  if (latest) {
+    const prefix =
+      latest.who === 'user' ? 'you · ' : sending ? '· · ·  ' : '';
+    return (
+      <div
+        className={`focus-widget__status${
+          latest.who === 'user' ? ' focus-widget__status--user' : ''
+        }${sending ? ' focus-widget__status--thinking' : ''}`}
+      >
+        {sending && (
+          <>
+            <span className="thinking-dot" />
+            <span className="thinking-dot" style={{ animationDelay: '160ms' }} />
+            <span className="thinking-dot" style={{ animationDelay: '320ms' }} />
+          </>
+        )}
+        <span>
+          {prefix && <span style={{ opacity: 0.7 }}>{prefix}</span>}
+          {latest.text.trim().split(/\n/)[0]}
+        </span>
+      </div>
+    );
+  }
   if (sending) {
     return (
       <div className="focus-widget__status focus-widget__status--thinking">
@@ -441,16 +481,9 @@ function StatusLine({
       </div>
     );
   }
-  if (!latest) {
-    return (
-      <div className="focus-widget__status focus-widget__status--idle">
-        Ready when you are.
-      </div>
-    );
-  }
   return (
-    <div className="focus-widget__status" title={latest}>
-      {latest.trim().split(/\n/)[0]}
+    <div className="focus-widget__status focus-widget__status--idle">
+      Ready when you are.
     </div>
   );
 }
