@@ -31,6 +31,13 @@ class ChatStore {
   private chats = new Map<string, InternalChat>();
   private activeId: string | null = null;
   private listeners = new Set<() => void>();
+  /** Memoised unread-workspace snapshot. useSyncExternalStore calls
+   *  getSnapshot every render — returning a fresh array each time is
+   *  the textbook "Maximum update depth exceeded" foot-gun. We rebuild
+   *  it lazily and only when dispatch/setActive invalidates the
+   *  cache. */
+  private cachedUnread: ReadonlyArray<string> = [];
+  private unreadDirty = true;
 
   // ---- subscription -------------------------------------------------------
 
@@ -67,14 +74,29 @@ class ChatStore {
   }
 
   /** Snapshot of all workspaces that have ever received events. Used
-   *  by the sidebar to render unread dots without re-asking the store
-   *  for every workspace by id. */
+   *  by the sidebar to render unread dots. The result is memoised so
+   *  useSyncExternalStore's same-reference identity check holds across
+   *  renders. */
   unreadWorkspaces(): ReadonlyArray<string> {
-    const out: string[] = [];
+    if (!this.unreadDirty) return this.cachedUnread;
+    const next: string[] = [];
     for (const [id, c] of this.chats) {
-      if (id !== this.activeId && c.seq > c.lastSeenSeq) out.push(id);
+      if (id !== this.activeId && c.seq > c.lastSeenSeq) next.push(id);
     }
-    return out;
+    // Preserve the previous reference when nothing changed — avoids
+    // gratuitous re-renders even when an unrelated chat dispatch
+    // marks the cache dirty.
+    const prev = this.cachedUnread;
+    if (
+      prev.length === next.length &&
+      prev.every((v, i) => v === next[i])
+    ) {
+      this.unreadDirty = false;
+      return prev;
+    }
+    this.cachedUnread = next;
+    this.unreadDirty = false;
+    return next;
   }
 
   // ---- write side --------------------------------------------------------
@@ -87,6 +109,7 @@ class ChatStore {
       const c = this.ensure(workspaceId);
       c.lastSeenSeq = c.seq;
     }
+    this.unreadDirty = true;
     this.emit();
   }
 
@@ -99,12 +122,16 @@ class ChatStore {
     next.lastSeenSeq =
       this.activeId === workspaceId ? next.seq : cur.lastSeenSeq;
     this.chats.set(workspaceId, next);
+    this.unreadDirty = true;
     this.emit();
   }
 
   /** Drop one workspace's state — used when the user removes a desk. */
   drop(workspaceId: string): void {
-    if (this.chats.delete(workspaceId)) this.emit();
+    if (this.chats.delete(workspaceId)) {
+      this.unreadDirty = true;
+      this.emit();
+    }
   }
 
   // ---- internals ---------------------------------------------------------
