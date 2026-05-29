@@ -18,10 +18,11 @@
   --color-text-muted:    #475569;
   --color-text-dim:      #94a3b8;
 
-  /* Sidebar — pearl white. A hair warmer than the app canvas so the
-   * column reads as separate without a heavy rule. */
-  --color-sidebar-bg:        #fbfcff;
-  --color-sidebar-bg-hover:  #f2f3fa;
+  /* Sidebar — pure white. The lavender app canvas + the hairline
+   * right border on `.col-sidebar` are enough to separate the column
+   * without a fill tint. */
+  --color-sidebar-bg:        #ffffff;
+  --color-sidebar-bg-hover:  #f4f5fb;
   --color-sidebar-bg-active: #fdf2f8;   /* brand-pink wash for the active row */
   --color-sidebar-text:      #0f172a;
   --color-sidebar-text-dim:  #6b7194;
