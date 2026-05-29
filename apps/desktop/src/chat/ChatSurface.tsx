@@ -390,7 +390,6 @@ function EmptyState({ ready }: { readonly ready: boolean }): JSX.Element {
             height: 'auto',
             display: 'block',
             margin: '0 auto 20px',
-            imageRendering: 'pixelated',
           }}
         />
         <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
