@@ -34,6 +34,12 @@ export default defineConfig({
       alias: {
         '@': path.resolve(__dirname, 'src'),
         '@shared': path.resolve(__dirname, 'electron/shared'),
+        // @clerk/elements optionally peers on Next.js for SSR. We're
+        // a plain Vite + Electron app; satisfy the imports with no-op
+        // shims so the bundle doesn't try to resolve real Next.
+        'next/compat/router': path.resolve(__dirname, 'src/lib/next-compat-shim.ts'),
+        'next/navigation': path.resolve(__dirname, 'src/lib/next-compat-shim.ts'),
+        'next/router': path.resolve(__dirname, 'src/lib/next-compat-shim.ts'),
       },
     },
     build: {
