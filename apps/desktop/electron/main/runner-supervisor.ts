@@ -172,9 +172,22 @@ export class RunnerSupervisor extends EventEmitter {
     }
     this.cliPath = displayPath(cli);
 
-    const adopt = await this.probeSocket();
+    // If a workspace is bound, we MUST own the runner so its cwd is
+    // the workspace directory — adopting whatever serve is already on
+    // the socket would inherit the wrong cwd and silently leak file
+    // writes outside the workspace.
+    const adopt = this.cwd === null ? await this.probeSocket() : false;
 
     if (!adopt) {
+      // Kill the foreign serve if one is on the socket so we can take
+      // over. Without this the bind below would race with the
+      // existing listener.
+      if (this.cwd !== null && (await this.probeSocket())) {
+        this.pushLog(
+          'stderr',
+          'workspace bound — refusing to adopt foreign serve; replacing it',
+        );
+      }
       this.cleanupStaleSocket();
       const child = this.spawnServe(cli);
       this.child = child;
