@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSettings } from '@/lib/useSettings';
 import { Skeleton } from '@/lib/Skeleton';
+import { SkillsView } from './SkillsView';
 
 type Tab = 'providers' | 'mcp' | 'skills' | 'vault';
 
@@ -91,7 +92,7 @@ export function SettingsPanel(): JSX.Element {
         <>
           {tab === 'providers' && <ProvidersTab providers={s.providers} />}
           {tab === 'mcp' && <McpTab servers={s.mcp} onToggle={s.toggleMcp} />}
-          {tab === 'skills' && <SkillsTab s={s} />}
+          {tab === 'skills' && <SkillsView s={s} />}
           {tab === 'vault' && <VaultTab vault={s.vault} />}
         </>
       )}

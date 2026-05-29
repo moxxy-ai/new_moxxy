@@ -82,11 +82,13 @@ export function ToolGroupView({
             <Icon name="chevron-right" size={14} />
           </span>
         </button>
-        <ul role="list" style={{ listStyle: 'none', margin: '6px 0 0', padding: 0 }}>
-          {tools.map((t) => (
-            <ToolRow key={t.id} block={t} startOpen={open} />
-          ))}
-        </ul>
+        {open && (
+          <ul role="list" style={{ listStyle: 'none', margin: '6px 0 0', padding: 0 }}>
+            {tools.map((t) => (
+              <ToolRow key={t.id} block={t} startOpen={false} />
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );

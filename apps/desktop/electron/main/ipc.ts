@@ -299,6 +299,10 @@ export function registerIpcHandlers(pool: RunnerPool, desks: DeskStore): void {
     const { writeSkill } = await import('./skills');
     await writeSkill(name, body);
   });
+  handle('settings.deleteSkill', async ({ name }) => {
+    const { deleteSkill } = await import('./skills');
+    await deleteSkill(name);
+  });
 }
 
 /**

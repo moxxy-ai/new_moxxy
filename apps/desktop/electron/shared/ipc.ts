@@ -309,6 +309,7 @@ export interface IpcCommands {
   'settings.skills': () => Promise<ReadonlyArray<SkillFile>>;
   'settings.readSkill': (args: { name: string }) => Promise<string>;
   'settings.writeSkill': (args: { name: string; body: string }) => Promise<void>;
+  'settings.deleteSkill': (args: { name: string }) => Promise<void>;
 }
 
 /** Names of every command, derived. */

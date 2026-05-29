@@ -18,6 +18,7 @@ export interface UseSettings {
   readonly toggleMcp: (name: string, enabled: boolean) => Promise<void>;
   readonly readSkill: (name: string) => Promise<string>;
   readonly writeSkill: (name: string, body: string) => Promise<void>;
+  readonly deleteSkill: (name: string) => Promise<void>;
 }
 
 export function useSettings(): UseSettings {
@@ -82,6 +83,18 @@ export function useSettings(): UseSettings {
     [refresh],
   );
 
+  const deleteSkill = useCallback(
+    async (name: string): Promise<void> => {
+      try {
+        await api().invoke('settings.deleteSkill', { name });
+        await refresh();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [refresh],
+  );
+
   return {
     providers,
     mcp,
@@ -93,5 +106,6 @@ export function useSettings(): UseSettings {
     toggleMcp,
     readSkill,
     writeSkill,
+    deleteSkill,
   };
 }

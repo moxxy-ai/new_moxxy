@@ -43,6 +43,17 @@ export async function writeSkill(name: string, body: string): Promise<void> {
   await writeFile(path.join(skillsDir(), name), body, 'utf8');
 }
 
+export async function deleteSkill(name: string): Promise<void> {
+  assertSafeName(name);
+  const { unlink } = await import('node:fs/promises');
+  try {
+    await unlink(path.join(skillsDir(), name));
+  } catch (e) {
+    const err = e as NodeJS.ErrnoException;
+    if (err.code !== 'ENOENT') throw err;
+  }
+}
+
 function assertSafeName(name: string): void {
   if (name.includes('/') || name.includes('..') || !name.endsWith('.md')) {
     throw new Error(`invalid skill name: ${name}`);

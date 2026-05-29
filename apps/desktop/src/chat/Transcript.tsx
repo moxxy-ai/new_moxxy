@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import type { Block } from '@/lib/useChat';
 import { BlockView } from './BlockView';
 import { ToolGroupView } from './ToolGroupView';
+import { ThinkingIndicator } from './ThinkingIndicator';
 
 type ToolBlock = Extract<Block, { kind: 'tool' }>;
 
@@ -40,8 +41,13 @@ function groupBlocks(blocks: ReadonlyArray<Block>): RenderItem[] {
 
 export function Transcript({
   blocks,
+  sending,
 }: {
   readonly blocks: ReadonlyArray<Block>;
+  /** True while a turn is in flight (between runTurn and turn.complete).
+   *  Drives the "thinking" indicator that fills the gap before the
+   *  first assistant_chunk arrives. */
+  readonly sending?: boolean;
 }): JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
   const follow = useRef(true);
@@ -85,6 +91,27 @@ export function Transcript({
           <BlockView key={item.key} block={item.block} />
         ),
       )}
+      {sending && shouldShowThinking(blocks) && <ThinkingIndicator />}
     </div>
   );
+}
+
+/** Show the indicator only when there's no live assistant text yet.
+ *  Once the first chunk lands the streaming cursor in BlockView takes
+ *  over the "she's working" role. */
+function shouldShowThinking(blocks: ReadonlyArray<Block>): boolean {
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    const b = blocks[i]!;
+    if (b.kind === 'assistant') {
+      // Latest assistant block already has text → in-flight rendering
+      // is being handled by the streaming-cursor inside BlockView.
+      return b.streaming && b.text.length === 0;
+    }
+    if (b.kind === 'user') return true;
+    // Tool / system blocks sit between user and the assistant reply
+    // (skill load, etc.) — keep showing "thinking…" until the actual
+    // assistant response starts.
+    if (b.kind === 'tool' || b.kind === 'system') continue;
+  }
+  return true;
 }
