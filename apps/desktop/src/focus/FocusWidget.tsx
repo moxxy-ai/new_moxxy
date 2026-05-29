@@ -28,9 +28,16 @@ import { ConnectionBridge, useActiveWorkspaceId } from '@/lib/useConnection';
 
 type Stage = 'inactive' | 'active' | 'mini-text';
 
+// Active width depends on whether the mic button is present. With
+// the mic visible there are 4 actions (mic, text, restore, close);
+// without it just 3, so we tighten the panel accordingly so it
+// doesn't look hollow on the right.
+const ACTIVE_WIDTH_WITH_MIC = 232;
+const ACTIVE_WIDTH_WITHOUT_MIC = 196;
+
 const SIZE: Record<Stage, { width: number; height: number }> = {
   inactive: { width: 44, height: 44 },
-  active: { width: 232, height: 56 },
+  active: { width: ACTIVE_WIDTH_WITH_MIC, height: 56 },
   'mini-text': { width: 360, height: 220 },
 };
 
@@ -55,11 +62,32 @@ function Surface({
   readonly workspaceId: string | null;
 }): JSX.Element {
   const [stage, setStage] = useState<Stage>('inactive');
+  // Lifted from Active so the resize IPC knows whether to tighten
+  // the panel before painting (no flicker on first activation).
+  const [hasTranscriber, setHasTranscriber] = useState<boolean | null>(null);
 
   useEffect(() => {
-    const { width, height } = SIZE[stage];
+    let cancelled = false;
+    void api()
+      .invoke('session.hasTranscriber')
+      .then((has) => {
+        if (!cancelled) setHasTranscriber(Boolean(has));
+      })
+      .catch(() => {
+        if (!cancelled) setHasTranscriber(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let { width, height } = SIZE[stage];
+    if (stage === 'active' && hasTranscriber === false) {
+      width = ACTIVE_WIDTH_WITHOUT_MIC;
+    }
     void api().invoke('focus.resize', { width, height }).catch(() => undefined);
-  }, [stage]);
+  }, [stage, hasTranscriber]);
 
   if (stage === 'inactive')
     return <Inactive onActivate={() => setStage('active')} />;
@@ -67,6 +95,7 @@ function Surface({
     return (
       <Active
         workspaceId={workspaceId}
+        hasTranscriber={hasTranscriber === true}
         onCollapse={() => setStage('inactive')}
         onText={() => setStage('mini-text')}
       />
@@ -100,36 +129,20 @@ type RecPhase = 'idle' | 'recording' | 'transcribing' | 'error';
 
 function Active({
   workspaceId,
+  hasTranscriber,
   onCollapse,
   onText,
 }: {
   readonly workspaceId: string | null;
+  readonly hasTranscriber: boolean;
   readonly onCollapse: () => void;
   readonly onText: () => void;
 }): JSX.Element {
   const chat = useChat(workspaceId);
   const [phase, setPhase] = useState<RecPhase>('idle');
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
-  // Hide the mic button entirely when the runner reports no active
-  // transcriber. Null = unknown (loading); true / false = answer.
-  const [hasTranscriber, setHasTranscriber] = useState<boolean | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void api()
-      .invoke('session.hasTranscriber')
-      .then((has) => {
-        if (!cancelled) setHasTranscriber(Boolean(has));
-      })
-      .catch(() => {
-        if (!cancelled) setHasTranscriber(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const stop = (): void => {
     const rec = recorderRef.current;
@@ -239,7 +252,6 @@ function Active({
           <ActionButton
             onClick={toggleMic}
             aria-label={recording ? 'Stop recording' : 'Record voice'}
-            variant={recording ? 'voiceOn' : undefined}
           >
             {phase === 'transcribing' ? <Dot delay={0} /> : <MicIcon />}
           </ActionButton>
@@ -528,24 +540,12 @@ function ActionButton({
 }: {
   readonly onClick: () => void;
   readonly children: React.ReactNode;
-  readonly variant?: 'danger' | 'voiceOn';
+  readonly variant?: 'danger';
   readonly 'aria-label': string;
 }): JSX.Element {
   const [hover, setHover] = useState(false);
-  const base = { ...style.actionBtn };
-  let pinned: React.CSSProperties | null = null;
-  if (variant === 'voiceOn') {
-    // Recording-on look — pink moxxy gradient + soft halo so the
-    // mic button stays readable over the spectrum background.
-    pinned = {
-      background: 'linear-gradient(135deg, #ec4899, #a855f7)',
-      color: '#fff',
-      boxShadow:
-        '0 0 0 2px rgba(255, 255, 255, 0.85), 0 6px 14px -6px rgba(236, 72, 153, 0.55)',
-    };
-  }
   let hoverStyle: React.CSSProperties | null = null;
-  if (hover && !pinned) {
+  if (hover) {
     hoverStyle =
       variant === 'danger'
         ? { background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444' }
@@ -557,7 +557,7 @@ function ActionButton({
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      style={{ ...base, ...(pinned ?? {}), ...(hoverStyle ?? {}) }}
+      style={{ ...style.actionBtn, ...(hoverStyle ?? {}) }}
       aria-label={rest['aria-label']}
     >
       {children}
