@@ -11,7 +11,7 @@
  */
 
 import { BrowserWindow, app, screen } from 'electron';
-import path from 'node:path';
+import { lockDownNavigation } from './security';
 
 let focusWindow: BrowserWindow | null = null;
 
@@ -143,9 +143,13 @@ export async function showFocusWindow(opts: CreateOpts): Promise<void> {
     webPreferences: {
       preload: opts.preloadPath,
       contextIsolation: true,
-      sandbox: false,
+      sandbox: true,
     },
   });
+
+  // The focus widget never opens child windows and never navigates away
+  // from its own document — lock both down (deny window.open too).
+  lockDownNavigation(win, { keepWindowOpenHandler: false });
 
   win.setAlwaysOnTop(true, 'floating', 1);
   // Visible across desktops + Spaces so the widget follows you when

@@ -8,7 +8,7 @@
  * disk just because someone passed `../../etc/passwd` as `path`.
  */
 
-import { readdir, stat } from 'node:fs/promises';
+import { readdir, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 
 const HIDDEN_PREFIX = '.';
@@ -34,28 +34,47 @@ export interface ListDirResult {
   readonly entries: ReadonlyArray<ListedEntry>;
 }
 
+function isInside(root: string, abs: string): boolean {
+  return abs === root || abs.startsWith(root + path.sep);
+}
+
 /**
- * Resolve `relPath` against `cwd` and verify the result stays
- * underneath `cwd` (or equals it). Throws if the user tried to
- * navigate above the workspace root via `..` or absolute paths.
+ * Resolve `relPath` against the canonical workspace `root` and verify
+ * the result stays underneath it — at BOTH the string level (catches
+ * `..` / absolute paths) and the symlink level (catches a symlink inside
+ * the workspace that points out of it). Pure `path.resolve` +
+ * `startsWith` is not enough: it would happily traverse a symlink whose
+ * resolved string still looks like a child of the root. Throws on escape.
  */
-function resolveInside(cwd: string, relPath: string | undefined): string {
-  const abs = relPath
-    ? path.resolve(cwd, relPath)
-    : path.resolve(cwd);
-  if (abs !== cwd && !abs.startsWith(cwd + path.sep)) {
-    throw new Error(`path "${relPath}" escapes the workspace root`);
+async function resolveInside(root: string, relPath: string | undefined): Promise<string> {
+  const candidate = path.resolve(root, relPath ?? '.');
+  if (!isInside(root, candidate)) {
+    throw new Error(`path "${relPath ?? '.'}" escapes the workspace root`);
   }
-  return abs;
+  let real: string;
+  try {
+    real = await realpath(candidate);
+  } catch {
+    // Doesn't exist yet — string-level confinement above is sufficient
+    // (there is nothing on disk to leak).
+    return candidate;
+  }
+  if (!isInside(root, real)) {
+    throw new Error(`path "${relPath ?? '.'}" escapes the workspace root via a symlink`);
+  }
+  return real;
 }
 
 export async function listDir(cwd: string, relPath?: string): Promise<ListDirResult> {
-  const abs = resolveInside(cwd, relPath);
+  // Canonicalise the workspace root once so the symlink check below
+  // compares like-for-like (e.g. macOS /var → /private/var).
+  const root = await realpath(cwd).catch(() => path.resolve(cwd));
+  const abs = await resolveInside(root, relPath);
   const info = await stat(abs).catch(() => null);
   if (!info || !info.isDirectory()) {
     return {
-      cwd,
-      path: path.relative(cwd, abs) || '.',
+      cwd: root,
+      path: path.relative(root, abs) || '.',
       entries: [],
     };
   }
@@ -84,8 +103,8 @@ export async function listDir(cwd: string, relPath?: string): Promise<ListDirRes
     return a.name.localeCompare(b.name);
   });
   return {
-    cwd,
-    path: path.relative(cwd, abs) || '.',
+    cwd: root,
+    path: path.relative(root, abs) || '.',
     entries,
   };
 }

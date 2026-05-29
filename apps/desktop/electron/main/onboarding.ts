@@ -17,6 +17,7 @@ import {
   resolveMoxxyCli,
   type CliInvocation,
 } from './cli-resolver';
+import { assertSafeProviderName } from './security';
 
 export async function probeOnboarding(): Promise<OnboardingStatus> {
   const cli = resolveMoxxyCli({ extraPaths: augmentedPaths() });
@@ -70,6 +71,7 @@ export async function readVaultKeys(home: string): Promise<string[]> {
  * keychain integration.
  */
 export async function saveProviderKey(provider: string, secret: string): Promise<void> {
+  assertSafeProviderName(provider);
   const cli = resolveMoxxyCli({ extraPaths: augmentedPaths() });
   if (!cli) throw new Error('moxxy CLI not found');
   const key = `${provider.toUpperCase().replace(/-/g, '_')}_API_KEY`;

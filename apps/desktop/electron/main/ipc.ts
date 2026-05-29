@@ -33,6 +33,7 @@ import { SessionDriver } from './session-driver';
 import { DeskStore } from './desks';
 import { dialog, shell, BrowserWindow as BrowserWindowApi } from 'electron';
 import { buildInProcessPlugins, type InProcessPlugins } from './in-process-plugins';
+import { assertSafeExternalUrl } from './security';
 
 /**
  * Lazily-built bag of in-process plugins (Codex transcriber today,
@@ -78,6 +79,7 @@ export function registerIpcHandlers(pool: RunnerPool, desks: DeskStore): void {
     return code;
   });
   handle('onboarding.openExternal', async ({ url }) => {
+    assertSafeExternalUrl(url);
     await shell.openExternal(url);
   });
   handle('onboarding.saveProviderKey', async ({ provider, secret }) => {

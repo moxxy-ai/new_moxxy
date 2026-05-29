@@ -12,6 +12,7 @@
 import { spawn } from 'node:child_process';
 import { type BrowserWindow } from 'electron';
 import { augmentedPaths } from './cli-resolver';
+import { assertSafeProviderName } from './security';
 
 export interface NodeProbe {
   installed: boolean;
@@ -106,6 +107,7 @@ export async function runProviderLogin(
   provider: string,
   window: BrowserWindow,
 ): Promise<number> {
+  assertSafeProviderName(provider);
   const { resolveMoxxyCli, augmentedPaths } = await import('./cli-resolver');
   const cli = resolveMoxxyCli({ extraPaths: augmentedPaths() });
   if (!cli) throw new Error('moxxy CLI not found — run the install step first');

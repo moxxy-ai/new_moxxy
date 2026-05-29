@@ -38,6 +38,7 @@ import {
   resolveMoxxyCli,
   type CliInvocation,
 } from './cli-resolver';
+import { redactSecrets } from './security';
 
 const PROBE_TIMEOUT_MS = 250;
 const SOCKET_WAIT_MS = 20_000;
@@ -411,7 +412,10 @@ export class RunnerSupervisor extends EventEmitter {
   }
 
   private pushLog(stream: 'stdout' | 'stderr', line: string): void {
-    this.logRing.push({ stream, line });
+    // Redact before buffering: this ring is shipped to the renderer in
+    // every snapshot() and shown in the connection diagnostics, so a
+    // secret a plugin echoed to stdout must never make it across.
+    this.logRing.push({ stream, line: redactSecrets(line) });
     if (this.logRing.length > LOG_RING_SIZE) {
       this.logRing.splice(0, this.logRing.length - LOG_RING_SIZE);
     }

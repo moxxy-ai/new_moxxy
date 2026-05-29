@@ -28,7 +28,8 @@ import {
   showFocusWindow,
   toggleFocusWindow,
 } from './focus-window';
-import { ipcMain, Tray, Menu, nativeImage, globalShortcut } from 'electron';
+import { ipcMain, Tray, Menu, nativeImage, globalShortcut, session } from 'electron';
+import { installContentSecurityPolicy, lockDownNavigation } from './security';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -70,9 +71,17 @@ async function createWindow(): Promise<void> {
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload', 'index.mjs'),
       contextIsolation: true,
-      sandbox: false,
+      // The preload bridge only touches ipcRenderer + contextBridge, so
+      // the OS process sandbox is safe to enable — it shrinks the blast
+      // radius of a renderer compromise to "can't reach Node directly."
+      sandbox: true,
     },
   });
+
+  // Refuse top-frame navigation away from our own origin. The OAuth
+  // popups open via the `setWindowOpenHandler` below (kept intact), not
+  // by navigating this frame, so sign-in is unaffected.
+  lockDownNavigation(mainWindow, { keepWindowOpenHandler: true });
 
   // OAuth popup handling — Clerk's clerk-js calls window.open() to
   // run the provider's OAuth flow. We allow popups whose origin is on
@@ -348,6 +357,11 @@ function installApplicationMenu(
 let trayInstance: Tray | null = null;
 
 app.whenReady().then(async () => {
+  // Apply the Content-Security-Policy to our own document responses
+  // before any window loads. Skipped in dev (Vite HMR needs a loose
+  // policy); third-party + OAuth responses are left untouched.
+  installContentSecurityPolicy(session.defaultSession, { isDev });
+
   // Reap any orphan runners from a previous crashed desktop process
   // before we try to spawn new ones. Without this, the first workspace
   // a returning user opens hits EADDRINUSE because a zombie moxxy serve
