@@ -9,6 +9,11 @@
  */
 
 import { app, BrowserWindow } from 'electron';
+
+// Set the user-facing app name BEFORE app.whenReady so the macOS
+// menu bar / Dock and Windows taskbar pick it up. Falls through to
+// the packaged productName for the bundled .app/.exe.
+app.setName('MoxxyAI Workspaces');
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -35,7 +40,7 @@ async function createWindow(): Promise<void> {
     : path.join(__dirname, '..', '..', 'dist', 'logo.png');
 
   mainWindow = new BrowserWindow({
-    title: 'moxxy',
+    title: 'MoxxyAI Workspaces',
     width: 1180,
     height: 760,
     minWidth: 720,

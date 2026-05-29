@@ -44,7 +44,7 @@
   },
   "build": {
     "appId": "ai.moxxy.desktop",
-    "productName": "moxxy",
+    "productName": "MoxxyAI Workspaces",
     "directories": {
       "output": "release"
     },
@@ -54,14 +54,17 @@
     ],
     "mac": {
       "category": "public.app-category.productivity",
-      "target": "dmg"
+      "target": "dmg",
+      "icon": "public/logo.png"
     },
     "linux": {
       "target": "AppImage",
-      "category": "Utility"
+      "category": "Utility",
+      "icon": "public/logo.png"
     },
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "public/logo.png"
     }
   }
 }
