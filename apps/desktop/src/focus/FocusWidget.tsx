@@ -110,7 +110,7 @@ function DotMode({
     <button
       type="button"
       onClick={onExpand}
-      title="moxxy · click to open"
+      aria-label="moxxy · click to open"
       className="focus-dot"
       data-busy={sending ? 'true' : 'false'}
     >
@@ -141,7 +141,7 @@ function MenuMode({
         type="button"
         className="focus-menu__handle"
         onClick={onDot}
-        title="Collapse"
+        aria-label="Collapse"
         style={noDrag}
       >
         <img src="/logo.png" alt="" aria-hidden width={26} height={26} draggable={false} />
@@ -152,7 +152,7 @@ function MenuMode({
           type="button"
           className="focus-menu__btn"
           onClick={onVoice}
-          title="Voice"
+          aria-label="Voice"
         >
           <Icon name="mic" size={16} />
         </button>
@@ -160,7 +160,7 @@ function MenuMode({
           type="button"
           className="focus-menu__btn"
           onClick={onText}
-          title="Text input"
+          aria-label="Text input"
         >
           <Icon name="edit" size={15} />
         </button>
@@ -168,7 +168,7 @@ function MenuMode({
           type="button"
           className="focus-menu__btn"
           onClick={() => void api().invoke('focus.restoreMain').catch(() => undefined)}
-          title="Open main window"
+          aria-label="Open main window"
         >
           <Icon name="workspace" size={15} />
         </button>
@@ -176,7 +176,7 @@ function MenuMode({
           type="button"
           className="focus-menu__btn focus-menu__btn--close"
           onClick={() => void api().invoke('focus.close').catch(() => undefined)}
-          title="Close focus mode"
+          aria-label="Close focus mode"
         >
           <Icon name="x" size={13} />
         </button>
@@ -320,7 +320,7 @@ function VoiceMode({
           className={`focus-voice__button focus-voice__button--${phase}`}
           onClick={() => (phase === 'recording' ? stop() : void start())}
           disabled={phase === 'transcribing' || phase === 'unavailable'}
-          title={
+          aria-label={
             phase === 'recording'
               ? 'Tap to stop'
               : phase === 'transcribing'
@@ -333,7 +333,7 @@ function VoiceMode({
           <Icon name="mic" size={26} />
         </button>
         {transcript ? (
-          <div className="focus-voice__transcript" title={transcript}>
+          <div className="focus-voice__transcript" aria-label={transcript}>
             {transcript}
           </div>
         ) : (
@@ -384,7 +384,6 @@ function PanelHeader({
           type="button"
           className="btn-icon focus-widget__close"
           aria-label="Back to menu"
-          title="Back"
           onClick={onBack}
         >
           <Icon name="chevron-right" size={12} style={{ transform: 'rotate(180deg)' }} />
@@ -393,7 +392,6 @@ function PanelHeader({
           type="button"
           className="btn-icon focus-widget__close"
           aria-label="Open main window"
-          title="Open main window"
           onClick={() => void api().invoke('focus.restoreMain').catch(() => undefined)}
         >
           <Icon name="workspace" size={12} />
