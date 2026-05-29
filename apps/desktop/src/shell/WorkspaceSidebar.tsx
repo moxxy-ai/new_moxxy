@@ -6,6 +6,7 @@ import { Icon } from '@/lib/Icon';
 import { Modal, ConfirmModal } from '@/lib/Modal';
 import { useUnreadWorkspaces } from '@/lib/useChat';
 import { usePrefs } from '@/lib/usePrefs';
+import { ProfileView } from './ProfileView';
 import type { Desk } from '@shared/ipc';
 
 /** Format an accountType value for display. Free-tier is the default
@@ -476,14 +477,11 @@ function WorkspaceRow({
 }
 
 function ProfilePill(): JSX.Element {
-  // Both Clerk hooks return safe defaults when the provider isn't
-  // mounted (no publishable key configured), so we can call them
-  // unconditionally and fall back to prefs / Guest.
   const { user, isLoaded } = useUser();
   const { sessionClaims } = useAuth();
-  const { signOut } = useClerk();
-  const { prefs, update } = usePrefs();
-  const [busy, setBusy] = useState(false);
+  const clerk = useClerk();
+  const { prefs } = usePrefs();
+  const [profileOpen, setProfileOpen] = useState(false);
 
   const signedIn = !!user;
   const displayName =
@@ -513,94 +511,135 @@ function ProfilePill(): JSX.Element {
         .toUpperCase()
     : 'G';
 
-  const onSignOut = async (): Promise<void> => {
-    setBusy(true);
-    try {
-      await signOut();
-      await update({
-        clerkUserId: null,
-        clerkDisplayName: null,
-        signedInAt: null,
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  // (avatar dropped — username + tier badge carry the meaning on
-  // their own now.)
+  // Sign-out now lives inside ProfileView; this pill is just a
+  // trigger button.
   void initials;
+  void clerk;
 
-  return (
-    <div
-      style={{
-        margin: 12,
-        padding: '10px 12px',
-        background: 'var(--color-sidebar-bg-hover)',
-        border: '1px solid var(--color-sidebar-border)',
-        borderRadius: 12,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-      }}
-    >
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div
-          title={displayName}
-          style={{
-            fontSize: 13,
-            fontWeight: 600,
-            color: 'var(--color-sidebar-text)',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          }}
-        >
-          {displayName}
-        </div>
-        <div
-          style={{
-            fontSize: 10.5,
-            color: 'var(--color-sidebar-text-dim)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            marginTop: 3,
-          }}
-        >
-          {!isLoaded ? (
-            <span>…</span>
-          ) : (
-            <span style={tierBadgeStyle(tier)}>{tier}</span>
-          )}
-        </div>
-      </div>
-      {signedIn && (
-        <button
-          type="button"
-          aria-label="Sign out"
-          title="Sign out"
-          disabled={busy}
-          onClick={() => void onSignOut()}
+  // Not signed in: the pill becomes a clear sign-in prompt instead of
+  // the Guest/Free pair, which read as a permanent state rather than
+  // an invitation.
+  if (isLoaded && !signedIn) {
+    return (
+      <button
+        type="button"
+        className="row-button"
+        onClick={() => void clerk.openSignIn()}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          margin: 12,
+          padding: '11px 14px',
+          background: 'var(--color-primary-soft)',
+          border: '1px solid var(--color-primary)',
+          borderRadius: 12,
+          color: 'var(--color-primary-strong)',
+          textAlign: 'left',
+          width: 'auto',
+        }}
+      >
+        <span
+          aria-hidden
           style={{
             width: 28,
             height: 28,
             borderRadius: 8,
-            color: 'var(--color-sidebar-text-dim)',
+            background: 'var(--grad-cta)',
+            color: '#fff',
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
-            opacity: busy ? 0.4 : 1,
+            flexShrink: 0,
           }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--color-text)')}
-          onMouseLeave={(e) =>
-            (e.currentTarget.style.color = 'var(--color-sidebar-text-dim)')
-          }
         >
-          <Icon name="x" size={14} />
-        </button>
-      )}
-    </div>
+          <Icon name="agent" size={14} />
+        </span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span
+            style={{
+              display: 'block',
+              fontSize: 13,
+              fontWeight: 700,
+              color: 'var(--color-primary-strong)',
+            }}
+          >
+            Sign in
+          </span>
+          <span
+            style={{
+              display: 'block',
+              fontSize: 11,
+              color: 'var(--color-text-muted)',
+              marginTop: 2,
+            }}
+          >
+            Sync settings across machines
+          </span>
+        </span>
+        <Icon name="chevron-right" size={14} />
+      </button>
+    );
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        className="row-button"
+        onClick={() => setProfileOpen(true)}
+        title={`${displayName} · click for account`}
+        style={{
+          margin: 12,
+          padding: '10px 12px',
+          background: 'var(--color-sidebar-bg-hover)',
+          border: '1px solid var(--color-sidebar-border)',
+          borderRadius: 12,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          width: 'auto',
+          textAlign: 'left',
+        }}
+      >
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: 13,
+              fontWeight: 600,
+              color: 'var(--color-sidebar-text)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {displayName}
+          </div>
+          <div
+            style={{
+              fontSize: 10.5,
+              color: 'var(--color-sidebar-text-dim)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              marginTop: 3,
+            }}
+          >
+            {!isLoaded ? (
+              <span>…</span>
+            ) : (
+              <span style={tierBadgeStyle(tier)}>{tier}</span>
+            )}
+          </div>
+        </div>
+        <Icon
+          name="chevron-right"
+          size={13}
+          style={{ color: 'var(--color-sidebar-text-dim)' }}
+        />
+      </button>
+      {profileOpen && <ProfileView tier={tier} onClose={() => setProfileOpen(false)} />}
+    </>
   );
 }
 

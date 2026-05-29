@@ -24,7 +24,9 @@ export function Splash({
         alignItems: 'center',
         justifyContent: 'center',
         gap: '1.25rem',
-        background: 'var(--color-app-bg)',
+        // Match the chat surface bg so the cold-start splash feels
+        // continuous with the app's first useful screen.
+        background: 'rgb(252, 252, 255)',
         color: 'var(--color-text)',
       }}
     >

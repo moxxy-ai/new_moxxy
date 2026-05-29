@@ -1,0 +1,176 @@
+/* Focus widget chrome. Transparent BrowserWindow → the page itself
+ * draws the rounded card, the shadow, and the drag handle. */
+
+html,
+body,
+#root {
+  background: transparent;
+  overflow: hidden;
+}
+
+.focus-widget {
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--color-card-border);
+  border-radius: 16px;
+  box-shadow:
+    0 24px 48px -16px rgba(15, 23, 42, 0.28),
+    0 6px 14px -8px rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(18px) saturate(120%);
+  -webkit-backdrop-filter: blur(18px) saturate(120%);
+  overflow: hidden;
+  font-family: var(--font-sans);
+  color: var(--color-text);
+}
+
+.focus-widget__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px 8px 12px;
+  border-bottom: 1px solid var(--color-card-border);
+  background: rgba(255, 255, 255, 0.55);
+}
+.focus-widget__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+.focus-widget__close {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-dim);
+}
+
+.focus-widget__status {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+}
+.focus-widget__status--idle {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+.focus-widget__status--thinking {
+  color: var(--color-primary-strong);
+  font-weight: 600;
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
+}
+.focus-widget__status--thinking em {
+  font-style: normal;
+  color: var(--color-text-dim);
+  margin-left: 4px;
+  font-weight: 500;
+}
+
+.focus-widget__composer {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--color-card-border);
+  background: #fff;
+}
+.focus-widget__input {
+  flex: 1;
+  height: 32px;
+  padding: 0 10px;
+  font-size: 13px;
+  color: var(--color-text);
+  background: #f7f8fc;
+  border: 1px solid var(--color-card-border);
+  border-radius: 9px;
+  outline: none;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+.focus-widget__input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.15);
+}
+.focus-widget__input:disabled {
+  opacity: 0.5;
+}
+
+.focus-widget__mic {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-card-border);
+  background: #fff;
+  flex-shrink: 0;
+}
+.focus-widget__mic--rec {
+  color: #fff;
+  background: var(--color-red);
+  border-color: var(--color-red);
+  animation: focus-pulse 1.2s ease-in-out infinite;
+}
+@keyframes focus-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); }
+  50%      { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+}
+
+.focus-widget__send {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--grad-cta);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 6px 14px -10px rgba(236, 72, 153, 0.55);
+}
+.focus-widget__send:disabled {
+  opacity: 0.45;
+  box-shadow: none;
+}
+
+.focus-widget__busybar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--color-primary) 30%,
+    var(--color-primary-strong) 50%,
+    var(--color-primary) 70%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: focus-busybar 1.3s linear infinite;
+}
+@keyframes focus-busybar {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}

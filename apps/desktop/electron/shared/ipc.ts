@@ -325,6 +325,10 @@ export interface IpcCommands {
   'prefs.read': () => Promise<DesktopPrefs>;
   'prefs.update': (patch: Partial<DesktopPrefs>) => Promise<DesktopPrefs>;
 
+  // Focus-mode window control (from the floating widget back to main).
+  'focus.close': () => Promise<void>;
+  'focus.restoreMain': () => Promise<void>;
+
   /** Provider list for the given workspace (defaults to active). */
   'settings.providers': (args?: { workspaceId?: string }) => Promise<ReadonlyArray<ProviderEntry>>;
   /** Hit the provider's /v1/models endpoint and return the model ids

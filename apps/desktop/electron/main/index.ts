@@ -21,6 +21,12 @@ import { RunnerPool, UNBOUND_ID } from './runner-pool';
 import { bindWindow, registerIpcHandlers } from './ipc';
 import { DeskStore } from './desks';
 import { sweepStaleSockets } from './sweep-sockets';
+import {
+  bindMainWindowMinimize,
+  closeFocusWindow,
+  toggleFocusWindow,
+} from './focus-window';
+import { ipcMain, Tray, Menu, nativeImage } from 'electron';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -115,7 +121,53 @@ async function createWindow(): Promise<void> {
       mainWindow = null;
     });
   }
+
+  // Focus mode wiring — when the user minimizes / hides the main
+  // window, surface the floating widget instead.
+  const focusOpts = {
+    devUrl: isDev ? process.env['ELECTRON_RENDERER_URL'] : undefined,
+    preloadPath: path.join(__dirname, '..', 'preload', 'index.mjs'),
+    indexHtml: path.join(__dirname, '..', '..', 'dist', 'index.html'),
+  };
+  bindMainWindowMinimize(mainWindow, focusOpts);
+
+  // Tray menu — toggle the widget, restore the main window, quit.
+  if (!trayInstance) {
+    try {
+      const iconPath = isDev
+        ? path.join(__dirname, '..', '..', '..', 'public', 'logo.png')
+        : path.join(__dirname, '..', '..', 'dist', 'logo.png');
+      const icon = nativeImage.createFromPath(iconPath).resize({ width: 18, height: 18 });
+      if (process.platform === 'darwin') icon.setTemplateImage(false);
+      trayInstance = new Tray(icon);
+      trayInstance.setToolTip('MoxxyAI Workspaces');
+      trayInstance.setContextMenu(
+        Menu.buildFromTemplate([
+          { label: 'Open main window', click: () => mainWindow?.show() },
+          { label: 'Toggle focus mode', click: () => void toggleFocusWindow(focusOpts) },
+          { type: 'separator' },
+          { role: 'quit' },
+        ]),
+      );
+      trayInstance.on('click', () => void toggleFocusWindow(focusOpts));
+    } catch {
+      /* tray failure is non-fatal */
+    }
+  }
+
+  ipcMain.removeHandler('focus.close');
+  ipcMain.handle('focus.close', () => {
+    closeFocusWindow();
+  });
+  ipcMain.removeHandler('focus.restoreMain');
+  ipcMain.handle('focus.restoreMain', () => {
+    mainWindow?.show();
+    mainWindow?.focus();
+    closeFocusWindow();
+  });
 }
+
+let trayInstance: Tray | null = null;
 
 app.whenReady().then(async () => {
   // Reap any orphan runners from a previous crashed desktop process

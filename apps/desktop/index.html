@@ -20,15 +20,13 @@
   </head>
   <body>
     <style>
-      html, body { margin: 0; background: #f1f2f9; color: #0f172a;
+      html, body { margin: 0; background: rgb(252, 252, 255); color: #0f172a;
         font-family: 'Inter', -apple-system, system-ui, sans-serif; }
       #splash-fallback { position: fixed; inset: 0; display: flex;
         flex-direction: column; align-items: center; justify-content: center;
         gap: 1.25rem; }
       #splash-fallback .mark { width: 160px; height: 160px;
         background: url('/avatar.gif') center/contain no-repeat;
-        image-rendering: pixelated;
-        filter: drop-shadow(0 12px 14px rgba(236, 72, 153, 0.30));
         animation: splash-bob 2.2s ease-in-out infinite; }
       #splash-fallback .label { font-size: 0.85rem; color: #475569;
         letter-spacing: 0.04em; font-family: 'JetBrains Mono', monospace; }
