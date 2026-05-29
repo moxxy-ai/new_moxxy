@@ -109,10 +109,12 @@ export function registerIpcHandlers(pool: RunnerPool, desks: DeskStore): void {
   handle('session.setProvider', async ({ workspaceId, provider }) => {
     const session = mustRemote(pool, workspaceId);
     session.providers.setActive(provider);
+    await waitForSessionState(session, (info) => info.activeProvider === provider);
   });
   handle('session.setMode', async ({ workspaceId, mode }) => {
     const session = mustRemote(pool, workspaceId);
     session.modes.setActive(mode);
+    await waitForSessionState(session, (info) => info.activeMode === mode);
   });
   handle('session.hasTranscriber', async () => {
     const sup = pool.active();
@@ -386,6 +388,33 @@ function mustRemote(
   const session = sup?.remote();
   if (!session) throw new Error('not connected to a runner');
   return session;
+}
+
+/**
+ * Poll `session.getInfo()` until `predicate` holds or `timeoutMs`
+ * elapses. setProvider / setMode on RemoteSession fire-and-forget the
+ * RPC; without this wait, the IPC returns before the runner's
+ * InfoChanged notification has updated RemoteSession's local cache,
+ * and the renderer's follow-up `session.info` fetch reads the
+ * pre-change state — making the picker visibly snap back to the old
+ * value until the user clicks a second time. Cheap polling here is
+ * the right trade-off vs. surgery on the runner client view.
+ */
+async function waitForSessionState(
+  session: NonNullable<ReturnType<RunnerSupervisor['remote']>>,
+  predicate: (info: ReturnType<typeof session.getInfo>) => boolean,
+  timeoutMs = 1500,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      if (predicate(session.getInfo())) return;
+    } catch {
+      /* getInfo throws before attach — bail */
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 40));
+  }
 }
 
 function mustDriver(workspaceId: string): SessionDriver {

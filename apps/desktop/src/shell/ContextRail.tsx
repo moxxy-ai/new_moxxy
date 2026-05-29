@@ -78,7 +78,10 @@ function StatusBar({ onClose }: { readonly onClose: () => void }): JSX.Element {
         display: 'flex',
         alignItems: 'center',
         gap: 8,
-        padding: '12px 16px',
+        // Match the Chat header's height exactly so the two columns
+        // share a single top rule.
+        height: 64,
+        padding: '0 16px',
         borderBottom: '1px solid var(--color-card-border)',
         position: 'sticky',
         top: 0,

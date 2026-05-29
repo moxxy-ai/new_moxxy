@@ -219,7 +219,10 @@ function Header({
   return (
     <header
       style={{
-        padding: '18px 24px 14px',
+        // Locked to the same height as the agent rail's StatusBar so
+        // the two columns share one continuous top rule.
+        height: 64,
+        padding: '0 24px',
         borderBottom: '1px solid var(--color-card-border)',
         display: 'flex',
         alignItems: 'center',
