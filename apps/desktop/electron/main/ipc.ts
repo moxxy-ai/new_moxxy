@@ -362,6 +362,29 @@ export function registerIpcHandlers(pool: RunnerPool, desks: DeskStore): void {
     const { deleteSkill } = await import('./skills');
     await deleteSkill(name);
   });
+
+  // ---- Chat transcript log (append-only NDJSON) ---------------------------
+
+  handle('chat.append', async ({ workspaceId, events }) => {
+    const { appendEvents } = await import('./chat-log');
+    await appendEvents(workspaceId, events);
+  });
+  handle('chat.loadSegment', async ({ workspaceId, before, limit }) => {
+    const { loadSegment } = await import('./chat-log');
+    return loadSegment(workspaceId, before, limit);
+  });
+  handle('chat.clearLog', async ({ workspaceId }) => {
+    const { clearLog } = await import('./chat-log');
+    await clearLog(workspaceId);
+  });
+  handle('chat.listWorkspaces', async () => {
+    const { listWorkspaces } = await import('./chat-log');
+    return listWorkspaces();
+  });
+  handle('chat.migrate', async ({ workspaces }) => {
+    const { migrate } = await import('./chat-log');
+    await migrate(workspaces);
+  });
 }
 
 /**

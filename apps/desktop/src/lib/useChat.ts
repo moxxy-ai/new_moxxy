@@ -2,6 +2,7 @@ import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import { api } from './api';
 import type { MoxxyEvent } from '@moxxy/sdk';
 import { chatStore, EMPTY_SNAPSHOT } from './chatStore';
+import { createIpcPersistence, migrateLegacyChats } from './chatPersistence';
 import type { Extension } from './chatModel';
 
 export type { Extension, RenderNode, FoldedBlock } from './chatModel';
@@ -24,6 +25,10 @@ export interface UseChat {
   ) => Promise<void>;
   readonly abort: () => Promise<void>;
   readonly clear: () => void;
+  /** More history exists on disk; call {@link loadOlder} to page it in. */
+  readonly hasOlder: boolean;
+  /** Fetch the page of events preceding the in-memory window (scroll-up). */
+  readonly loadOlder: () => void;
 }
 
 /** Fire a turn against the runner without queueing checks. Shared by the
@@ -61,7 +66,10 @@ async function sendImmediate(
  */
 export function ChatStoreBridge(): null {
   useEffect(() => {
-    chatStore.hydrate();
+    // Wire the durable NDJSON backend, then drain any legacy localStorage
+    // transcripts into it (one-time, idempotent).
+    chatStore.setPersistence(createIpcPersistence());
+    void migrateLegacyChats();
     const offEvent = api().subscribe(
       'runner.event',
       ({ workspaceId, event }: { workspaceId: string; event: MoxxyEvent }) => {
@@ -113,6 +121,16 @@ export function useChat(workspaceId: string | null): UseChat {
     workspaceId ? chatStore.getChat(workspaceId) : EMPTY_SNAPSHOT,
   );
 
+  // Load the most-recent window from disk the first time this workspace
+  // is observed (idempotent — the store guards re-entry).
+  useEffect(() => {
+    if (workspaceId) void chatStore.loadInitial(workspaceId);
+  }, [workspaceId]);
+
+  const loadOlder = useCallback((): void => {
+    if (workspaceId) void chatStore.loadOlder(workspaceId);
+  }, [workspaceId]);
+
   const send = useCallback(
     async (
       prompt: string,
@@ -156,6 +174,8 @@ export function useChat(workspaceId: string | null): UseChat {
     send,
     abort,
     clear,
+    hasOlder: snap.hasOlder,
+    loadOlder,
   };
 }
 

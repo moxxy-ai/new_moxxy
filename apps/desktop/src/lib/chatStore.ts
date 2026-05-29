@@ -4,16 +4,17 @@
  *
  * Each workspace owns a {@link ChatRuntime} — an append-only
  * `ChunkedBlockLog` of committed runner events plus the in-flight
- * streaming text. Events stream in on `runner.event` tagged with the
- * workspace id; the store routes each into the matching runtime via
- * {@link applyAction}. A per-workspace cached {@link ChatSnapshot} keeps
- * `useSyncExternalStore` happy: it is rebuilt only when `rev` changes,
- * and its `events` array reference is preserved across streaming-only
- * ticks so the transcript never re-folds while a chunk is arriving.
+ * streaming text. The log is a bounded WINDOW into the durable
+ * main-process NDJSON log: on first open we load the most-recent
+ * {@link INITIAL_WINDOW} events; scrolling up calls {@link loadOlder} to
+ * prepend the preceding page (cursor pagination). New committed events
+ * are appended to both the in-memory window and the durable log via the
+ * injected {@link ChatPersistence}.
  *
- * Unread tracking: `rev` bumps on every change; the foreground
- * workspace's `lastSeenRev` is advanced on activation, so activity in a
- * *different* workspace pushes rev past lastSeenRev → unread dot.
+ * A cached {@link ChatSnapshot} keeps `useSyncExternalStore` happy: it is
+ * rebuilt only when `rev` changes, and its `events` array reference is
+ * preserved across streaming-only ticks so the transcript never re-folds
+ * while a chunk is arriving.
  */
 
 import type { MoxxyEvent } from '@moxxy/sdk';
@@ -25,11 +26,9 @@ import {
   type Extension,
 } from './chatModel';
 import {
-  loadPersistedEvents,
-  persistEvents,
-  removePersisted,
-  loadAllPersisted,
-  type PersistedChat,
+  INITIAL_WINDOW,
+  OLDER_PAGE,
+  type ChatPersistence,
 } from './chatPersistence';
 
 /** One queued turn — the user hit Enter while a previous turn was in
@@ -52,6 +51,8 @@ export interface ChatSnapshot {
   readonly activeTurnId: string | null;
   readonly error: string | null;
   readonly isEmpty: boolean;
+  /** More history exists on disk, fetchable via {@link ChatStore.loadOlder}. */
+  readonly hasOlder: boolean;
 }
 
 interface Slot {
@@ -60,6 +61,12 @@ interface Slot {
   model: string | null;
   lastSeenRev: number;
   queue: ReadonlyArray<QueuedTurn>;
+  /** Cursor for the next-older page, or null at the start of history. */
+  oldestCursor: number | null;
+  hasOlder: boolean;
+  /** Whether the initial window has been loaded from disk. */
+  loaded: boolean;
+  loadingOlder: boolean;
 }
 
 const EMPTY_QUEUE: ReadonlyArray<QueuedTurn> = Object.freeze([]);
@@ -76,30 +83,20 @@ export const EMPTY_SNAPSHOT: ChatSnapshot = Object.freeze({
   activeTurnId: null,
   error: null,
   isEmpty: true,
+  hasOlder: false,
 });
 
 class ChatStore {
   private slots = new Map<string, Slot>();
   private activeId: string | null = null;
   private listeners = new Set<() => void>();
-  private persistTimers = new Map<string, number>();
   private cachedUnread: ReadonlyArray<string> = [];
   private unreadDirty = true;
+  private persistence: ChatPersistence | null = null;
 
-  // ---- hydration ---------------------------------------------------------
-
-  /** Rehydrate persisted transcripts at app boot so conversations from
-   *  before the last restart come back. */
-  hydrate(): void {
-    for (const { id, events } of loadAllPersisted()) {
-      const slot = this.ensure(id);
-      // Direct log seed — bypass applyEvent so we don't re-run the
-      // assistant_chunk/streaming logic on already-committed events.
-      for (const e of events) slot.rt.log.append(e);
-      slot.rt.rev += 1;
-    }
-    this.unreadDirty = true;
-    this.emit();
+  /** Wire the durable backend (called once at boot by ChatStoreBridge). */
+  setPersistence(p: ChatPersistence): void {
+    this.persistence = p;
   }
 
   // ---- subscription ------------------------------------------------------
@@ -121,16 +118,15 @@ class ChatStore {
     return this.activeId;
   }
 
-  /** Snapshot of a workspace's chat, rebuilt only when its `rev`
-   *  changed. Returns a frozen empty snapshot for unknown workspaces. */
   getChat(workspaceId: string): ChatSnapshot {
     const slot = this.slots.get(workspaceId);
     if (!slot) return EMPTY_SNAPSHOT;
     const { rt } = slot;
-    if (slot.snap && slot.snap.rev === rt.rev) return slot.snap;
-    // Reuse the previous events array unless a committed event landed —
-    // streaming-only ticks keep the same reference so the fold memo holds.
-    const eventsChanged = !slot.snap || slot.snap.eventsVersion !== rt.log.version;
+    if (slot.snap && slot.snap.rev === rt.rev && slot.snap.hasOlder === slot.hasOlder) {
+      return slot.snap;
+    }
+    const eventsChanged =
+      !slot.snap || slot.snap.eventsVersion !== rt.log.version;
     const events = eventsChanged ? rt.log.toArray() : slot.snap!.events;
     slot.snap = {
       rev: rt.rev,
@@ -142,6 +138,7 @@ class ChatStore {
       activeTurnId: rt.activeTurnId,
       error: rt.error,
       isEmpty: events.length === 0 && rt.extensions.length === 0 && rt.streamingText === '',
+      hasOlder: slot.hasOlder,
     };
     return slot.snap;
   }
@@ -215,6 +212,63 @@ class ChatStore {
     return next;
   }
 
+  // ---- async loading (cursor pagination) ---------------------------------
+
+  /**
+   * Load the most-recent window of a workspace's history on first open.
+   * Idempotent — guarded by `loaded`. Loaded events are prepended (with
+   * id-dedup) so any turn that raced ahead of the load stays newest.
+   */
+  async loadInitial(workspaceId: string): Promise<void> {
+    const slot = this.ensure(workspaceId);
+    if (slot.loaded || !this.persistence) return;
+    slot.loaded = true; // set before await so concurrent calls bail
+    try {
+      const { events, prevCursor } = await this.persistence.loadSegment(
+        workspaceId,
+        null,
+        INITIAL_WINDOW,
+      );
+      this.prependFresh(slot, events);
+      slot.oldestCursor = prevCursor;
+      slot.hasOlder = prevCursor !== null;
+      slot.snap = null;
+      this.emit();
+    } catch {
+      slot.loaded = false; // allow a retry on the next open
+    }
+  }
+
+  /** Fetch the page preceding the in-memory window (scroll-up). */
+  async loadOlder(workspaceId: string): Promise<void> {
+    const slot = this.slots.get(workspaceId);
+    if (!slot || !slot.hasOlder || slot.loadingOlder || !this.persistence) return;
+    slot.loadingOlder = true;
+    try {
+      const { events, prevCursor } = await this.persistence.loadSegment(
+        workspaceId,
+        slot.oldestCursor,
+        OLDER_PAGE,
+      );
+      this.prependFresh(slot, events);
+      slot.oldestCursor = prevCursor;
+      slot.hasOlder = prevCursor !== null;
+      slot.snap = null;
+      this.emit();
+    } catch {
+      /* leave hasOlder set so the user can retry by scrolling */
+    } finally {
+      slot.loadingOlder = false;
+    }
+  }
+
+  private prependFresh(slot: Slot, events: ReadonlyArray<MoxxyEvent>): void {
+    if (events.length === 0) return;
+    const have = new Set(slot.rt.log.toArray().map((e) => e.id));
+    const fresh = events.filter((e) => !have.has(e.id));
+    if (fresh.length > 0) slot.rt.log.prepend(fresh);
+  }
+
   // ---- write side --------------------------------------------------------
 
   setActive(workspaceId: string | null): void {
@@ -230,20 +284,26 @@ class ChatStore {
 
   dispatch(workspaceId: string, action: ChatAction): void {
     const slot = this.ensure(workspaceId);
+    const before = slot.rt.log.length;
     const changed = applyAction(slot.rt, action);
     if (!changed) return;
+    // Persist exactly the events this dispatch committed (dispatch only
+    // ever appends; prepends come from pagination and are already
+    // durable). The tail delta is precisely the new runner events.
+    const added = slot.rt.log.length - before;
+    if (added > 0 && this.persistence) {
+      void this.persistence.append(workspaceId, slot.rt.log.tail(added)).catch(() => {});
+    }
     if (this.activeId === workspaceId) slot.lastSeenRev = slot.rt.rev;
     this.unreadDirty = true;
-    this.schedulePersist(workspaceId);
     this.emit();
   }
 
-  /** Drop one workspace's state — desk removed or conversation cleared
-   *  out entirely. */
+  /** Drop one workspace's state + its durable log. */
   drop(workspaceId: string): void {
     if (this.slots.delete(workspaceId)) {
       this.unreadDirty = true;
-      removePersisted(workspaceId);
+      void this.persistence?.clear(workspaceId).catch(() => {});
       this.emit();
     }
   }
@@ -252,43 +312,29 @@ class ChatStore {
   clear(workspaceId: string): void {
     const slot = this.ensure(workspaceId);
     applyAction(slot.rt, { type: 'clear' });
+    slot.oldestCursor = null;
+    slot.hasOlder = false;
     slot.snap = null;
     this.unreadDirty = true;
-    removePersisted(workspaceId);
+    void this.persistence?.clear(workspaceId).catch(() => {});
     this.emit();
   }
 
   // ---- internals ---------------------------------------------------------
 
-  private schedulePersist(workspaceId: string): void {
-    const existing = this.persistTimers.get(workspaceId);
-    if (existing !== undefined && typeof window !== 'undefined') {
-      window.clearTimeout(existing);
-    }
-    if (typeof window === 'undefined') return;
-    const handle = window.setTimeout(() => {
-      this.persistTimers.delete(workspaceId);
-      const slot = this.slots.get(workspaceId);
-      if (!slot) {
-        removePersisted(workspaceId);
-        return;
-      }
-      const persisted: PersistedChat = { events: slot.rt.log.toArray() };
-      persistEvents(workspaceId, persisted);
-    }, 250);
-    this.persistTimers.set(workspaceId, handle);
-  }
-
   private ensure(workspaceId: string): Slot {
     let slot = this.slots.get(workspaceId);
     if (!slot) {
-      const seed = loadPersistedEvents(workspaceId);
       slot = {
-        rt: createRuntime(seed?.events ?? []),
+        rt: createRuntime(),
         snap: null,
         model: null,
         lastSeenRev: 0,
         queue: EMPTY_QUEUE,
+        oldestCursor: null,
+        hasOlder: false,
+        loaded: false,
+        loadingOlder: false,
       };
       this.slots.set(workspaceId, slot);
     }

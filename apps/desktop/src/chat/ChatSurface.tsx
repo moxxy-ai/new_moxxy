@@ -142,6 +142,8 @@ export function ChatSurface({
           streamingText={searchQuery ? '' : chat.streamingText}
           sending={chat.sending}
           workspaceId={workspaceId}
+          hasOlder={!searchQuery && chat.hasOlder}
+          onReachedTop={chat.loadOlder}
         />
       )}
       {ready && !chat.sending && !chat.isEmpty && (
