@@ -10,6 +10,7 @@ import { api } from '@/lib/api';
 import { chatStore } from '@/lib/chatStore';
 import { AgentPicker } from './AgentPicker';
 import { CommandPalette, stepsForCommand, type ArgStep } from './CommandPalette';
+import { FILE_INSERT_EVENT } from '@/shell/WorkspaceFiles';
 
 interface ComposerProps {
   readonly ready: boolean;
@@ -66,6 +67,24 @@ export function Composer({
   const taRef = useRef<HTMLTextAreaElement>(null);
   const inFlight = activeTurnId !== null || sending;
   const canSubmit = ready && !inFlight && draft.trim().length > 0;
+
+  // The context rail's file tree fires a CustomEvent when the user
+  // clicks a file; append it as an `@<path>` mention so the agent
+  // can resolve it as a workspace-relative reference.
+  useEffect(() => {
+    const handler = (ev: Event): void => {
+      const detail = (ev as CustomEvent<{ path: string }>).detail;
+      if (!detail?.path) return;
+      const mention = `@${detail.path}`;
+      setDraft((d) => {
+        const sep = d.length === 0 || /\s$/.test(d) ? '' : ' ';
+        return `${d}${sep}${mention} `;
+      });
+      window.setTimeout(() => taRef.current?.focus(), 0);
+    };
+    window.addEventListener(FILE_INSERT_EVENT, handler);
+    return () => window.removeEventListener(FILE_INSERT_EVENT, handler);
+  }, []);
 
   // Probe transcriber availability when the connection comes up.
   useEffect(() => {

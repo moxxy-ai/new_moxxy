@@ -14,6 +14,7 @@
 
 import { useDesks } from '@/lib/useDesks';
 import { Icon } from '@/lib/Icon';
+import { WorkspaceFiles } from './WorkspaceFiles';
 
 interface Props {
   readonly onClose: () => void;
@@ -26,16 +27,6 @@ export function ContextRail({ onClose }: Props): JSX.Element {
   return (
     <section className="col-rail col-rail--right">
       <Header onClose={onClose} />
-
-      <Section title="Output preview">
-        <EmptyZone
-          icon="agent"
-          headline="Nothing previewed yet"
-          body="Skill outputs that have a view (charts, files, HTML) will land here so you can keep reading the conversation."
-        />
-      </Section>
-
-      <Divider />
 
       <Section title="Workspace">
         {active ? (
@@ -53,6 +44,18 @@ export function ContextRail({ onClose }: Props): JSX.Element {
             title="No workspace bound"
             subtitle="Create one in the sidebar"
           />
+        )}
+      </Section>
+
+      <Divider />
+
+      <Section title="Files">
+        {active ? (
+          <WorkspaceFiles workspaceId={active.id} />
+        ) : (
+          <div style={{ fontSize: 11.5, color: 'var(--color-text-dim)' }}>
+            Pick a workspace to browse its files.
+          </div>
         )}
       </Section>
     </section>

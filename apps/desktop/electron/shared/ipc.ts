@@ -288,6 +288,23 @@ export interface IpcCommands {
    *  chose. Null when cancelled. */
   'session.pickAttachment': () => Promise<string | null>;
 
+  // ---- Workspace filesystem browsing ------------------------------------
+  /** List one directory inside the workspace's cwd. Relative paths
+   *  are resolved against the active desk's cwd; absolute paths must
+   *  stay below the cwd or the call errors (no traversing out of the
+   *  workspace). Returns entries sorted directories-first. */
+  'workspace.listDir': (args: {
+    workspaceId: string;
+    path?: string;
+  }) => Promise<{
+    readonly cwd: string;
+    readonly path: string;
+    readonly entries: ReadonlyArray<{
+      readonly name: string;
+      readonly kind: 'file' | 'dir';
+    }>;
+  }>;
+
   // Workflows
   'workflows.list': () => Promise<ReadonlyArray<WorkflowSummary>>;
   'workflows.setEnabled': (args: { name: string; enabled: boolean }) => Promise<void>;

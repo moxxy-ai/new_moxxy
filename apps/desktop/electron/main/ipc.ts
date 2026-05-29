@@ -148,6 +148,17 @@ export function registerIpcHandlers(pool: RunnerPool, desks: DeskStore): void {
     );
     return result.text;
   });
+  handle('workspace.listDir', async ({ workspaceId, path: relPath }) => {
+    const { listDir } = await import('./workspace-fs');
+    // Look up the cwd by the workspace id so background workspaces
+    // can be browsed too; fall back to the active desk.
+    const all = await desks.list();
+    const desk = all.find((d) => d.id === workspaceId) ?? (await desks.getActive());
+    if (!desk) {
+      return { cwd: process.cwd(), path: '.', entries: [] };
+    }
+    return listDir(desk.cwd, relPath);
+  });
   handle('session.pickAttachment', async () => {
     const window =
       BrowserWindowApi.getFocusedWindow() ?? BrowserWindowApi.getAllWindows()[0];
