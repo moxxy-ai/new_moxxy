@@ -1,13 +1,18 @@
 /* Focus widget chrome. Transparent BrowserWindow → the page itself
  * draws the rounded card, the shadow, and the drag handle. */
 
-/* Scope every rule below to body[data-mode='focus'] so this stylesheet
+/* Scope every rule below to html[data-mode='focus'] so this stylesheet
  * (which is imported from the shared bundle) doesn't bleed into the
- * main app's layout. */
+ * main app's layout.
+ *
+ * NOTE: previously this used body[data-mode='focus'] html, which is
+ * an invalid descendant selector (html is an ancestor of body, not
+ * descendant) — html was never sized to 100% and the renderer
+ * collapsed to 0×0, leaving only the OS-drawn window background. */
 
-body[data-mode='focus'],
-body[data-mode='focus'] html,
-body[data-mode='focus'] #root {
+html[data-mode='focus'],
+html[data-mode='focus'] body,
+html[data-mode='focus'] #root {
   background: transparent !important;
   overflow: hidden;
   margin: 0;
@@ -15,10 +20,17 @@ body[data-mode='focus'] #root {
   height: 100%;
   width: 100%;
 }
-body[data-mode='focus'] #root {
+html[data-mode='focus'] #root {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+/* Hide the static splash fallback that ships in index.html — it's
+ * sized for the main 1180×760 window and overflows the 44×44 focus
+ * dot. Without this the avatar background bled around the edge of
+ * the dot tile. */
+html[data-mode='focus'] #splash-fallback {
+  display: none !important;
 }
 
 /* --- 1) dot ------------------------------------------------------------- */
