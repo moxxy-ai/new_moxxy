@@ -101,6 +101,11 @@ function DotMode({
   readonly onExpand: () => void;
   readonly sending: boolean;
 }): JSX.Element {
+  // Important: NO -webkit-app-region: drag on the button — that
+  // makes the element a window-drag target on macOS and clicks are
+  // absorbed by the OS instead of reaching React. The dot has no
+  // "empty space" to drag from anyway; just make the whole circle a
+  // click target.
   return (
     <button
       type="button"
@@ -108,15 +113,8 @@ function DotMode({
       title="moxxy · click to open"
       className="focus-dot"
       data-busy={sending ? 'true' : 'false'}
-      style={{ ['-webkit-app-region' as never]: 'drag' }}
-      onMouseDown={(e) => {
-        // Click registers on mouseup, but we still want the drag
-        // handle to work. The button's onClick fires when the mouse
-        // doesn't move, the drag region grabs otherwise.
-        void e;
-      }}
     >
-      <img src="/logo.png" alt="moxxy" width={36} height={36} />
+      <img src="/logo.png" alt="moxxy" width={36} height={36} draggable={false} />
     </button>
   );
 }
@@ -132,19 +130,24 @@ function MenuMode({
   readonly onVoice: () => void;
   readonly onDot: () => void;
 }): JSX.Element {
+  // Note: React drops keys with leading hyphens silently in some
+  // versions, so we use the WebkitAppRegion camelCase form which
+  // both React and Electron understand.
+  const drag = { WebkitAppRegion: 'drag' } as React.CSSProperties;
+  const noDrag = { WebkitAppRegion: 'no-drag' } as React.CSSProperties;
   return (
-    <div className="focus-menu" style={{ ['-webkit-app-region' as never]: 'drag' }}>
+    <div className="focus-menu" style={drag}>
       <button
         type="button"
         className="focus-menu__handle"
         onClick={onDot}
         title="Collapse"
-        style={{ ['-webkit-app-region' as never]: 'no-drag' }}
+        style={noDrag}
       >
-        <img src="/logo.png" alt="" aria-hidden width={26} height={26} />
+        <img src="/logo.png" alt="" aria-hidden width={26} height={26} draggable={false} />
       </button>
       <div className="focus-menu__split" />
-      <div className="focus-menu__actions" style={{ ['-webkit-app-region' as never]: 'no-drag' }}>
+      <div className="focus-menu__actions" style={noDrag}>
         <button
           type="button"
           className="focus-menu__btn"
@@ -370,13 +373,13 @@ function PanelHeader({
   return (
     <header
       className="focus-widget__header"
-      style={{ ['-webkit-app-region' as never]: 'drag' }}
+      style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
     >
       <div className="focus-widget__brand">
-        <img src="/logo.png" alt="" aria-hidden width={16} height={16} style={{ borderRadius: 4 }} />
+        <img src="/logo.png" alt="" aria-hidden width={16} height={16} style={{ borderRadius: 4 }} draggable={false} />
         <span>moxxy · {title}</span>
       </div>
-      <div style={{ display: 'flex', gap: 4, ['-webkit-app-region' as never]: 'no-drag' }}>
+      <div style={{ display: 'flex', gap: 4, WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
         <button
           type="button"
           className="btn-icon focus-widget__close"

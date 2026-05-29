@@ -173,7 +173,11 @@ async function createWindow(): Promise<void> {
           { role: 'quit' },
         ]),
       );
-      trayInstance.on('click', () => void toggleFocusWindow(focusOpts));
+      // We intentionally do NOT bind a left-click → toggle handler
+      // here. A bare tray click should just open the menu (the OS
+      // default). Focus mode is summoned explicitly via the menu's
+      // "Toggle focus mode" item or the keyboard shortcut, so the
+      // user is never surprised by it popping up.
     } catch (err) {
       // Surface the failure — silent catch was hiding "icon missing"
       // and "Tray() blew up" alike, leaving the user with no menubar
