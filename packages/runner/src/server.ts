@@ -289,37 +289,49 @@ export class RunnerServer {
 
   private async handleTranscribe(raw: unknown): Promise<TranscribeResult> {
     const params = transcribeParamsSchema.parse(raw);
-    const transcriber = this.resolveTranscriberForRequest();
-    if (!transcriber) throw new Error('no active transcriber on the runner');
     const audio = new Uint8Array(Buffer.from(params.audio, 'base64'));
-    return transcriber.transcribe(audio, {
+    const opts = {
       ...(params.mimeType ? { mimeType: params.mimeType } : {}),
       ...(params.language ? { language: params.language } : {}),
       ...(params.prompt ? { prompt: params.prompt } : {}),
-    });
-  }
-
-  /** Return whatever transcriber the session has active; if none is
-   *  active, lazily promote the first *registered* one to active.
-   *  This mirrors what the TUI does inside its voice-input hook:
-   *  rather than requiring the host to pre-`setActive(...)` at boot,
-   *  we activate on first use so newly-installed plugins "just work".
-   *  Agnostic to the transcriber name — whichever plugin happens to
-   *  register one (Whisper, Codex, a local provider, etc.) gets
-   *  promoted. */
-  private resolveTranscriberForRequest(): ReturnType<typeof this.session.transcribers.tryGetActive> {
-    const active = this.session.transcribers.tryGetActive();
-    if (active) return active;
-    const registered = this.session.transcribers.list();
-    for (const def of registered) {
+    };
+    // Build an ordered list of candidates: the active transcriber
+    // first (if any), then every other registered one — that way an
+    // "active but uncredentialled" transcriber (e.g. plain Whisper
+    // without OPENAI_API_KEY) doesn't shadow an OAuth-backed one
+    // that would actually succeed. Identical to what the TUI does
+    // by hardcoding to Codex, but agnostic to transcriber name.
+    const candidates = this.transcribeCandidates();
+    if (candidates.length === 0) throw new Error('no active transcriber on the runner');
+    let lastErr: unknown = new Error('no active transcriber on the runner');
+    for (const def of candidates) {
       try {
-        return this.session.transcribers.setActive(def.name);
-      } catch {
-        // Constructor failed (missing config / API key / auth) —
-        // try the next candidate.
+        const transcriber = this.session.transcribers.setActive(def.name);
+        const result = await transcriber.transcribe(audio, opts);
+        // Surface the change so remote clients observe activeTranscriber
+        // tracking the one that actually worked.
+        this.broadcastInfo();
+        return result;
+      } catch (err) {
+        lastErr = err;
       }
     }
-    return null;
+    throw lastErr;
+  }
+
+  /** Ordered candidate list for a transcribe call.
+   *  - First the active one (if any) — respects an explicit host /
+   *    user choice.
+   *  - Then every other registered transcriber. */
+  private transcribeCandidates(): ReadonlyArray<{ readonly name: string }> {
+    const activeName = this.session.transcribers.getActiveName();
+    const all = this.session.transcribers.list();
+    if (!activeName) return all.map((d) => ({ name: d.name }));
+    const head = all.find((d) => d.name === activeName);
+    const tail = all.filter((d) => d.name !== activeName);
+    return head
+      ? [{ name: head.name }, ...tail.map((d) => ({ name: d.name }))]
+      : tail.map((d) => ({ name: d.name }));
   }
 
   // --- MCP (delegates to session.mcpAdmin if the plugin is loaded) ----------
