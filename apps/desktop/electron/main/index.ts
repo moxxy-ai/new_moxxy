@@ -144,23 +144,44 @@ async function createWindow(): Promise<void> {
   // Tray menu — toggle the widget, restore the main window, quit.
   if (!trayInstance) {
     try {
-      const trayIconPath = isDev
-        ? path.join(__dirname, '..', '..', '..', 'public', 'logo.png')
-        : path.join(__dirname, '..', '..', 'dist', 'logo.png');
-      const raw = nativeImage.createFromPath(trayIconPath);
+      // Try several candidate paths because the prod / dev build
+      // layouts differ — log which one wins (or report all-empty)
+      // so future icon regressions are noisy instead of silent.
+      const trayIconCandidates = [
+        path.join(__dirname, '..', '..', '..', 'public', 'logo.png'),
+        path.join(__dirname, '..', '..', 'dist', 'logo.png'),
+        path.join(process.resourcesPath ?? '', 'public', 'logo.png'),
+        path.join(process.resourcesPath ?? '', 'logo.png'),
+      ];
+      let raw = nativeImage.createEmpty();
+      let resolvedPath = '';
+      for (const p of trayIconCandidates) {
+        const candidate = nativeImage.createFromPath(p);
+        if (!candidate.isEmpty()) {
+          raw = candidate;
+          resolvedPath = p;
+          break;
+        }
+      }
+      // eslint-disable-next-line no-console
+      console.log(
+        raw.isEmpty()
+          ? `[moxxy] tray: NO icon found, fell back to text label. Tried: ${trayIconCandidates.join(', ')}`
+          : `[moxxy] tray: icon loaded from ${resolvedPath}`,
+      );
       const icon = raw.isEmpty()
         ? nativeImage.createEmpty()
         : raw.resize({ width: 18, height: 18, quality: 'best' });
-      if (raw.isEmpty()) {
-        // eslint-disable-next-line no-console
-        console.warn(`[moxxy] tray icon source missing or unreadable: ${trayIconPath}`);
-      }
-      // Template image on macOS: AppKit tints the alpha mask to
-      // match the menu bar (white on dark mode, black on light) so
-      // the moxxy silhouette reads as the system foreground colour.
-      if (process.platform === 'darwin') icon.setTemplateImage(true);
+      // Do NOT setTemplateImage on a colored avatar — the alpha is
+      // a near-solid rectangle, which AppKit tints to a featureless
+      // blob (or, on some versions, drops to invisible). Render the
+      // image as-is; a 18×18 coloured avatar is recognisable on the
+      // menu bar.
       trayInstance = new Tray(icon);
-      // No title text now — the templated silhouette is the brand.
+      // Fallback title — if the icon couldn't be loaded, at least
+      // something is visible in the menu bar (template-image
+      // failures + missing PNGs both hit this path).
+      if (raw.isEmpty()) trayInstance.setTitle('moxxy');
       trayInstance.setToolTip('MoxxyAI Workspaces');
       const openMainAndCloseFocus = (): void => {
         closeFocusWindow();
