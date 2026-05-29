@@ -527,6 +527,10 @@ function ProfilePill(): JSX.Element {
     }
   };
 
+  // (avatar dropped — username + tier badge carry the meaning on
+  // their own now.)
+  void initials;
+
   return (
     <div
       style={{
@@ -537,35 +541,14 @@ function ProfilePill(): JSX.Element {
         borderRadius: 12,
         display: 'flex',
         alignItems: 'center',
-        gap: 10,
+        gap: 8,
       }}
     >
-      <span
-        aria-hidden
-        style={{
-          width: 32,
-          height: 32,
-          borderRadius: '50%',
-          background: signedIn
-            ? 'linear-gradient(135deg, #f59e0b, #f472b6)'
-            : 'linear-gradient(135deg, #cbd5e1, #94a3b8)',
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: '#fff',
-          fontWeight: 700,
-          fontSize: 11.5,
-          letterSpacing: '0.04em',
-          flexShrink: 0,
-        }}
-      >
-        {initials}
-      </span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
           title={displayName}
           style={{
-            fontSize: 12.5,
+            fontSize: 13,
             fontWeight: 600,
             color: 'var(--color-sidebar-text)',
             whiteSpace: 'nowrap',
@@ -582,6 +565,7 @@ function ProfilePill(): JSX.Element {
             display: 'flex',
             alignItems: 'center',
             gap: 6,
+            marginTop: 3,
           }}
         >
           {!isLoaded ? (

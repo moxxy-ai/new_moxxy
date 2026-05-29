@@ -34,11 +34,13 @@ export const __reducerForTest = {
 
 /**
  * Bridge component — forwards `runner.event` / `runner.turn.complete`
- * from the main process into the workspace-keyed {@link chatStore}.
- * Mount once at the top of the tree.
+ * from the main process into the workspace-keyed {@link chatStore},
+ * and rehydrates the persisted conversation on first mount so
+ * transcripts survive restarts.
  */
 export function ChatStoreBridge(): null {
   useEffect(() => {
+    chatStore.hydrate();
     const offEvent = api().subscribe(
       'runner.event',
       ({ workspaceId, event }: { workspaceId: string; event: MoxxyEvent }) => {
@@ -118,7 +120,10 @@ export function useChat(workspaceId: string | null): UseChat {
 
   const clear = useCallback((): void => {
     if (!workspaceId) return;
-    chatStore.dispatch(workspaceId, { type: 'clear' });
+    // Use the store's clear() rather than dispatching a 'clear'
+    // action so the persisted localStorage blob is removed in the
+    // same step.
+    chatStore.clear(workspaceId);
   }, [workspaceId]);
 
   return {

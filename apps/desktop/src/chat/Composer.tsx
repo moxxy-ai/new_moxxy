@@ -8,6 +8,7 @@ import {
 import { Icon } from '@/lib/Icon';
 import { api } from '@/lib/api';
 import { AgentPicker } from './AgentPicker';
+import { CommandPalette } from './CommandPalette';
 
 interface ComposerProps {
   readonly ready: boolean;
@@ -48,6 +49,7 @@ export function Composer({
   const [draft, setDraft] = useState('');
   const [voice, setVoice] = useState<VoiceState>({ kind: 'idle' });
   const [hasTranscriber, setHasTranscriber] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const inFlight = activeTurnId !== null || sending;
   const canSubmit = ready && !inFlight && draft.trim().length > 0;
@@ -186,6 +188,10 @@ export function Composer({
       />
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         <AgentPicker workspaceId={workspaceId} disabled={!ready || inFlight} />
+        <ToolChip label="Commands" onClick={() => setCommandPaletteOpen(true)}>
+          <span className="mono" style={{ fontWeight: 700 }}>/</span>
+          <span>Commands</span>
+        </ToolChip>
         <ToolChip label="Attach file" onClick={() => void onAttach()}>
           <Icon name="attach" size={16} />
           <span>Attach</span>
@@ -247,6 +253,21 @@ export function Composer({
         >
           {voice.reason}
         </p>
+      )}
+      {commandPaletteOpen && (
+        <CommandPalette
+          workspaceId={workspaceId}
+          onClose={() => setCommandPaletteOpen(false)}
+          onPick={(text) => {
+            setDraft((d) => {
+              const sep = d.length === 0 || d.endsWith('\n') ? '' : '\n';
+              return `${d}${sep}${text}`;
+            });
+            setCommandPaletteOpen(false);
+            // Refocus the textarea for immediate typing.
+            window.setTimeout(() => taRef.current?.focus(), 0);
+          }}
+        />
       )}
     </form>
   );

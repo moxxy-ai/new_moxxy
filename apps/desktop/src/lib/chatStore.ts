@@ -32,10 +32,25 @@ const blankChat = (): InternalChat => ({
   model: null,
 });
 
+/** localStorage namespace prefix. One key per workspace
+ *  (`moxxy:chat:<id>`) so a corrupt blob never takes everything down. */
+const STORAGE_PREFIX = 'moxxy:chat:';
+const STORAGE_VERSION = 1;
+
+/** Hard cap on persisted blocks per workspace. localStorage has a
+ *  ~5MB total budget across the whole origin; large tool outputs can
+ *  blow that out fast. Cap at the most recent N blocks; older history
+ *  drops out of the persisted log but stays in memory while the
+ *  session is alive. */
+const PERSIST_MAX_BLOCKS = 400;
+
 class ChatStore {
   private chats = new Map<string, InternalChat>();
   private activeId: string | null = null;
   private listeners = new Set<() => void>();
+  /** Per-workspace persist debounce so we don't write on every
+   *  assistant_chunk (could be 50/sec while streaming). */
+  private persistTimers = new Map<string, number>();
   /** Memoised unread-workspace snapshot. useSyncExternalStore calls
    *  getSnapshot every render — returning a fresh array each time is
    *  the textbook "Maximum update depth exceeded" foot-gun. We rebuild
@@ -43,6 +58,75 @@ class ChatStore {
    *  cache. */
   private cachedUnread: ReadonlyArray<string> = [];
   private unreadDirty = true;
+
+  /**
+   * Rehydrate every workspace's chat from localStorage. Call once at
+   * app boot so the conversations users had before the last restart
+   * come back instead of disappearing.
+   */
+  hydrate(): void {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key?.startsWith(STORAGE_PREFIX)) continue;
+      const id = key.slice(STORAGE_PREFIX.length);
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
+        const parsed = JSON.parse(raw) as
+          | (InternalChat & { version?: number })
+          | null;
+        if (!parsed || parsed.version !== STORAGE_VERSION) continue;
+        // Reset any in-flight flags — anything that was streaming
+        // when the app closed is definitely not streaming now.
+        const restored: InternalChat = {
+          ...parsed,
+          activeTurnId: null,
+          sending: false,
+          blocks: parsed.blocks.map((b) =>
+            b.kind === 'assistant' && b.streaming ? { ...b, streaming: false } : b,
+          ),
+        };
+        this.chats.set(id, restored);
+      } catch {
+        /* corrupt blob → drop it */
+      }
+    }
+    this.unreadDirty = true;
+    this.emit();
+  }
+
+  private persist(workspaceId: string): void {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    const existing = this.persistTimers.get(workspaceId);
+    if (existing !== undefined) window.clearTimeout(existing);
+    const handle = window.setTimeout(() => {
+      this.persistTimers.delete(workspaceId);
+      const chat = this.chats.get(workspaceId);
+      if (!chat) {
+        localStorage.removeItem(STORAGE_PREFIX + workspaceId);
+        return;
+      }
+      const trimmed: InternalChat & { version: number } = {
+        ...chat,
+        // Cap the persisted block list; oldest first goes.
+        blocks:
+          chat.blocks.length > PERSIST_MAX_BLOCKS
+            ? chat.blocks.slice(-PERSIST_MAX_BLOCKS)
+            : chat.blocks,
+        version: STORAGE_VERSION,
+      };
+      try {
+        localStorage.setItem(
+          STORAGE_PREFIX + workspaceId,
+          JSON.stringify(trimmed),
+        );
+      } catch {
+        /* QuotaExceeded — drop persistence rather than crash */
+      }
+    }, 250);
+    this.persistTimers.set(workspaceId, handle);
+  }
 
   // ---- subscription -------------------------------------------------------
 
@@ -135,21 +219,38 @@ class ChatStore {
     const cur = this.ensure(workspaceId);
     const next = chatReducer(cur, action) as InternalChat;
     if (next === cur) return;
+    next.model = cur.model;
     // Carry over the unread cursor; if this workspace IS active,
     // bump it forward so it never trips the unread check.
     next.lastSeenSeq =
       this.activeId === workspaceId ? next.seq : cur.lastSeenSeq;
     this.chats.set(workspaceId, next);
     this.unreadDirty = true;
+    this.persist(workspaceId);
     this.emit();
   }
 
-  /** Drop one workspace's state — used when the user removes a desk. */
+  /** Drop one workspace's state — used when the user removes a desk
+   *  OR clears the conversation from the chat header. */
   drop(workspaceId: string): void {
     if (this.chats.delete(workspaceId)) {
       this.unreadDirty = true;
+      if (typeof window !== 'undefined' && window.localStorage) {
+        localStorage.removeItem(STORAGE_PREFIX + workspaceId);
+      }
       this.emit();
     }
+  }
+
+  /** Reset one workspace's transcript without removing the workspace
+   *  itself. Used by the "Clear conversation" action. */
+  clear(workspaceId: string): void {
+    const blank = blankChat();
+    blank.model = this.chats.get(workspaceId)?.model ?? null;
+    this.chats.set(workspaceId, blank);
+    this.unreadDirty = true;
+    this.persist(workspaceId);
+    this.emit();
   }
 
   // ---- internals ---------------------------------------------------------
