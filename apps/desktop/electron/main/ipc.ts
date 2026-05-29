@@ -210,6 +210,23 @@ export function registerIpcHandlers(pool: RunnerPool, desks: DeskStore): void {
     const { fetchProviderModels } = await import('./provider-discovery');
     return await fetchProviderModels(provider);
   });
+  handle('settings.adminProviders', async () => {
+    try {
+      const { readFile } = await import('node:fs/promises');
+      const { homedir } = await import('node:os');
+      const path = await import('node:path');
+      const body = await readFile(
+        path.join(homedir(), '.moxxy', 'providers.json'),
+        'utf8',
+      );
+      const json = JSON.parse(body) as { providers?: ReadonlyArray<{ name?: string }> };
+      return (json.providers ?? [])
+        .map((p) => p.name)
+        .filter((n): n is string => typeof n === 'string');
+    } catch {
+      return [];
+    }
+  });
   handle('settings.providerCatalog', async () => {
     // Built-ins are always pickable. Admin-registered ones come from
     // providers.json so the onboarding dropdown reflects whatever the

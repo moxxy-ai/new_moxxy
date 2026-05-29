@@ -294,6 +294,9 @@ export interface IpcCommands {
    *  during onboarding — built-ins (anthropic, openai, openai-codex)
    *  plus anything in ~/.moxxy/providers.json. */
   'settings.providerCatalog': () => Promise<ReadonlyArray<string>>;
+  /** Subset of providers that the user added via `provider_add` — the
+   *  ones for which live /v1/models fetching is wired. */
+  'settings.adminProviders': () => Promise<ReadonlyArray<string>>;
   'settings.mcpServers': (args?: { workspaceId?: string }) => Promise<ReadonlyArray<McpServerEntry>>;
   'settings.mcpToggle': (args: {
     workspaceId?: string;

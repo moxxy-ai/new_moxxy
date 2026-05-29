@@ -102,6 +102,11 @@ function envVarFor(provider: StoredProvider): string {
  * Fetch the model list from a provider's `/v1/models`. Works for any
  * OpenAI-compatible API (OpenAI, OpenRouter, Together, zai, etc.).
  * Returns ids sorted alphabetically.
+ *
+ * Built-in providers (anthropic, openai, openai-codex) ship their
+ * own hard-coded model list with the moxxy CLI build and don't need
+ * live discovery — we return an empty array and let the picker fall
+ * back to whatever the runner advertises, rather than throwing.
  */
 export async function fetchProviderModels(
   providerName: string,
@@ -109,10 +114,11 @@ export async function fetchProviderModels(
   const stored = await readStoredProviders();
   const entry = stored.providers.find((p) => p.name === providerName);
   if (!entry) {
-    throw new Error(
-      `provider "${providerName}" is not registered in providers.json — ` +
-        `live model discovery is only wired for admin-registered providers`,
-    );
+    // Not in providers.json → almost certainly a built-in. The runner
+    // already has its model list cached and surfaced via session.info,
+    // so an empty result here means "we have nothing extra to add",
+    // which is the truth. The caller merges with advertised models.
+    return [];
   }
   const apiKey = await vaultGet(envVarFor(entry));
   const base = entry.baseURL.replace(/\/+$/, '');
@@ -131,4 +137,10 @@ export async function fetchProviderModels(
     .map((m) => m.id)
     .filter((id): id is string => typeof id === 'string' && id.length > 0);
   return ids.sort();
+}
+
+/** Is this provider admin-registered (so live fetch makes sense)? */
+export async function isAdminRegistered(providerName: string): Promise<boolean> {
+  const stored = await readStoredProviders();
+  return stored.providers.some((p) => p.name === providerName);
 }

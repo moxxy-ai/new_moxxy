@@ -72,10 +72,16 @@ export function AgentPicker({
   if (!info) return null;
 
   const onMode = async (next: string): Promise<void> => {
+    // Optimistic flip so the chip updates instantly — the IPC fires
+    // a fire-and-forget RPC to the runner, then the renderer relies
+    // on a session.info refresh to confirm. Without this the chip
+    // visibly snaps back to the old value for a beat.
+    setInfo((cur) => (cur ? { ...cur, activeMode: next } : cur));
     try {
       await api().invoke('session.setMode', { workspaceId, mode: next });
+      refresh();
     } catch {
-      /* swallow */
+      refresh();
     }
   };
 
@@ -265,6 +271,20 @@ function ProviderModelPicker({
   const [hoveredProvider, setHoveredProvider] = useState<string>(
     activeProvider ?? providers[0]?.name ?? '',
   );
+  const [adminProviders, setAdminProviders] = useState<ReadonlyArray<string>>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void api()
+      .invoke('settings.adminProviders')
+      .then((list) => {
+        if (!cancelled) setAdminProviders(list);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const canFetchLive = adminProviders.includes(hoveredProvider);
   // Per-provider cache of models fetched live from the provider's API.
   // We merge these with whatever the runner already advertised so the
   // user can refresh once and not lose the additions on tab switch.
@@ -408,33 +428,47 @@ function ProviderModelPicker({
             >
               Models · {hoveredProvider || '—'}
             </span>
-            <button
-              type="button"
-              onClick={() => void onFetch()}
-              disabled={
-                !hoveredProvider ||
+            {canFetchLive ? (
+              <button
+                type="button"
+                onClick={() => void onFetch()}
+                disabled={
+                  !hoveredProvider ||
+                  fetchState.status === 'loading'
+                }
+                title="Fetch the live model list from the provider's API"
+                style={{
+                  fontSize: 11.5,
+                  padding: '4px 10px',
+                  borderRadius: 8,
+                  color: 'var(--color-primary-strong)',
+                  border: '1px solid var(--color-primary-soft)',
+                  background: 'var(--color-primary-soft)',
+                  fontWeight: 600,
+                  opacity:
+                    fetchState.status === 'loading' || !hoveredProvider
+                      ? 0.6
+                      : 1,
+                }}
+              >
+                {fetchState.provider === hoveredProvider &&
                 fetchState.status === 'loading'
-              }
-              title="Fetch the live model list from the provider's API"
-              style={{
-                fontSize: 11.5,
-                padding: '4px 10px',
-                borderRadius: 8,
-                color: 'var(--color-primary-strong)',
-                border: '1px solid var(--color-primary-soft)',
-                background: 'var(--color-primary-soft)',
-                fontWeight: 600,
-                opacity:
-                  fetchState.status === 'loading' || !hoveredProvider
-                    ? 0.6
-                    : 1,
-              }}
-            >
-              {fetchState.provider === hoveredProvider &&
-              fetchState.status === 'loading'
-                ? 'Fetching…'
-                : 'Fetch live'}
-            </button>
+                  ? 'Fetching…'
+                  : 'Fetch live'}
+              </button>
+            ) : (
+              <span
+                className="mono"
+                title="Built-in provider — models ship with the moxxy CLI"
+                style={{
+                  fontSize: 10.5,
+                  color: 'var(--color-text-dim)',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                built-in
+              </span>
+            )}
           </header>
           <ul
             role="listbox"
