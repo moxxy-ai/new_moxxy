@@ -38,6 +38,22 @@ export interface WhisperTranscriberOptions {
   readonly language?: string;
   /** Inject a pre-built OpenAI client (tests pass a stub here). */
   readonly client?: OpenAI;
+  /**
+   * Async resolver for the OpenAI API key. Called lazily on first
+   * transcribe so the host (CLI / desktop / serve) can pull the key
+   * from a vault or other secrets store without forcing the plugin
+   * to know about a specific storage backend.
+   *
+   * Resolution order at transcribe time:
+   *   1. `apiKey` (if explicitly passed) → use as-is.
+   *   2. `client` (if injected) → use as-is.
+   *   3. `apiKeyResolver()` → await result.
+   *   4. `process.env.OPENAI_API_KEY` as last fallback.
+   * If all four are empty, the OpenAI SDK throws the canonical
+   * "OPENAI_API_KEY environment variable is missing or empty"
+   * error — but at request time, not at registration time.
+   */
+  readonly apiKeyResolver?: () => Promise<string | undefined>;
 }
 
 /**
@@ -50,26 +66,68 @@ export interface WhisperTranscriberOptions {
  */
 export class WhisperTranscriber implements Transcriber {
   readonly name: string;
-  private readonly client: OpenAI;
   private readonly model: WhisperModel;
   private readonly defaultLanguage: string | undefined;
+  private readonly explicitApiKey: string | undefined;
+  private readonly baseURL: string | undefined;
+  private readonly apiKeyResolver: (() => Promise<string | undefined>) | undefined;
+  // Lazily constructed so a missing OPENAI_API_KEY at registration
+  // time doesn't throw and shadow other transcribers (e.g. the
+  // OAuth-backed Codex one) the runner could fall back to.
+  private cachedClient: OpenAI | undefined;
 
   constructor(opts: WhisperTranscriberOptions = {}) {
     this.model = opts.model ?? 'whisper-1';
     this.name = `openai-${this.model}`;
     this.defaultLanguage = opts.language;
-    this.client =
-      opts.client ??
-      new OpenAI({
-        apiKey: opts.apiKey ?? process.env.OPENAI_API_KEY,
-        ...(opts.baseURL ? { baseURL: opts.baseURL } : {}),
-      });
+    this.explicitApiKey = opts.apiKey;
+    this.baseURL = opts.baseURL;
+    this.apiKeyResolver = opts.apiKeyResolver;
+    if (opts.client) this.cachedClient = opts.client;
+  }
+
+  /** Resolve credentials and build / return the OpenAI client. Called
+   *  on every transcribe; the resolved client is cached after the
+   *  first successful build. */
+  private async resolveClient(): Promise<OpenAI> {
+    if (this.cachedClient) return this.cachedClient;
+    let apiKey = this.explicitApiKey;
+    if (!apiKey && this.apiKeyResolver) {
+      try {
+        apiKey = await this.apiKeyResolver();
+      } catch {
+        // Vault read failed — fall through to env var fallback below.
+      }
+    }
+    if (!apiKey) apiKey = process.env.OPENAI_API_KEY;
+    this.cachedClient = new OpenAI({
+      apiKey,
+      ...(this.baseURL ? { baseURL: this.baseURL } : {}),
+    });
+    return this.cachedClient;
+  }
+
+  /** Backwards-compat accessor — used by the existing transcribe
+   *  body via `this.client`. We replace the field with a getter that
+   *  enforces "resolve once, then reuse." Synchronous because every
+   *  call site is inside an already-async transcribe path that
+   *  awaits `resolveClient()` first. */
+  private get client(): OpenAI {
+    if (!this.cachedClient) {
+      throw new Error('WhisperTranscriber.client accessed before resolveClient()');
+    }
+    return this.cachedClient;
   }
 
   async transcribe(
     audio: Uint8Array | ArrayBuffer,
     opts: TranscribeOptions = {},
   ): Promise<TranscriptionResult> {
+    // Construct the OpenAI client lazily so a missing API key only
+    // surfaces an error at TRANSCRIBE time — not at plugin
+    // registration time where it would shadow other transcribers
+    // the runner could fall back to.
+    await this.resolveClient();
     const bytes = audio instanceof Uint8Array ? audio : new Uint8Array(audio);
     const mimeType = opts.mimeType ?? 'audio/ogg';
     const filename = DEFAULT_FILENAMES[mimeType] ?? 'audio.bin';
