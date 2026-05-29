@@ -283,6 +283,10 @@ export interface IpcCommands {
    *  it advertises. Useful for admin-registered providers whose
    *  providers.json entry didn't enumerate models upfront. */
   'settings.fetchProviderModels': (args: { provider: string }) => Promise<ReadonlyArray<string>>;
+  /** Lists every provider name the user could realistically pick from
+   *  during onboarding — built-ins (anthropic, openai, openai-codex)
+   *  plus anything in ~/.moxxy/providers.json. */
+  'settings.providerCatalog': () => Promise<ReadonlyArray<string>>;
   'settings.mcpServers': (args?: { workspaceId?: string }) => Promise<ReadonlyArray<McpServerEntry>>;
   'settings.mcpToggle': (args: {
     workspaceId?: string;

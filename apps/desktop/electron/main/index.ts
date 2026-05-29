@@ -39,6 +39,17 @@ async function createWindow(): Promise<void> {
     ? path.join(__dirname, '..', '..', '..', 'public', 'logo.png')
     : path.join(__dirname, '..', '..', 'dist', 'logo.png');
 
+  // Hosts where Clerk's OAuth popup is allowed to open. Anything else
+  // returns `action: 'deny'` so we don't accidentally let arbitrary
+  // window.open() calls spawn full Electron windows.
+  const OAUTH_HOST_PATTERNS = [
+    /^https:\/\/.*\.clerk\.accounts\.dev$/,
+    /^https:\/\/.*\.clerk\.com$/,
+    /^https:\/\/accounts\.google\.com$/,
+    /^https:\/\/appleid\.apple\.com$/,
+    /^https:\/\/github\.com$/,
+  ];
+
   mainWindow = new BrowserWindow({
     title: 'MoxxyAI Workspaces',
     width: 1180,
@@ -53,6 +64,41 @@ async function createWindow(): Promise<void> {
       contextIsolation: true,
       sandbox: false,
     },
+  });
+
+  // OAuth popup handling — Clerk's clerk-js calls window.open() to
+  // run the provider's OAuth flow. We allow popups whose origin is on
+  // the OAUTH_HOST_PATTERNS list (Clerk's own domain + the major
+  // providers' login pages), open them as child BrowserWindows that
+  // share this window's session (so cookies/localStorage are visible
+  // to the renderer when the popup closes), and deny everything else.
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    try {
+      const origin = new URL(url).origin;
+      if (OAUTH_HOST_PATTERNS.some((re) => re.test(origin))) {
+        return {
+          action: 'allow',
+          overrideBrowserWindowOptions: {
+            width: 480,
+            height: 640,
+            minWidth: 380,
+            minHeight: 480,
+            autoHideMenuBar: true,
+            parent: mainWindow ?? undefined,
+            modal: false,
+            webPreferences: {
+              contextIsolation: true,
+              sandbox: true,
+              // No preload: this is third-party Clerk/OAuth UI; we don't
+              // want our IPC surface exposed.
+            },
+          },
+        };
+      }
+    } catch {
+      /* malformed URL → deny */
+    }
+    return { action: 'deny' };
   });
 
   if (isDev) {

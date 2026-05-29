@@ -652,11 +652,33 @@ function ProviderStep({
   readonly onNext: () => void;
   readonly onBack: () => void;
 }): JSX.Element {
+  const [catalog, setCatalog] = useState<ReadonlyArray<string>>([
+    'anthropic',
+    'openai',
+    'openai-codex',
+  ]);
   const [provider, setProvider] = useState('anthropic');
   const [secret, setSecret] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void api()
+      .invoke('settings.providerCatalog')
+      .then((list) => {
+        if (cancelled || list.length === 0) return;
+        setCatalog(list);
+        setProvider((cur) => (list.includes(cur) ? cur : list[0]!));
+      })
+      .catch(() => {
+        /* keep static fallback */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const save = async (): Promise<void> => {
     if (!secret.trim()) return;
@@ -701,9 +723,11 @@ function ProviderStep({
             onChange={(e) => setProvider(e.target.value)}
             style={inputStyle}
           >
-            <option value="anthropic">Anthropic (Claude)</option>
-            <option value="openai">OpenAI</option>
-            <option value="openrouter">OpenRouter</option>
+            {catalog.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
           </select>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
