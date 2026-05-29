@@ -100,4 +100,14 @@ describe('<App />', () => {
       ).toBeDefined(),
     );
   });
+
+  it('switches to the schedules view via the sidebar nav', async () => {
+    mockTauri.respond('sidecar_status', () => 'running');
+    mockTauri.respond('runner_ready', () => true);
+    mockTauri.respond('schedules_list', () => []);
+    render(<App />);
+    await userEvent.click(await screen.findByTestId('nav-schedules'));
+    expect(await screen.findByTestId('schedule-panel')).toBeInTheDocument();
+    expect(screen.queryByTestId('composer')).toBeNull();
+  });
 });

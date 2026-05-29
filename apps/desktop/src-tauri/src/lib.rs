@@ -62,7 +62,30 @@ pub fn run() {
             commands::desks_pick_folder,
             commands::open_session_window,
             commands::close_session_window,
+            commands::schedules_list,
+            commands::schedules_create,
+            commands::schedules_update,
+            commands::schedules_delete,
+            commands::schedules_set_enabled,
+            commands::schedules_validate_cron,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            // Cmd+Q / Alt+F4 / OS shutdown all funnel through ExitRequested.
+            // We block exit just long enough to kill the runner pool so no
+            // stray `node moxxy serve` child is left behind.
+            if let tauri::RunEvent::ExitRequested { .. } = event {
+                use tauri::Manager;
+                if let Some(state) = app.try_state::<app_state::AppState>() {
+                    let state = state.inner().clone();
+                    // Block on the existing tokio runtime; ExitRequested
+                    // already runs after the window loop has stopped, so a
+                    // synchronous wait here is safe and bounded.
+                    tauri::async_runtime::block_on(async move {
+                        state.shutdown().await;
+                    });
+                }
+            }
+        });
 }

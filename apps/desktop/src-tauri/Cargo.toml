@@ -1,10 +1,13 @@
 [workspace]
 members = ["crates/core"]
-# Bare `cargo test` / `cargo build` from this directory targets only the
-# core crate by default — Tauri's heavy dep tree is opt-in via either an
-# explicit `-p moxxy-desktop` or `pnpm tauri:dev`. Keeps the local
-# iteration loop sub-second.
-default-members = ["crates/core"]
+# NOTE: `default-members` is intentionally NOT set here. Tauri's
+# `tauri dev` / `tauri build` invokes a bare `cargo run` (no `-p`)
+# and needs to find the bin target in this (the parent) crate. Setting
+# default-members to the core crate would silently scope tauri's
+# cargo invocations to the lib-only sub-crate and fail.
+#
+# For the fast Rust test loop, scope tests with `-p moxxy-desktop-core`
+# (or use `pnpm --filter @moxxy/desktop test:rust` from anywhere).
 resolver = "2"
 
 [package]

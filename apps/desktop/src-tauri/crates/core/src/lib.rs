@@ -21,6 +21,7 @@ pub mod error;
 pub mod jsonrpc;
 pub mod pool;
 pub mod runner_bridge;
+pub mod schedule;
 pub mod sidecar;
 pub mod transport;
 pub mod windows;

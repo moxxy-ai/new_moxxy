@@ -6,6 +6,9 @@ import { useWindows } from './lib/windows';
 import { isMainWindow } from './lib/window-context';
 import { DeskSidebar } from './desks/desk-sidebar';
 import { Composer, Transcript } from './chat';
+import { SchedulePanel } from './schedules';
+
+type View = 'chat' | 'schedules';
 
 export function App(): JSX.Element {
   const status = useSidecarStatus();
@@ -13,6 +16,7 @@ export function App(): JSX.Element {
   const desks = useDesks();
   const windows = useWindows();
   const [theme] = useState<'dark' | 'light'>('dark');
+  const [view, setView] = useState<View>('chat');
   const showWindowControls = isMainWindow();
 
   return (
@@ -20,6 +24,7 @@ export function App(): JSX.Element {
       <aside className="app-sidebar">
         <SidebarHeader status={status} />
         <DeskSidebar api={desks} />
+        <ViewSwitcher view={view} onChange={setView} />
         {showWindowControls && (
           <button
             type="button"
@@ -44,20 +49,82 @@ export function App(): JSX.Element {
         )}
       </aside>
       <main className="app-main bp-grid-fade">
-        {session.blocks.length === 0 ? (
-          <EmptyState status={status} ready={session.ready} />
+        {view === 'chat' ? (
+          <>
+            {session.blocks.length === 0 ? (
+              <EmptyState status={status} ready={session.ready} />
+            ) : (
+              <Transcript blocks={session.blocks} />
+            )}
+            <Composer
+              ready={session.ready && status === 'running'}
+              activeTurnId={session.activeTurnId}
+              onSend={(p) => void session.send(p)}
+              onAbort={() => void session.abort()}
+            />
+            {session.error && <ErrorBanner message={session.error} />}
+          </>
         ) : (
-          <Transcript blocks={session.blocks} />
+          <SchedulePanel />
         )}
-        <Composer
-          ready={session.ready && status === 'running'}
-          activeTurnId={session.activeTurnId}
-          onSend={(p) => void session.send(p)}
-          onAbort={() => void session.abort()}
-        />
-        {session.error && <ErrorBanner message={session.error} />}
       </main>
     </div>
+  );
+}
+
+function ViewSwitcher({
+  view,
+  onChange,
+}: {
+  readonly view: View;
+  readonly onChange: (next: View) => void;
+}): JSX.Element {
+  const item = (target: View, label: string): JSX.Element => (
+    <button
+      type="button"
+      data-testid={`nav-${target}`}
+      data-active={view === target}
+      onClick={() => onChange(target)}
+      style={{
+        padding: '0.4rem 0.75rem',
+        fontSize: '0.8rem',
+        textAlign: 'left',
+        color:
+          view === target ? 'var(--color-text)' : 'var(--color-text-muted)',
+        borderLeft:
+          view === target
+            ? '2px solid var(--color-primary)'
+            : '2px solid transparent',
+        background:
+          view === target ? 'var(--color-bg-card-hover)' : 'transparent',
+      }}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <nav
+      style={{
+        padding: '0.5rem 0 0.25rem',
+        borderTop: '1px solid var(--color-border)',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      <header
+        style={{
+          padding: '0.25rem 1rem',
+          fontSize: '0.65rem',
+          color: 'var(--color-text-dim)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.06em',
+        }}
+      >
+        View
+      </header>
+      {item('chat', '◇ Chat')}
+      {item('schedules', '⏱ Schedules')}
+    </nav>
   );
 }
 

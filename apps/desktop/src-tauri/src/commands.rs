@@ -9,6 +9,9 @@ use crate::app_state::AppState;
 use moxxy_desktop_core::desks::{Desk, DeskId};
 use moxxy_desktop_core::error::AppResult;
 use moxxy_desktop_core::runner_bridge::{RunTurnParams, RunnerBridge};
+use moxxy_desktop_core::schedule::{
+    is_basic_valid_cron, NewSchedule, ScheduleEntry, ScheduleId, SchedulePatch,
+};
 use moxxy_desktop_core::sidecar::SidecarStatus;
 use moxxy_desktop_core::windows::WindowId;
 
@@ -241,6 +244,73 @@ pub async fn close_session_window<R: Runtime>(
     }
     Ok(())
 }
+
+// ---- Schedules --------------------------------------------------------------
+
+#[tauri::command]
+pub async fn schedules_list(state: State<'_, AppState>) -> AppResult<Vec<ScheduleEntry>> {
+    state.schedules.list().await
+}
+
+#[tauri::command]
+pub async fn schedules_create(
+    state: State<'_, AppState>,
+    input: NewSchedule,
+) -> Result<ScheduleEntry, String> {
+    // Cheap pre-flight so a bad cron is rejected before the disk write.
+    if let Some(c) = input.cron.as_deref() {
+        if !is_basic_valid_cron(c) {
+            return Err(format!("invalid cron expression \"{c}\""));
+        }
+    }
+    state.schedules.create(input).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn schedules_update(
+    state: State<'_, AppState>,
+    id: String,
+    patch: SchedulePatch,
+) -> Result<ScheduleEntry, String> {
+    let id = ScheduleId::from_raw(id);
+    state
+        .schedules
+        .update(&id, patch)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn schedules_delete(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<(), String> {
+    let id = ScheduleId::from_raw(id);
+    state.schedules.delete(&id).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn schedules_set_enabled(
+    state: State<'_, AppState>,
+    id: String,
+    enabled: bool,
+) -> Result<ScheduleEntry, String> {
+    let id = ScheduleId::from_raw(id);
+    state
+        .schedules
+        .set_enabled(&id, enabled)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// True if `expr` is at least syntactically a 5-field cron expression.
+/// The JS form calls this on debounced input to gate the Submit button.
+#[tauri::command]
+pub fn schedules_validate_cron(expr: String) -> bool {
+    is_basic_valid_cron(&expr)
+}
+
+// ---- Dialogs ----------------------------------------------------------------
 
 #[tauri::command]
 pub async fn desks_pick_folder<R: Runtime>(app: AppHandle<R>) -> Result<Option<String>, String> {

@@ -16,8 +16,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
-    "test:rust": "cd src-tauri && cargo test",
-    "check:rust": "cd src-tauri && cargo check --all-targets",
+    "test:rust": "cd src-tauri && cargo test -p moxxy-desktop-core",
+    "check:rust": "cd src-tauri && cargo check -p moxxy-desktop-core --all-targets",
     "clean": "rm -rf dist .turbo node_modules/.vite src-tauri/target"
   },
   "dependencies": {
