@@ -1,5 +1,12 @@
-import { useState } from 'react';
-import { useConnection, isConnected } from './lib/useConnection';
+import { useEffect, useState } from 'react';
+import {
+  ConnectionBridge,
+  isConnected,
+  useActiveWorkspaceId,
+  useConnection,
+} from './lib/useConnection';
+import { ChatStoreBridge } from './lib/useChat';
+import { chatStore } from './lib/chatStore';
 import { ConnectionScreen } from './connection/ConnectionScreen';
 import { OnboardingWizard } from './onboarding/OnboardingWizard';
 import { ChatSurface } from './chat/ChatSurface';
@@ -20,23 +27,34 @@ import { Splash } from './Splash';
  *      WorkspaceSidebar | ContextRail | <active view>.
  */
 export function App(): JSX.Element {
-  const { snapshot, hasEverConnected, retry } = useConnection();
+  const activeWorkspaceId = useActiveWorkspaceId();
+  const { snapshot, hasEverConnected, retry } = useConnection(activeWorkspaceId);
   const phase = snapshot?.phase;
   const [forceWizard, setForceWizard] = useState(false);
   const [view, setView] = useState<View>('chat');
   const [railOpen, setRailOpen] = useState(true);
-  // Hold onto the last 'connected' phase so transient reconnects (e.g.
-  // workspace switching restarts the runner) don't blank out the
-  // chat header's provider/mode chips while the new socket comes up.
   const [lastConnected, setLastConnected] = useState<typeof phase>(undefined);
   if (phase?.phase === 'connected' && phase !== lastConnected) {
-    // Pure state-during-render is fine here: same input ⇒ same output.
     setLastConnected(phase);
   }
 
-  // Hold the splash until the first snapshot arrives — prevents a
-  // flash of "ConnectionScreen / resolving" during cold boot.
-  if (!snapshot) return <Splash />;
+  // Mirror the active workspace into the chat store so unread state
+  // clears as soon as the user switches.
+  useEffect(() => {
+    chatStore.setActive(activeWorkspaceId);
+  }, [activeWorkspaceId]);
+
+  // Hold the splash until we have a connection snapshot for some
+  // workspace AND we know who the active one is.
+  if (activeWorkspaceId === null || !snapshot) {
+    return (
+      <>
+        <ConnectionBridge />
+        <ChatStoreBridge />
+        <Splash />
+      </>
+    );
+  }
 
   const cliMissing = phase?.phase === 'cli-missing';
   const connectedWithoutProvider =
@@ -44,21 +62,27 @@ export function App(): JSX.Element {
 
   if (forceWizard || cliMissing || connectedWithoutProvider) {
     return (
-      <OnboardingWizard
-        phase={phase}
-        onComplete={() => setForceWizard(false)}
-      />
+      <>
+        <ConnectionBridge />
+        <ChatStoreBridge />
+        <OnboardingWizard
+          phase={phase}
+          onComplete={() => setForceWizard(false)}
+        />
+      </>
     );
   }
 
-  // Cold start: we've never been connected. Full ConnectionScreen.
   if (!isConnected(phase) && !hasEverConnected) {
-    return <ConnectionScreen snapshot={snapshot} onRetry={() => void retry()} />;
+    return (
+      <>
+        <ConnectionBridge />
+        <ChatStoreBridge />
+        <ConnectionScreen snapshot={snapshot} onRetry={() => void retry()} />
+      </>
+    );
   }
 
-  // Transient reconnect: keep the shell, show a banner. The chat
-  // header chip falls back to the last-known mode/provider so the UI
-  // doesn't shuffle while the runner restarts.
   const connected = isConnected(phase);
   const shellPhase = connected ? phase! : lastConnected!;
   const activeMode = shellPhase.phase === 'connected' ? shellPhase.activeMode : null;
@@ -66,6 +90,8 @@ export function App(): JSX.Element {
 
   return (
     <div className="app-shell">
+      <ConnectionBridge />
+      <ChatStoreBridge />
       <WorkspaceSidebar view={view} onView={setView} />
       {view === 'chat' && (
         <>
@@ -78,6 +104,7 @@ export function App(): JSX.Element {
           )}
           <ChatSurface
             phase={shellPhase}
+            workspaceId={activeWorkspaceId}
             railOpen={railOpen}
             onShowRail={() => setRailOpen(true)}
           />

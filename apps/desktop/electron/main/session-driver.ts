@@ -32,10 +32,14 @@ export class SessionDriver {
   constructor(
     private readonly session: RemoteSession,
     private readonly window: BrowserWindow,
+    /** Workspace id this driver was created for. Stamped on every
+     *  event so the renderer can route it to the right per-workspace
+     *  chat state. */
+    private readonly workspaceId: string,
   ) {
     // Mirror every event the runner emits.
     const logUnsub = session.log.subscribe((event) => {
-      this.send('runner.event', event);
+      this.send('runner.event', { workspaceId, event });
     });
     this.disposes.push(logUnsub);
 
@@ -73,7 +77,11 @@ export class SessionDriver {
         error = e instanceof Error ? e.message : String(e);
       } finally {
         this.turns.delete(id);
-        this.send('runner.turn.complete', { turnId: id, error });
+        this.send('runner.turn.complete', {
+          workspaceId: this.workspaceId,
+          turnId: id,
+          error,
+        });
       }
     })();
 

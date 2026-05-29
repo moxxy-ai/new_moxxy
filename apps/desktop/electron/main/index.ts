@@ -12,7 +12,7 @@ import { app, BrowserWindow } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { RunnerSupervisor } from './runner-supervisor';
+import { RunnerPool, UNBOUND_ID } from './runner-pool';
 import { bindWindow, registerIpcHandlers } from './ipc';
 import { DeskStore } from './desks';
 
@@ -20,7 +20,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const isDev = !!process.env['ELECTRON_RENDERER_URL'];
 
-let supervisor: RunnerSupervisor | null = null;
+let pool: RunnerPool | null = null;
 let mainWindow: BrowserWindow | null = null;
 
 async function createWindow(): Promise<void> {
@@ -46,8 +46,8 @@ async function createWindow(): Promise<void> {
     await mainWindow.loadFile(path.join(__dirname, '..', '..', 'dist', 'index.html'));
   }
 
-  if (supervisor) {
-    const unbind = bindWindow(supervisor, mainWindow);
+  if (pool) {
+    const unbind = bindWindow(pool, mainWindow);
     mainWindow.on('closed', () => {
       unbind();
       mainWindow = null;
@@ -56,15 +56,20 @@ async function createWindow(): Promise<void> {
 }
 
 app.whenReady().then(async () => {
-  supervisor = new RunnerSupervisor();
+  pool = new RunnerPool();
   const desks = new DeskStore();
-  // If there's an active desk, prime the supervisor with its cwd
-  // BEFORE the run loop starts so the first spawn lands in the right
-  // directory.
+  // Prime: spawn a runner for the active workspace if one is bound,
+  // otherwise an unbound runner so the user lands in a working chat
+  // surface from the first paint.
   const initialActive = await desks.getActive();
-  if (initialActive) await supervisor.setCwd(initialActive.cwd);
-  registerIpcHandlers(supervisor, desks);
-  void supervisor.run();
+  if (initialActive) {
+    await pool.getOrCreate(initialActive.id, initialActive.cwd);
+    pool.setActive(initialActive.id);
+  } else {
+    await pool.getOrCreate(UNBOUND_ID, null);
+    pool.setActive(UNBOUND_ID);
+  }
+  registerIpcHandlers(pool, desks);
 
   await createWindow();
 
@@ -90,10 +95,10 @@ app.on('before-quit', (event) => {
 });
 
 async function shutdown(): Promise<void> {
-  if (!supervisor) return;
+  if (!pool) return;
   await Promise.race([
-    supervisor.stop().catch(() => undefined),
+    pool.stopAll().catch(() => undefined),
     // Belt-and-braces timeout: don't hang the app on a stuck child.
-    new Promise<void>((resolve) => setTimeout(resolve, 2000)),
+    new Promise<void>((resolve) => setTimeout(resolve, 3000)),
   ]);
 }

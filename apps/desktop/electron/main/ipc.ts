@@ -1,41 +1,58 @@
 /**
  * Wire every IPC handler declared in [`IpcCommands`].
  *
- * Each handler is a thin glue around either the supervisor (for
- * connection/session calls) or onboarding helpers (for setup
- * commands). The renderer's `window.moxxy.invoke('foo', args)` lands
- * here, typed end-to-end through the shared `IpcCommands` map.
+ * Two collaborators:
  *
- * Event forwarding is handled per-window in [`bindWindow`]: it
- * subscribes to the supervisor's `change` event and (re-)creates a
- * [`SessionDriver`] every time we land in `connected`, so the new
- * session's log gets mirrored to the right renderer.
+ *   1. {@link RunnerPool} — one supervisor per workspace; the active
+ *      one is the foreground. session.* commands accept an optional
+ *      workspaceId arg and default to the active workspace so the
+ *      renderer can target background workspaces without switching.
+ *
+ *   2. {@link DeskStore} — workspace metadata on disk.
+ *
+ * Events forwarded from each supervisor are tagged with workspaceId
+ * (see {@link bindWindow}), so the renderer can dispatch into the
+ * right per-workspace chat state and surface "background turn
+ * finished in workspace X" notifications later.
  */
 
 import { ipcMain, type BrowserWindow } from 'electron';
 
 import type {
-  ConnectionSnapshot,
+  ConnectionPhase,
   IpcCommandName,
   IpcCommands,
   IpcEvents,
 } from '../shared/ipc';
 import type { SessionLike } from '@moxxy/sdk';
 import { RunnerSupervisor } from './runner-supervisor';
+import { RunnerPool, UNBOUND_ID } from './runner-pool';
 import { probeOnboarding, saveProviderKey } from './onboarding';
 import { installMoxxyCli, probeNode } from './installer';
 import { SessionDriver } from './session-driver';
 import { DeskStore } from './desks';
 import { dialog, shell, BrowserWindow as BrowserWindowApi } from 'electron';
 
-export function registerIpcHandlers(
-  supervisor: RunnerSupervisor,
-  desks: DeskStore,
-): void {
-  handle('connection.snapshot', async () => supervisor.snapshot());
-  handle('connection.retry', async () => {
-    supervisor.forceRetry();
+export function registerIpcHandlers(pool: RunnerPool, desks: DeskStore): void {
+  // ---- Connection ----------------------------------------------------------
+
+  handle('connection.snapshot', async (args) => {
+    const id = args?.workspaceId ?? pool.activeWorkspaceId() ?? UNBOUND_ID;
+    const sup = pool.get(id);
+    if (!sup) throw new Error(`no supervisor for ${id}`);
+    return { workspaceId: id, ...sup.snapshot() };
   });
+  handle('connection.snapshotAll', async () =>
+    pool.list().map((e) => ({ workspaceId: e.id, ...e.supervisor.snapshot() })),
+  );
+  handle('connection.activeWorkspace', async () => pool.activeWorkspaceId());
+  handle('connection.retry', async (args) => {
+    const id = args?.workspaceId ?? pool.activeWorkspaceId();
+    if (!id) return;
+    pool.get(id)?.forceRetry();
+  });
+
+  // ---- Onboarding ----------------------------------------------------------
 
   handle('onboarding.status', () => probeOnboarding());
   handle('onboarding.probeNode', () => probeNode());
@@ -43,9 +60,7 @@ export function registerIpcHandlers(
     const target = BrowserWindowApi.getFocusedWindow() ?? BrowserWindowApi.getAllWindows()[0];
     if (!target) throw new Error('no window to stream install progress to');
     const code = await installMoxxyCli(target);
-    // After a successful install, retry the supervisor immediately so
-    // the connection screen recovers without the user pressing Retry.
-    if (code === 0) supervisor.forceRetry();
+    if (code === 0) pool.active()?.forceRetry();
     return code;
   });
   handle('onboarding.openExternal', async ({ url }) => {
@@ -53,39 +68,44 @@ export function registerIpcHandlers(
   });
   handle('onboarding.saveProviderKey', async ({ provider, secret }) => {
     await saveProviderKey(provider, secret);
-    const session = supervisor.remote();
-    if (session) {
-      session.providers.setActive(provider);
-    }
+    const session = pool.active()?.remote();
+    if (session) session.providers.setActive(provider);
   });
 
-  handle('session.info', async () => {
-    const session = supervisor.remote();
+  // ---- Session (per-workspace) --------------------------------------------
+
+  handle('session.info', async (args) => {
+    const sup = resolveSupervisor(pool, args?.workspaceId);
+    const session = sup?.remote();
     return session ? session.getInfo() : null;
   });
-  handle('session.runTurn', async ({ prompt, model }) => {
-    const driver = mustHaveDriver();
+  handle('session.runTurn', async ({ workspaceId, prompt, model }) => {
+    const id = workspaceId ?? pool.activeWorkspaceId();
+    if (!id) throw new Error('no active workspace');
+    const driver = mustDriver(id);
     return driver.runTurn(prompt, model);
   });
-  handle('session.abortTurn', async ({ turnId }) => {
-    const driver = mustHaveDriver();
-    driver.abortTurn(turnId);
+  handle('session.abortTurn', async ({ workspaceId, turnId }) => {
+    const id = workspaceId ?? pool.activeWorkspaceId();
+    if (!id) return;
+    drivers.get(id)?.abortTurn(turnId);
   });
-  handle('session.setProvider', async ({ provider }) => {
-    const session = mustHaveSession(supervisor);
+  handle('session.setProvider', async ({ workspaceId, provider }) => {
+    const session = mustRemote(pool, workspaceId);
     session.providers.setActive(provider);
   });
-  handle('session.setMode', async ({ mode }) => {
-    const session = mustHaveSession(supervisor);
+  handle('session.setMode', async ({ workspaceId, mode }) => {
+    const session = mustRemote(pool, workspaceId);
     session.modes.setActive(mode);
   });
   handle('session.hasTranscriber', async () => {
-    const session = supervisor.remote();
+    const sup = pool.active();
+    const session = sup?.remote();
     if (!session) return false;
     return session.transcribers.getActiveName() !== null;
   });
   handle('session.transcribe', async ({ audioBase64, mimeType }) => {
-    const session = mustHaveSession(supervisor);
+    const session = mustRemote(pool);
     const transcriber = session.transcribers.tryGetActive();
     if (!transcriber) throw new Error('no active transcriber on the runner');
     const audio = Buffer.from(audioBase64, 'base64');
@@ -106,6 +126,8 @@ export function registerIpcHandlers(
     return result.filePaths[0]!;
   });
 
+  // ---- Desks --------------------------------------------------------------
+
   handle('desks.list', async () => {
     const list = await desks.list();
     const active = await desks.getActive();
@@ -114,13 +136,17 @@ export function registerIpcHandlers(
   handle('desks.create', async ({ name, cwd }) => desks.create({ name, cwd }));
   handle('desks.remove', async ({ id }) => {
     await desks.remove(id);
+    await pool.remove(id);
     const active = await desks.getActive();
-    await supervisor.setCwd(active?.cwd ?? null);
+    if (active) await pool.getOrCreate(active.id, active.cwd);
   });
   handle('desks.setActive', async ({ id }) => {
     await desks.setActive(id);
     const active = await desks.getActive();
-    await supervisor.setCwd(active?.cwd ?? null);
+    if (active) {
+      await pool.getOrCreate(active.id, active.cwd);
+      pool.setActive(active.id);
+    }
   });
   handle('desks.pickFolder', async () => {
     const window =
@@ -133,26 +159,28 @@ export function registerIpcHandlers(
     return result.filePaths[0]!;
   });
 
-  // Workflows
+  // ---- Workflows -----------------------------------------------------------
+
   handle('workflows.list', async () => {
-    const session = sessionLike(supervisor);
+    const session = mustSession(pool);
     const view = session.workflows;
     if (!view) return [];
     return await view.list();
   });
   handle('workflows.setEnabled', async ({ name, enabled }) => {
-    const session = sessionLike(supervisor);
+    const session = mustSession(pool);
     if (session.workflows) await session.workflows.setEnabled(name, enabled);
   });
   handle('workflows.run', async ({ name }) => {
-    const session = sessionLike(supervisor);
+    const session = mustSession(pool);
     if (!session.workflows) throw new Error('workflows plugin not loaded');
     return await session.workflows.run(name);
   });
 
-  // Settings — providers (read from SessionInfo + ready flag)
+  // ---- Settings -----------------------------------------------------------
+
   handle('settings.providers', async () => {
-    const session = supervisor.remote();
+    const session = pool.active()?.remote();
     if (!session) return [];
     const info = session.getInfo();
     const readySet = new Set(info.readyProviders ?? []);
@@ -161,29 +189,23 @@ export function registerIpcHandlers(
       ready: readySet.has(p.name),
     }));
   });
-
-  // MCP admin
   handle('settings.mcpServers', async () => {
-    const session = sessionLike(supervisor);
+    const session = mustSession(pool);
     if (!session.mcpAdmin) return [];
     return await session.mcpAdmin.listServers();
   });
   handle('settings.mcpToggle', async ({ name, enabled }) => {
-    const session = sessionLike(supervisor);
+    const session = mustSession(pool);
     if (!session.mcpAdmin) throw new Error('mcp admin not available');
     if (enabled) await session.mcpAdmin.enableAndAttach(name);
     else await session.mcpAdmin.detach(name);
   });
-
-  // Vault entries (read entry names without decrypting)
   handle('settings.vaultEntries', async () => {
     const { readVaultKeys } = await import('./onboarding');
     const home = (await import('node:os')).homedir();
     const names = await readVaultKeys(home);
     return names.map((name) => ({ name }));
   });
-
-  // Skills
   handle('settings.skills', async () => {
     const { listSkills } = await import('./skills');
     return listSkills();
@@ -199,111 +221,101 @@ export function registerIpcHandlers(
 }
 
 /**
- * Bind a window to the supervisor: forward `connection.changed` to
- * it, create a SessionDriver when we connect, dispose it on
- * disconnect. Returns a cleanup callback for the window-closed hook.
+ * Bind a window to the runner pool: forward every supervisor's
+ * `connection.changed` to the renderer, manage per-workspace
+ * SessionDrivers so streamed events get the right workspaceId tag,
+ * and tear everything down when the window closes.
  */
-export function bindWindow(
-  supervisor: RunnerSupervisor,
-  window: BrowserWindow,
-): () => void {
-  let driver: SessionDriver | null = null;
-  driverByWindow.set(window, () => driver);
-
+export function bindWindow(pool: RunnerPool, window: BrowserWindow): () => void {
   const send = <K extends keyof IpcEvents>(channel: K, payload: IpcEvents[K]): void => {
     if (window.isDestroyed()) return;
     window.webContents.send(channel, payload);
   };
 
-  const refreshDriver = (): void => {
-    const session = supervisor.remote();
-    driver?.dispose();
-    driver = session ? new SessionDriver(session, window) : null;
-  };
+  // Maintain one SessionDriver per workspace for the lifetime of its
+  // active RemoteSession.
+  const localDrivers = new Map<string, SessionDriver>();
 
-  const onChange = (snapshot: ConnectionSnapshot): void => {
-    send('connection.changed', snapshot.phase);
-    if (snapshot.phase.phase === 'connected') refreshDriver();
-    else if (driver) {
-      driver.dispose();
-      driver = null;
+  const ensureDriverFor = (id: string, sup: RunnerSupervisor): void => {
+    const session = sup.remote();
+    const existing = localDrivers.get(id);
+    if (existing) existing.dispose();
+    if (session) {
+      const driver = new SessionDriver(session, window, id);
+      localDrivers.set(id, driver);
+      drivers.set(id, driver);
+    } else {
+      localDrivers.delete(id);
+      drivers.delete(id);
     }
   };
 
-  supervisor.on('change', onChange);
-  // If we're already connected when the window is born, attach now.
-  if (supervisor.snapshot().phase.phase === 'connected') refreshDriver();
+  const onPoolChange = (id: string): void => {
+    const sup = pool.get(id);
+    if (!sup) return;
+    const phase = sup.snapshot().phase;
+    send('connection.changed', { workspaceId: id, phase });
+    if (phase.phase === 'connected') ensureDriverFor(id, sup);
+    else {
+      const existing = localDrivers.get(id);
+      if (existing) {
+        existing.dispose();
+        localDrivers.delete(id);
+        drivers.delete(id);
+      }
+    }
+  };
+
+  pool.on('change', onPoolChange);
+
+  // If the pool is already populated when the window opens, prime
+  // each supervisor's connection state into the renderer.
+  for (const { id, supervisor } of pool.list()) {
+    const phase: ConnectionPhase = supervisor.snapshot().phase;
+    send('connection.changed', { workspaceId: id, phase });
+    if (phase.phase === 'connected') ensureDriverFor(id, supervisor);
+  }
 
   return () => {
-    supervisor.off('change', onChange);
-    driver?.dispose();
-    driver = null;
-    driverByWindow.delete(window);
+    pool.off('change', onPoolChange);
+    for (const driver of localDrivers.values()) driver.dispose();
+    localDrivers.clear();
+    drivers.clear();
   };
 }
 
 // ---- internals ----
 
-/**
- * Tracks the active SessionDriver for the currently-focused window.
- * For now we only support one window; future multi-window support
- * will key this by window id and pick based on the IPC sender.
- */
-const driverByWindow = new WeakMap<BrowserWindow, () => SessionDriver | null>();
+/** Driver lookup shared across the IPC handlers + bindWindow. Keyed by
+ *  workspace id so runTurn / abortTurn target the right runner. */
+const drivers = new Map<string, SessionDriver>();
 
-function mustHaveSession(supervisor: RunnerSupervisor) {
-  const session = supervisor.remote();
+function resolveSupervisor(pool: RunnerPool, workspaceId?: string): RunnerSupervisor | null {
+  const id = workspaceId ?? pool.activeWorkspaceId();
+  return id ? pool.get(id) : null;
+}
+
+function mustSession(pool: RunnerPool, workspaceId?: string): SessionLike {
+  return mustRemote(pool, workspaceId) as unknown as SessionLike;
+}
+
+function mustRemote(
+  pool: RunnerPool,
+  workspaceId?: string,
+): NonNullable<ReturnType<RunnerSupervisor['remote']>> {
+  const sup = resolveSupervisor(pool, workspaceId);
+  const session = sup?.remote();
   if (!session) throw new Error('not connected to a runner');
   return session;
 }
 
-/**
- * Same as {@link mustHaveSession} but typed as `SessionLike` so we can
- * reach the optional `workflows` / `mcpAdmin` views. The runner exposes
- * these views on the wire even though `RemoteSession`'s class shape
- * doesn't declare them; this assertion narrows the type for callers
- * that handle the `undefined` case explicitly.
- */
-function sessionLike(supervisor: RunnerSupervisor): SessionLike {
-  return mustHaveSession(supervisor) as unknown as SessionLike;
-}
-
-function mustHaveDriver(): SessionDriver {
-  // Single-window scoping: grab whichever driver is currently active.
-  // (Refined when multi-window lands.)
-  for (const accessor of Array.from(activeDriverAccessors())) {
-    const driver = accessor();
-    if (driver) return driver;
+function mustDriver(workspaceId: string): SessionDriver {
+  const driver = drivers.get(workspaceId);
+  if (!driver) {
+    throw new Error(`no active session for workspace ${workspaceId}`);
   }
-  throw new Error('not connected to a runner');
+  return driver;
 }
-
-function* activeDriverAccessors(): Generator<() => SessionDriver | null> {
-  // WeakMap doesn't support iteration; we expose a sidecar Set that
-  // mirrors it. Maintained alongside `driverByWindow`.
-  for (const accessor of driverAccessors) yield accessor;
-}
-
-const driverAccessors = new Set<() => SessionDriver | null>();
-
-// Hook the WeakMap maintenance into a tiny helper so bindWindow() and
-// the unbind callback stay aligned.
-const originalSet = driverByWindow.set.bind(driverByWindow);
-driverByWindow.set = function patched(window: BrowserWindow, accessor) {
-  driverAccessors.add(accessor);
-  return originalSet(window, accessor);
-};
-const originalDelete = driverByWindow.delete.bind(driverByWindow);
-driverByWindow.delete = function patched(window: BrowserWindow) {
-  for (const accessor of driverAccessors) {
-    // Best-effort: remove any accessors whose window is the one
-    // being deleted. We can't identify exactly which without an
-    // index, so we drop those returning null and let bindWindow
-    // re-add fresh ones.
-    if (accessor() === null) driverAccessors.delete(accessor);
-  }
-  return originalDelete(window);
-};
 
 /**
  * Strongly-typed `ipcMain.handle` — channel + arg shapes come from

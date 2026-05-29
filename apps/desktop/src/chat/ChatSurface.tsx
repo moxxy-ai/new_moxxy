@@ -6,6 +6,7 @@ import { Icon } from '@/lib/Icon';
 
 interface ChatSurfaceProps {
   readonly phase: ConnectionPhase;
+  readonly workspaceId: string;
   readonly railOpen: boolean;
   readonly onShowRail: () => void;
 }
@@ -25,8 +26,13 @@ const SUGGESTIONS: ReadonlyArray<string> = [
  * trails the assistant text while chunks are still arriving). Auto-
  * scroll follows the bottom unless the user scrolls up to read.
  */
-export function ChatSurface({ phase, railOpen, onShowRail }: ChatSurfaceProps): JSX.Element {
-  const chat = useChat();
+export function ChatSurface({
+  phase,
+  workspaceId,
+  railOpen,
+  onShowRail,
+}: ChatSurfaceProps): JSX.Element {
+  const chat = useChat(workspaceId);
   const ready = phase.phase === 'connected';
 
   return (

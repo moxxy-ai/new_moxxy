@@ -18,7 +18,7 @@
  */
 
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, unlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, unlinkSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
@@ -188,6 +188,7 @@ export class RunnerSupervisor extends EventEmitter {
           'workspace bound — refusing to adopt foreign serve; replacing it',
         );
       }
+      this.ensureSocketDir();
       this.cleanupStaleSocket();
       const child = this.spawnServe(cli);
       this.child = child;
@@ -261,6 +262,17 @@ export class RunnerSupervisor extends EventEmitter {
       socket.once('timeout', () => done(false));
       socket.connect(this.socketPath);
     });
+  }
+
+  private ensureSocketDir(): void {
+    const dir = path.dirname(this.socketPath);
+    if (!existsSync(dir)) {
+      try {
+        mkdirSync(dir, { recursive: true });
+      } catch (e) {
+        this.pushLog('stderr', `could not create socket dir ${dir}: ${(e as Error).message}`);
+      }
+    }
   }
 
   private cleanupStaleSocket(): void {

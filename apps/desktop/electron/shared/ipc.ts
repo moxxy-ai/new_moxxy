@@ -153,10 +153,19 @@ export interface RunTurnResult {
  * map).
  */
 export interface IpcEvents {
-  'connection.changed': ConnectionPhase;
-  'runner.event': MoxxyEvent;
-  'runner.turn.complete': { turnId: string; error: string | null };
-  'runner.info.changed': unknown;
+  /** Phase of the supervisor for `workspaceId`. The renderer's
+   *  ConnectionStore keeps one phase per workspace; the foreground UI
+   *  reads only the active workspace's. */
+  'connection.changed': { workspaceId: string; phase: ConnectionPhase };
+  /** Runner event tagged with the workspace it came from so the
+   *  renderer can dispatch into the right per-workspace chat state. */
+  'runner.event': { workspaceId: string; event: MoxxyEvent };
+  'runner.turn.complete': {
+    workspaceId: string;
+    turnId: string;
+    error: string | null;
+  };
+  'runner.info.changed': { workspaceId: string; info: unknown };
   /** Streamed during `onboarding.installMoxxyCli`. One event per
    *  stdout/stderr line; the invoke() also returns the final exit
    *  code so callers can short-circuit on success. */
@@ -171,12 +180,23 @@ export interface IpcEvents {
  * renderer is a type error rather than a silent runtime failure.
  */
 export interface IpcCommands {
-  /** Returns the latest snapshot. Use alongside `connection.changed`
-   *  events to handle late-mount races. */
-  'connection.snapshot': () => Promise<ConnectionSnapshot>;
+  /** Returns the snapshot for the given workspace. Defaults to the
+   *  pool's active workspace. */
+  'connection.snapshot': (args?: { workspaceId?: string }) => Promise<
+    ConnectionSnapshot & { workspaceId: string }
+  >;
+  /** Snapshot every supervised workspace (active + background). Used
+   *  on cold start so the renderer learns about running background
+   *  workspaces without waiting for events. */
+  'connection.snapshotAll': () => Promise<
+    ReadonlyArray<ConnectionSnapshot & { workspaceId: string }>
+  >;
+  /** Currently foregrounded workspace id, or null if no workspace is
+   *  bound. */
+  'connection.activeWorkspace': () => Promise<string | null>;
   /** Kick the supervisor out of failed / reconnecting back into the
    *  resolution loop. */
-  'connection.retry': () => Promise<void>;
+  'connection.retry': (args?: { workspaceId?: string }) => Promise<void>;
 
   'onboarding.status': () => Promise<OnboardingStatus>;
   /** Probe Node.js — used by the first wizard step before we offer
@@ -201,17 +221,28 @@ export interface IpcCommands {
    *  if the user cancelled. */
   'desks.pickFolder': () => Promise<string | null>;
 
-  /** Returns the runner's SessionInfo snapshot. */
-  'session.info': () => Promise<unknown | null>;
-  /** Issue a new turn. Events stream back via 'runner.event'. */
-  'session.runTurn': (args: RunTurnArgs) => Promise<RunTurnResult>;
+  /** Returns the runner's SessionInfo snapshot for the workspace.
+   *  Defaults to the active workspace. */
+  'session.info': (args?: { workspaceId?: string }) => Promise<unknown | null>;
+  /** Issue a new turn. Defaults to the active workspace; pass a
+   *  workspaceId to start a turn in a background workspace. Events
+   *  stream back via 'runner.event' tagged with the same id. */
+  'session.runTurn': (
+    args: RunTurnArgs & { workspaceId?: string },
+  ) => Promise<RunTurnResult>;
   /** Abort the named turn. Best-effort. */
-  'session.abortTurn': (args: { turnId: string }) => Promise<void>;
+  'session.abortTurn': (args: {
+    workspaceId?: string;
+    turnId: string;
+  }) => Promise<void>;
   /** Switch the active provider. The vault must already hold the
    *  matching credential. */
-  'session.setProvider': (args: { provider: string }) => Promise<void>;
+  'session.setProvider': (args: {
+    workspaceId?: string;
+    provider: string;
+  }) => Promise<void>;
   /** Switch the active mode. */
-  'session.setMode': (args: { mode: string }) => Promise<void>;
+  'session.setMode': (args: { workspaceId?: string; mode: string }) => Promise<void>;
   /** True when the runner has an active transcriber plugin. UI uses
    *  this to enable/disable the mic button. */
   'session.hasTranscriber': () => Promise<boolean>;

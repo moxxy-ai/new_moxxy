@@ -3,6 +3,7 @@ import { useDesks } from '@/lib/useDesks';
 import { Skeleton } from '@/lib/Skeleton';
 import { Icon } from '@/lib/Icon';
 import { Modal, ConfirmModal } from '@/lib/Modal';
+import { useUnreadWorkspaces } from '@/lib/useChat';
 import type { Desk } from '@shared/ipc';
 
 export type View = 'chat' | 'workflows' | 'settings';
@@ -32,6 +33,7 @@ const MENU_ITEMS: ReadonlyArray<{
  */
 export function WorkspaceSidebar({ view, onView }: Props): JSX.Element {
   const desks = useDesks();
+  const unread = new Set(useUnreadWorkspaces());
   const [busy, setBusy] = useState(false);
   /** Folder the user picked; null when no naming flow is in progress. */
   const [pendingFolder, setPendingFolder] = useState<string | null>(null);
@@ -73,6 +75,7 @@ export function WorkspaceSidebar({ view, onView }: Props): JSX.Element {
               key={d.id}
               desk={d}
               active={desks.activeId === d.id}
+              unread={unread.has(d.id)}
               onClick={() => void desks.setActive(d.id)}
               onRemove={() => setPendingRemove(d)}
             />
@@ -340,11 +343,13 @@ function SectionHeader({
 function WorkspaceRow({
   desk,
   active,
+  unread,
   onClick,
   onRemove,
 }: {
   readonly desk: { id: string; name: string; color: string };
   readonly active: boolean;
+  readonly unread: boolean;
   readonly onClick: () => void;
   readonly onRemove: () => void;
 }): JSX.Element {
@@ -401,6 +406,20 @@ function WorkspaceRow({
         >
           {desk.name}
         </span>
+        {unread && (
+          <span
+            aria-label="unread activity"
+            title="New activity in this workspace"
+            style={{
+              width: 7,
+              height: 7,
+              borderRadius: '50%',
+              background: 'var(--color-primary)',
+              flexShrink: 0,
+              boxShadow: '0 0 8px rgba(124, 129, 248, 0.6)',
+            }}
+          />
+        )}
         <button
           type="button"
           aria-label={`remove workspace ${desk.name}`}
