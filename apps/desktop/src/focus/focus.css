@@ -74,28 +74,47 @@ body[data-mode='focus'] #root {
  * a safe surface to grab when corner-dragging the widget; the body
  * itself is also draggable but the grips are the visual hint. */
 
+/* The Electron BrowserWindow on macOS already provides the floating
+ * card chrome (rounded corners + drop shadow + vibrancy) for free.
+ * Layering our own border-radius + box-shadow on top of it produced
+ * the visible "card inside a card" — drop the inner chrome so the
+ * menu is just a flat surface filling the OS card. */
 .focus-menu {
   position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 60px;
-  margin: 6px;
+  height: 100%;
+  width: 100%;
+  margin: 0;
   padding: 6px 12px 6px 8px;
   background: rgba(255, 255, 255, 0.96);
-  border: 1px solid var(--color-card-border);
-  border-radius: 16px;
-  box-shadow:
-    0 18px 36px -12px rgba(15, 23, 42, 0.32),
-    0 4px 10px -4px rgba(15, 23, 42, 0.18);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
   backdrop-filter: blur(18px) saturate(120%);
   -webkit-backdrop-filter: blur(18px) saturate(120%);
 }
-.focus-menu[data-busy='true'] {
-  border-color: rgba(236, 72, 153, 0.55);
-  box-shadow:
-    0 18px 36px -12px rgba(236, 72, 153, 0.3),
-    0 0 0 1px rgba(236, 72, 153, 0.35);
+/* Busy state — pink underline strip along the bottom edge instead
+ * of a border ring, because the inner element no longer has a
+ * border-radius / shadow to attach a ring to. */
+.focus-menu[data-busy='true']::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--color-primary) 30%,
+    var(--color-primary-strong) 50%,
+    var(--color-primary) 70%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: focus-busybar 1.3s linear infinite;
 }
 
 /* Drag grips — small vertical bars on the inner left/right edges.
