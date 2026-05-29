@@ -387,16 +387,13 @@ function MiniVoice({
 }
 
 // ---- SpectroBackground ---------------------------------------------------
-// Wave-fill visualiser: a smooth curve traces the audio spectrum
-// across the bottom of the panel, the area below the curve is
-// filled with the moxxy gradient, the whole canvas is heavily
-// blurred for a "music-app artwork" cloud-of-colour look.
-//
-// Two layered waves sample the same FFT data slightly differently
-// (one slow + smoothed, one faster) and are blended with 'screen'
-// composite so they fuse into a single shifting cloud.
+// Bar visualiser styled to match the user reference: many thin
+// vertical bars rising from the bottom, each one a pink-bottom to
+// violet/blue-top gradient with a soft glow. Heavy CSS blur fuses
+// neighbouring bars into a continuous luminous wave while keeping
+// the "frequency-tower" silhouette readable.
 
-const SPECTRO_POINTS = 32;
+const SPECTRO_BARS = 64;
 
 function SpectroBackground({
   analyser,
@@ -404,10 +401,7 @@ function SpectroBackground({
   readonly analyser: AnalyserNode;
 }): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  // Two EMA-smoothed sample buffers — drives the two layered waves
-  // we draw each frame.
-  const slowRef = useRef<number[]>(new Array(SPECTRO_POINTS).fill(0));
-  const fastRef = useRef<number[]>(new Array(SPECTRO_POINTS).fill(0));
+  const ampsRef = useRef<number[]>(new Array(SPECTRO_BARS).fill(0));
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -432,91 +426,66 @@ function SpectroBackground({
     const ro = new ResizeObserver(sizeCanvas);
     ro.observe(canvas);
 
-    const sampleAmplitudes = (): { slow: number[]; fast: number[] } => {
-      // Log-ish frequency bucketing — voice energy concentrates in
-      // the low end, so weight the bins accordingly.
-      const useableBins = Math.min(bufferLength, 256);
-      const slow = slowRef.current;
-      const fast = fastRef.current;
-      for (let i = 0; i < SPECTRO_POINTS; i++) {
-        const t = i / SPECTRO_POINTS;
-        const start = Math.floor(Math.pow(t, 1.4) * useableBins);
-        const end = Math.floor(
-          Math.pow((i + 1) / SPECTRO_POINTS, 1.4) * useableBins,
-        );
-        let sum = 0;
-        const count = Math.max(1, end - start);
-        for (let j = start; j < end; j++) sum += data[j] ?? 0;
-        const amp = sum / count / 255;
-        // Slow wave: heavy smoothing, lazy breathing.
-        slow[i] = (slow[i] ?? 0) * 0.9 + amp * 0.1;
-        // Fast wave: shorter EMA, reacts more to transients.
-        fast[i] = (fast[i] ?? 0) * 0.7 + amp * 0.3;
-      }
-      return { slow, fast };
-    };
-
-    const drawWave = (
-      ctx2: CanvasRenderingContext2D,
-      points: ReadonlyArray<number>,
-      w: number,
-      h: number,
-      heightFraction: number,
-      gradientStops: ReadonlyArray<[number, string]>,
-    ): void => {
-      const maxH = h * heightFraction;
-      // Wave rises FROM the bottom UP. y = bottom - amplitude.
-      const xs: number[] = [];
-      const ys: number[] = [];
-      for (let i = 0; i < SPECTRO_POINTS; i++) {
-        xs.push((i / (SPECTRO_POINTS - 1)) * w);
-        ys.push(h - Math.max(2, (points[i] ?? 0) * maxH));
-      }
-
-      ctx2.beginPath();
-      ctx2.moveTo(0, h);
-      ctx2.lineTo(xs[0]!, ys[0]!);
-      // Smooth bezier between sample points using midpoints as
-      // anchor + sample points as control. Produces a continuous
-      // wavy curve.
-      for (let i = 0; i < SPECTRO_POINTS - 1; i++) {
-        const cx = (xs[i]! + xs[i + 1]!) / 2;
-        const cy = (ys[i]! + ys[i + 1]!) / 2;
-        ctx2.quadraticCurveTo(xs[i]!, ys[i]!, cx, cy);
-      }
-      ctx2.lineTo(xs[SPECTRO_POINTS - 1]!, ys[SPECTRO_POINTS - 1]!);
-      ctx2.lineTo(w, h);
-      ctx2.closePath();
-
-      const grad = ctx2.createLinearGradient(0, 0, 0, h);
-      for (const [stop, color] of gradientStops) grad.addColorStop(stop, color);
-      ctx2.fillStyle = grad;
-      ctx2.fill();
-    };
-
     const draw = (): void => {
       raf = requestAnimationFrame(draw);
       analyser.getByteFrequencyData(data);
       const w = canvas.clientWidth;
       const h = canvas.clientHeight;
       if (w === 0 || h === 0) return;
-      const { slow, fast } = sampleAmplitudes();
+
+      // Log-ish bin mapping: low frequencies (voice fundamentals)
+      // get more bars; high end is grouped.
+      const useableBins = Math.min(bufferLength, 256);
+      const amps = ampsRef.current;
+      for (let i = 0; i < SPECTRO_BARS; i++) {
+        const start = Math.floor(Math.pow(i / SPECTRO_BARS, 1.6) * useableBins);
+        const end = Math.floor(
+          Math.pow((i + 1) / SPECTRO_BARS, 1.6) * useableBins,
+        );
+        let sum = 0;
+        const count = Math.max(1, end - start);
+        for (let j = start; j < end; j++) sum += data[j] ?? 0;
+        const amp = sum / count / 255;
+        // EMA smoothing for breathing motion.
+        amps[i] = (amps[i] ?? 0) * 0.75 + amp * 0.25;
+      }
+
       ctx.clearRect(0, 0, w, h);
-      // Two layered waves, additively blended into a single dreamy
-      // colour cloud.
-      ctx.globalCompositeOperation = 'screen';
-      drawWave(ctx, slow, w, h, 0.95, [
-        [0, 'rgba(217, 70, 239, 0.0)'],
-        [0.35, 'rgba(217, 70, 239, 0.45)'],
-        [0.75, 'rgba(236, 72, 153, 0.7)'],
-        [1, 'rgba(244, 114, 182, 0.9)'],
-      ]);
-      drawWave(ctx, fast, w, h, 0.7, [
-        [0, 'rgba(167, 139, 250, 0)'],
-        [0.5, 'rgba(167, 139, 250, 0.5)'],
-        [1, 'rgba(236, 72, 153, 0.85)'],
-      ]);
-      ctx.globalCompositeOperation = 'source-over';
+
+      const gap = 1;
+      const totalGap = gap * (SPECTRO_BARS - 1);
+      const barW = Math.max(1, (w - totalGap) / SPECTRO_BARS);
+      const maxBarH = h * 0.95;
+      const minBarH = h * 0.06;
+
+      // Each bar gets the same vertical gradient — pink → fuchsia
+      // → blue/cyan at the very top (matches the reference image's
+      // cool-top warm-bottom blend). Built once, reused for every
+      // bar by translating.
+      const gradient = ctx.createLinearGradient(0, 0, 0, h);
+      gradient.addColorStop(0, 'rgba(96, 165, 250, 0.95)'); // sky blue top
+      gradient.addColorStop(0.35, 'rgba(167, 139, 250, 0.95)'); // violet
+      gradient.addColorStop(0.7, 'rgba(236, 72, 153, 0.95)'); // pink
+      gradient.addColorStop(1, 'rgba(244, 114, 182, 0.8)'); // soft pink
+      ctx.fillStyle = gradient;
+
+      // Strong glow per bar — the secret to the "music video"
+      // look. Pink shadow on a violet/blue gradient bar reads as
+      // electric / luminous.
+      ctx.shadowColor = 'rgba(236, 72, 153, 0.85)';
+      ctx.shadowBlur = 20;
+
+      for (let i = 0; i < SPECTRO_BARS; i++) {
+        const amp = amps[i] ?? 0;
+        const barH = Math.max(minBarH, amp * maxBarH);
+        const x = i * (barW + gap);
+        const y = h - barH;
+        // Thin rounded-top bars — single fillRect with rounded top
+        // via a clipped path looks too busy; a simple rect plus
+        // shadow + outer blur reads as luminous on its own.
+        ctx.fillRect(x, y, barW, barH);
+      }
+      ctx.shadowBlur = 0;
     };
     draw();
     return () => {
@@ -536,12 +505,13 @@ function SpectroBackground({
         height: '100%',
         zIndex: 0,
         pointerEvents: 'none',
-        // Strong blur turns the layered waves into a glowing
-        // continuous cloud that moves with the audio. Saturate
-        // pushes the moxxy pinks/violets so they pop against the
-        // white panel.
-        filter: 'blur(14px) saturate(1.2)',
-        WebkitFilter: 'blur(14px) saturate(1.2)',
+        // Strong outer blur fuses the 64 thin bars into a
+        // continuous luminous cloud. Boosted saturation pushes
+        // the pink/violet/blue to the front against the white
+        // panel.
+        filter: 'blur(10px) saturate(1.35)',
+        WebkitFilter: 'blur(10px) saturate(1.35)',
+        opacity: 0.95,
       }}
     />
   );
@@ -1046,25 +1016,49 @@ const style: Record<string, React.CSSProperties> = {
     flexShrink: 0,
   },
   micButton: {
-    width: 72,
-    height: 72,
+    width: 84,
+    height: 84,
     border: 'none',
-    background: 'linear-gradient(135deg, #ec4899, #d946ef)',
+    borderRadius: '50%',
+    // Conic-style gradient via radial — gives the button a 3D
+    // sphere feel with a brighter highlight at top-left.
+    background:
+      'radial-gradient(circle at 35% 30%, #ffffff 0%, #f9a8d4 18%, #ec4899 45%, #a855f7 88%)',
     color: '#fff',
     cursor: 'pointer',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    // Soft white halo so the button reads above the blurred
-    // background even when the blobs swell up behind it.
-    boxShadow: '0 0 0 6px rgba(255, 255, 255, 0.5)',
+    // Multi-layer shadow + inner highlight for a premium glass-bead
+    // look: white halo ring + soft outer glow + thin pink inner
+    // accent.
+    boxShadow: [
+      '0 0 0 4px rgba(255, 255, 255, 0.85)',
+      '0 0 0 5px rgba(236, 72, 153, 0.25)',
+      '0 12px 32px -8px rgba(168, 85, 247, 0.55)',
+      'inset 0 -6px 14px rgba(168, 85, 247, 0.35)',
+      'inset 0 4px 6px rgba(255, 255, 255, 0.55)',
+    ].join(', '),
+    transition: 'transform 140ms ease, box-shadow 200ms ease',
   },
   micButtonRecording: {
-    background: '#ef4444',
+    // Recording state: warmer / hotter gradient + bigger pulsing
+    // ring. Drives the live-mic feel — "I am hearing you."
+    background:
+      'radial-gradient(circle at 35% 30%, #ffffff 0%, #fda4af 18%, #ef4444 50%, #be123c 92%)',
+    boxShadow: [
+      '0 0 0 4px rgba(255, 255, 255, 0.85)',
+      '0 0 0 9px rgba(239, 68, 68, 0.35)',
+      '0 14px 36px -6px rgba(239, 68, 68, 0.6)',
+      'inset 0 -6px 14px rgba(190, 18, 60, 0.45)',
+      'inset 0 4px 6px rgba(255, 255, 255, 0.55)',
+    ].join(', '),
+    animation: 'focus-mic-pulse 1.6s ease-in-out infinite',
   },
   micButtonDisabled: {
-    opacity: 0.6,
+    opacity: 0.55,
     cursor: 'default',
+    animation: 'none',
   },
   transcript: {
     fontSize: 12.5,
@@ -1107,6 +1101,26 @@ if (typeof document !== 'undefined' && !document.getElementById('focus-keyframes
     @keyframes focus-thinking {
       0%, 100% { transform: translateY(0); opacity: 0.4; }
       50%      { transform: translateY(-3px); opacity: 1; }
+    }
+    /* Mic-button breathing ring — the inner gradient stays put,
+     * the outer ring pulses to signal active recording. */
+    @keyframes focus-mic-pulse {
+      0%, 100% {
+        box-shadow:
+          0 0 0 4px rgba(255, 255, 255, 0.85),
+          0 0 0 9px rgba(239, 68, 68, 0.35),
+          0 14px 36px -6px rgba(239, 68, 68, 0.6),
+          inset 0 -6px 14px rgba(190, 18, 60, 0.45),
+          inset 0 4px 6px rgba(255, 255, 255, 0.55);
+      }
+      50% {
+        box-shadow:
+          0 0 0 4px rgba(255, 255, 255, 0.85),
+          0 0 0 14px rgba(239, 68, 68, 0.12),
+          0 14px 36px -6px rgba(239, 68, 68, 0.6),
+          inset 0 -6px 14px rgba(190, 18, 60, 0.45),
+          inset 0 4px 6px rgba(255, 255, 255, 0.55);
+      }
     }
   `;
   document.head.appendChild(styleTag);
