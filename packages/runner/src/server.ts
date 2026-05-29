@@ -480,24 +480,11 @@ export async function startRunnerServer(
 ): Promise<RunnerServer> {
   const transport =
     opts.transport ?? (await createUnixSocketServer(opts.socketPath ?? runnerSocketPath()));
-  // Eagerly promote the first registered transcriber to "active" so
-  // remote clients see `info.activeTranscriber` populated on attach
-  // (they probe this to decide whether to show a mic affordance,
-  // without ever having to hit the Transcribe RPC just to find out).
-  // Agnostic to which transcriber wins — first one whose constructor
-  // succeeds. Failures are silent: clients gracefully see "none."
-  promoteFirstAvailableTranscriber(session);
+  // DO NOT auto-activate any transcriber at boot. The TUI's
+  // useVoiceInput depends on Codex specifically and would throw
+  // "another transcriber is active" if we promoted something else
+  // first. Active-transcriber selection is a per-client / per-flow
+  // concern; the runner's handleTranscribe handles fallback at
+  // request time instead.
   return new RunnerServer(session, transport);
-}
-
-function promoteFirstAvailableTranscriber(session: Session): void {
-  if (session.transcribers.getActiveName()) return;
-  for (const def of session.transcribers.list()) {
-    try {
-      session.transcribers.setActive(def.name);
-      return;
-    } catch {
-      // Next candidate.
-    }
-  }
 }

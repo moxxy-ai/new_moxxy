@@ -330,7 +330,13 @@ export class Session implements ClientSession, SessionRuntime {
         ...(c.pendingNotice ? { pendingNotice: c.pendingNotice } : {}),
       })),
       readyProviders: ready ? [...ready] : active ? [active] : [],
-      hasTranscriber: this.transcribers.tryGetActive() != null,
+      // hasTranscriber reports whether any backend is *registered*,
+      // not whether one is active. The active selection is per-flow
+      // (the TUI activates Codex on its first voice toggle; the
+      // desktop relies on handleTranscribe's candidate fallback).
+      // For UI affordance gating (showing / hiding a mic button),
+      // any registered transcriber means "voice is wired."
+      hasTranscriber: this.transcribers.list().length > 0,
       activeTranscriber: this.transcribers.getActiveName(),
     };
   }
