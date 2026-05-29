@@ -91,10 +91,12 @@ function Surface({
 // ---- Stage 1: inactive ---------------------------------------------------
 
 function Inactive({ onActivate }: { readonly onActivate: () => void }): JSX.Element {
+  // Layout: 10px | 1fr — drag handle on the LEFT, click target on
+  // the right. iOS-style vertical pill as the grip glyph.
   return (
     <div style={style.inactiveRoot}>
       <div style={style.inactiveHandle} aria-hidden>
-        <DragGlyph />
+        <PillHandle />
       </div>
       <button
         type="button"
@@ -119,10 +121,11 @@ function Active({
   readonly onText: () => void;
   readonly onVoice: () => void;
 }): JSX.Element {
+  // Layout: [grip-on-left] [brand] [divider] [actions]
   return (
     <div style={style.activeRoot}>
       <div style={style.activeGrip} aria-hidden>
-        <DragGlyph vertical />
+        <PillHandle />
       </div>
       <button
         type="button"
@@ -652,43 +655,22 @@ function Dot({ delay }: { readonly delay: number }): JSX.Element {
 // Better SVG icons — fully inline, no font dependency. Stroke weights
 // tuned for the 14–16 px size we use in the active row.
 
-function DragGlyph({ vertical = false }: { readonly vertical?: boolean }): JSX.Element {
-  // 6 dots in a 2x3 grid (or 3x2 if vertical). A standard drag-handle
-  // affordance — readable at any size, no font dep.
-  const dots = vertical
-    ? [
-        [0, 0],
-        [0, 1],
-        [0, 2],
-        [1, 0],
-        [1, 1],
-        [1, 2],
-      ]
-    : [
-        [0, 0],
-        [1, 0],
-        [2, 0],
-        [0, 1],
-        [1, 1],
-        [2, 1],
-      ];
+function PillHandle(): JSX.Element {
+  // iOS-style grabber: thin vertical pill, ~3 px wide × 22 px tall,
+  // medium opacity gray. Same shape iOS uses on its bottom-sheet
+  // drag indicators (rotated 90° because we're a side handle, not
+  // a top handle).
   return (
-    <svg
-      width={vertical ? 6 : 14}
-      height={vertical ? 14 : 6}
-      viewBox={vertical ? '0 0 6 14' : '0 0 14 6'}
+    <span
       aria-hidden
-    >
-      {dots.map(([x, y], i) => (
-        <circle
-          key={i}
-          cx={vertical ? (x ?? 0) * 4 + 1 : (x ?? 0) * 4 + 1}
-          cy={vertical ? (y ?? 0) * 4 + 1 : (y ?? 0) * 4 + 1}
-          r="1"
-          fill="rgba(15, 23, 42, 0.35)"
-        />
-      ))}
-    </svg>
+      style={{
+        display: 'inline-block',
+        width: 3,
+        height: 24,
+        borderRadius: 2,
+        background: 'rgba(15, 23, 42, 0.32)',
+      }}
+    />
   );
 }
 function MicIcon({ big = false }: { readonly big?: boolean }): JSX.Element {
@@ -799,7 +781,8 @@ const style: Record<string, React.CSSProperties> = {
     border: PANEL_BORDER,
     boxSizing: 'border-box',
     display: 'grid',
-    gridTemplateRows: '10px 1fr',
+    // Drag handle column on the left, click target fills the rest.
+    gridTemplateColumns: '10px 1fr',
     ...noDrag,
   },
   inactiveHandle: {
@@ -830,6 +813,8 @@ const style: Record<string, React.CSSProperties> = {
     boxSizing: 'border-box',
     display: 'flex',
     alignItems: 'center',
+    // Padding on the right for the trailing action buttons; the
+    // grip column owns the left edge.
     padding: '0 8px 0 0',
     ...noDrag,
   },

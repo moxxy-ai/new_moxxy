@@ -55,43 +55,47 @@ export function closeFocusWindow(): void {
  *  open. */
 /** Pin the bottom-right corner so resizes feel anchored to the
  *  screen corner instead of sliding the window around. */
-/** Resize the widget by ALWAYS pinning its right edge.
+/** Resize the widget — anchor to whichever screen edge is closer.
  *
- *  Rationale: the small "inactive" form factor is most useful when
- *  it sits against the right side of the screen. Collapsing the
- *  active panel should leave the icon there instead of stranding
- *  it in the middle of where the panel used to be. Pinning the
- *  right edge means: expand grows leftward, collapse retreats
- *  rightward — the user's eye stays on the right side of the work
- *  area where they last clicked the tray. */
+ *  Rationale: a small floating icon naturally lives against one
+ *  edge of the work area, not in the middle. Compute which side
+ *  (left or right) the widget's centre currently sits closer to,
+ *  then pin THAT edge so collapsing retreats outward and expanding
+ *  grows inward. Same logic both directions, symmetric.
+ *
+ *  - Widget centre on left half  → pin LEFT edge.
+ *  - Widget centre on right half → pin RIGHT edge.
+ *
+ *  Y axis: just keep the previous centre Y so the widget doesn't
+ *  jump vertically when its height changes.
+ */
 export function resizeFocusWindow(width: number, height: number): void {
   if (!focusWindow || focusWindow.isDestroyed()) return;
   const work = screen.getPrimaryDisplay().workArea;
-  const margin = 24;
   const [prevW = 0, prevH = 0] = focusWindow.getSize();
   const [prevX = 0, prevY = 0] = focusWindow.getPosition();
 
-  // Right edge stays where it was; new X comes from "right edge
-  // minus new width".
-  const rightEdge = prevX + prevW;
-  let nextX = rightEdge - width;
-  let nextY = prevY + (prevH - height) / 2;
-  // For the very first resize (window spawned at width 44/etc.) we
-  // want to anchor flush with the work-area right edge.
-  if (Math.abs(prevX + prevW - (work.x + work.width)) > 80) {
-    // User has dragged us off the right edge — just pin centre Y
-    // instead of bottom-right.
-    nextY = prevY + (prevH - height) / 2;
+  const widgetCenterX = prevX + prevW / 2;
+  const workCenterX = work.x + work.width / 2;
+  const pinRight = widgetCenterX >= workCenterX;
+
+  let nextX: number;
+  if (pinRight) {
+    // Right edge of the new bounds equals right edge of the old.
+    nextX = prevX + prevW - width;
   } else {
-    nextX = work.x + work.width - width - margin;
-    nextY = prevY + (prevH - height) / 2;
+    // Left edge stays put — new width grows / shrinks to the right.
+    nextX = prevX;
   }
+
+  // Centre Y is preserved so the widget doesn't bounce vertically.
+  let nextY = prevY + (prevH - height) / 2;
 
   // Clamp so we never end up off-screen.
   nextX = Math.max(work.x + 4, Math.min(nextX, work.x + work.width - width - 4));
   nextY = Math.max(work.y + 4, Math.min(nextY, work.y + work.height - height - 4));
 
-  // animate=false → no bounce / overshoot during the resize step.
+  // animate: false → snap, no overshoot.
   focusWindow.setBounds(
     { x: Math.round(nextX), y: Math.round(nextY), width, height },
     false,
