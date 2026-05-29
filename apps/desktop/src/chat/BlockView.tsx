@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Block } from '@/lib/useChat';
+import { chatStore } from '@/lib/chatStore';
 import { Icon } from '@/lib/Icon';
 import { MarkdownBody } from './MarkdownBody';
 
@@ -14,7 +15,15 @@ import { MarkdownBody } from './MarkdownBody';
  *   - tool     → small mono summary with status-coloured left bar.
  *   - system   → centered low-key separator.
  */
-export function BlockView({ block }: { readonly block: Block }): JSX.Element {
+export function BlockView({
+  block,
+  workspaceId,
+}: {
+  readonly block: Block;
+  /** Needed so action_result's dismiss button can dispatch into the
+   *  right per-workspace chat slot. */
+  readonly workspaceId?: string;
+}): JSX.Element {
   switch (block.kind) {
     case 'user':
       return <UserBlock text={block.text} />;
@@ -45,7 +54,151 @@ export function BlockView({ block }: { readonly block: Block }): JSX.Element {
       return (
         <SystemBlock text={`skill ${block.name} (${block.reason.replace(/_/g, ' ')})`} tone="info" />
       );
+    case 'action_result':
+      return (
+        <ActionResultBlock
+          id={block.id}
+          commandName={block.commandName}
+          argsLine={block.argsLine}
+          tone={block.tone}
+          text={block.text}
+          workspaceId={workspaceId}
+        />
+      );
   }
+}
+
+function ActionResultBlock({
+  id,
+  commandName,
+  argsLine,
+  tone,
+  text,
+  workspaceId,
+}: {
+  readonly id: string;
+  readonly commandName: string;
+  readonly argsLine: string;
+  readonly tone: 'info' | 'error' | 'notice';
+  readonly text: string;
+  readonly workspaceId?: string;
+}): JSX.Element {
+  const accent =
+    tone === 'error'
+      ? 'var(--color-red)'
+      : tone === 'notice'
+        ? 'var(--color-amber)'
+        : 'var(--color-primary-strong)';
+  const tint =
+    tone === 'error' ? '#fef2f2' : tone === 'notice' ? '#fffbeb' : '#fdf2f8';
+  const onDismiss = (): void => {
+    if (workspaceId) chatStore.dispatch(workspaceId, { type: 'dismiss_block', blockId: id });
+  };
+  return (
+    <article
+      data-testid="block-action"
+      style={{
+        alignSelf: 'stretch',
+        maxWidth: '92%',
+        background: '#fff',
+        border: `1px solid var(--color-card-border)`,
+        borderLeft: `3px solid ${accent}`,
+        borderRadius: 12,
+        boxShadow: 'var(--color-card-shadow)',
+        overflow: 'hidden',
+      }}
+    >
+      <header
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '8px 12px',
+          background: tint,
+          borderBottom: text ? `1px solid var(--color-card-border)` : 'none',
+        }}
+      >
+        <span
+          aria-hidden
+          style={{
+            color: accent,
+            display: 'inline-flex',
+            alignItems: 'center',
+          }}
+        >
+          <Icon
+            name={tone === 'error' ? 'x' : tone === 'notice' ? 'bell' : 'spark'}
+            size={14}
+          />
+        </span>
+        <span
+          style={{
+            fontSize: 12.5,
+            fontWeight: 700,
+            color: accent,
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em',
+          }}
+        >
+          Action · {commandName}
+        </span>
+        {argsLine && (
+          <span
+            className="mono"
+            title={argsLine}
+            style={{
+              fontSize: 11,
+              color: 'var(--color-text-dim)',
+              maxWidth: 240,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {argsLine}
+          </span>
+        )}
+        <span style={{ flex: 1 }} />
+        <button
+          type="button"
+          aria-label="Dismiss"
+          onClick={onDismiss}
+          className="btn-icon"
+          style={{
+            width: 24,
+            height: 24,
+            borderRadius: 6,
+            color: 'var(--color-text-dim)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Icon name="x" size={12} />
+        </button>
+      </header>
+      {text.trim() && (
+        <div style={{ padding: '12px 14px', fontSize: 13.5 }}>
+          {tone === 'error' ? (
+            <pre
+              className="mono"
+              style={{
+                margin: 0,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                color: 'var(--color-red)',
+                fontSize: 12,
+              }}
+            >
+              {text}
+            </pre>
+          ) : (
+            <MarkdownBody text={text} />
+          )}
+        </div>
+      )}
+    </article>
+  );
 }
 
 function UserBlock({ text }: { readonly text: string }): JSX.Element {

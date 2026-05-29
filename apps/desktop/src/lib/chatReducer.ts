@@ -31,6 +31,19 @@ export type Block =
    *  under one SkillGroupView. Rendered as a fallback compact system
    *  note when the grouping logic can't pair it with anything. */
   | { kind: 'skill_marker'; id: string; name: string; reason: string }
+  /** Output of a slash command (`session.runCommand`). Distinct from
+   *  `system` so the view can render it in a bordered card with a
+   *  dismiss control. */
+  | {
+      kind: 'action_result';
+      id: string;
+      commandName: string;
+      argsLine: string;
+      tone: 'info' | 'error' | 'notice';
+      /** Markdown body for `text` / `notice` kinds; raw message for
+       *  errors. Empty when the command was a noop or pure side-effect. */
+      text: string;
+    }
   | { kind: 'system'; id: string; text: string; tone: 'info' | 'error' };
 
 export interface ChatState {
@@ -56,10 +69,16 @@ export type ChatAction =
   | { type: 'send_started'; turnId: string; prompt: string }
   | { type: 'send_failed'; message: string }
   | { type: 'turn_complete'; turnId: string; error: string | null }
-  /** Surface the result of a slash command (text / error / notice)
-   *  alongside the user's command line as system blocks. */
-  | { type: 'command_invoked'; commandLine: string }
-  | { type: 'command_result'; text: string; tone: 'info' | 'error' }
+  /** Bordered result card for a slash command (text / error / notice). */
+  | {
+      type: 'action_result';
+      commandName: string;
+      argsLine: string;
+      tone: 'info' | 'error' | 'notice';
+      text: string;
+    }
+  /** Pop a block out of the transcript (dismiss button on the card). */
+  | { type: 'dismiss_block'; blockId: string }
   | { type: 'clear' };
 
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
@@ -83,26 +102,22 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     }
     case 'send_failed':
       return { ...state, sending: false, error: action.message };
-    case 'command_invoked': {
-      // Render the command line as a user-style block so the chat
-      // shows what was run. Mono-ish styling happens in the view.
+    case 'action_result': {
       const block: Block = {
-        kind: 'user',
-        id: `u-${state.seq}`,
-        text: action.commandLine,
-      };
-      return { ...state, blocks: [...state.blocks, block], seq: state.seq + 1 };
-    }
-    case 'command_result': {
-      if (!action.text.trim()) return state;
-      const block: Block = {
-        kind: 'system',
-        id: `s-${state.seq}`,
-        text: action.text,
+        kind: 'action_result',
+        id: `act-${state.seq}`,
+        commandName: action.commandName,
+        argsLine: action.argsLine,
         tone: action.tone,
+        text: action.text,
       };
       return { ...state, blocks: [...state.blocks, block], seq: state.seq + 1 };
     }
+    case 'dismiss_block':
+      return {
+        ...state,
+        blocks: state.blocks.filter((b) => b.id !== action.blockId),
+      };
     case 'turn_complete': {
       const next = closeStreamingAssistant(state.blocks);
       return {

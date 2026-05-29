@@ -130,7 +130,7 @@ export function ChatSurface({
       {chat.blocks.length === 0 ? (
         <EmptyState ready={ready} />
       ) : (
-        <Transcript blocks={filteredBlocks} sending={chat.sending} />
+        <Transcript blocks={filteredBlocks} sending={chat.sending} workspaceId={workspaceId} />
       )}
       {ready && !chat.sending && chat.blocks.length > 0 && (
         <SuggestedActions

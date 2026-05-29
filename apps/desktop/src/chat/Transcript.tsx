@@ -5,6 +5,13 @@ import { ToolGroupView } from './ToolGroupView';
 import { SkillGroupView } from './SkillGroupView';
 import { ThinkingIndicator } from './ThinkingIndicator';
 
+interface TranscriptProps {
+  readonly blocks: ReadonlyArray<Block>;
+  readonly sending?: boolean;
+  /** Forwarded into BlockView for the action_result dismiss control. */
+  readonly workspaceId?: string;
+}
+
 type ToolBlock = Extract<Block, { kind: 'tool' }>;
 type SkillMarker = Extract<Block, { kind: 'skill_marker' }>;
 
@@ -109,16 +116,7 @@ function groupBlocks(blocks: ReadonlyArray<Block>): RenderItem[] {
   return out;
 }
 
-export function Transcript({
-  blocks,
-  sending,
-}: {
-  readonly blocks: ReadonlyArray<Block>;
-  /** True while a turn is in flight (between runTurn and turn.complete).
-   *  Drives the "thinking" indicator that fills the gap before the
-   *  first assistant_chunk arrives. */
-  readonly sending?: boolean;
-}): JSX.Element {
+export function Transcript({ blocks, sending, workspaceId }: TranscriptProps): JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
   const follow = useRef(true);
   const streamLen = blocks
@@ -169,7 +167,9 @@ export function Transcript({
             />
           );
         }
-        return <BlockView key={item.key} block={item.block} />;
+        return (
+          <BlockView key={item.key} block={item.block} workspaceId={workspaceId} />
+        );
       })}
       {sending && shouldShowThinking(blocks) && <ThinkingIndicator />}
     </div>
