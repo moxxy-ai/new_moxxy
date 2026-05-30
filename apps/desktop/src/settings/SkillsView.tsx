@@ -370,7 +370,7 @@ function SkillGallery({
             <button
               key={skill.name}
               type="button"
-              className="row-button"
+              className="skill-card"
               onClick={() => onPick(skill.name)}
               style={{
                 textAlign: 'left',
@@ -384,7 +384,7 @@ function SkillGallery({
                 borderRadius: 14,
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                 <span
                   aria-hidden
                   style={{
@@ -416,7 +416,11 @@ function SkillGallery({
                 >
                   {skill.name.replace(/\.md$/, '')}
                 </span>
-                <Icon name="chevron-right" size={15} style={{ color: 'var(--color-text-dim)' }} />
+                <Icon
+                  name="chevron-right"
+                  size={15}
+                  style={{ color: 'var(--color-text-dim)', flexShrink: 0 }}
+                />
               </div>
               <p
                 style={{
@@ -822,35 +826,11 @@ function GenerateSkillModal({
             }}
           />
         </label>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 11.5, color: 'var(--color-text-dim)' }}>
-            {workspaceId
-              ? 'Generated privately — it stays here in the editor and never shows in the chat.'
-              : 'No active workspace — open one before generating.'}
-          </span>
-          <button
-            type="button"
-            onClick={() => void onGenerate()}
-            disabled={!workspaceId || !description.trim() || phase === 'streaming'}
-            className="btn-cta"
-            style={{
-              padding: '8px 14px',
-              fontSize: 13,
-              fontWeight: 600,
-              color: '#fff',
-              background: 'var(--grad-cta)',
-              borderRadius: 10,
-              opacity:
-                !workspaceId || !description.trim() || phase === 'streaming' ? 0.5 : 1,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-            }}
-          >
-            <Icon name="spark" size={14} />
-            {phase === 'streaming' ? 'Generating…' : 'Generate'}
-          </button>
-        </div>
+        <span style={{ fontSize: 11.5, color: 'var(--color-text-dim)' }}>
+          {workspaceId
+            ? 'Generated privately — it stays here in the editor and never shows in the chat.'
+            : 'No active workspace — open one before generating.'}
+        </span>
         {(phase === 'streaming' || phase === 'done' || phase === 'error') && (
           <section
             style={{
@@ -916,23 +896,40 @@ function GenerateSkillModal({
           >
             Cancel
           </button>
-          <button
-            type="button"
-            onClick={() => onUseGenerated(generated)}
-            disabled={phase !== 'done' || !generated.trim()}
-            className="btn-cta"
-            style={{
-              padding: '8px 14px',
-              fontSize: 13,
-              fontWeight: 600,
-              color: '#fff',
-              background: 'var(--grad-cta)',
-              borderRadius: 10,
-              opacity: phase === 'done' && generated.trim() ? 1 : 0.5,
-            }}
-          >
-            Use this skill
-          </button>
+          {(() => {
+            // One primary action that morphs by phase: Generate → Generating…
+            // → Use this skill (shown in the same spot once a draft exists).
+            const ready = phase === 'done' && generated.trim().length > 0;
+            const canGenerate = !!workspaceId && description.trim().length > 0;
+            const disabled = phase === 'streaming' || (!ready && !canGenerate);
+            return (
+              <button
+                type="button"
+                onClick={ready ? () => onUseGenerated(generated) : () => void onGenerate()}
+                disabled={disabled}
+                className="btn-cta"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '8px 16px',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: '#fff',
+                  background: 'var(--grad-cta)',
+                  borderRadius: 10,
+                  opacity: disabled ? 0.5 : 1,
+                }}
+              >
+                <Icon name={ready ? 'check' : 'spark'} size={14} />
+                {phase === 'streaming'
+                  ? 'Generating…'
+                  : ready
+                    ? 'Use this skill'
+                    : 'Generate'}
+              </button>
+            );
+          })()}
         </footer>
       </div>
     </Modal>
