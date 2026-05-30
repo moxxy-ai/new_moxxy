@@ -60,6 +60,8 @@
   "build": {
     "appId": "ai.moxxy.desktop",
     "productName": "MoxxyAI Workspaces",
+    "executableName": "moxxy-desktop",
+    "afterPack": "build/after-pack.cjs",
     "directories": {
       "output": "release"
     },
@@ -86,7 +88,9 @@
       ],
       "category": "Utility",
       "maintainer": "MoxxyAI <noreply@moxxy.ai>",
-      "icon": "public/logo.png"
+      "icon": "public/logo.png",
+      "packageName": "moxxy-desktop",
+      "artifactName": "moxxy-desktop-${version}-${arch}.${ext}"
     },
     "win": {
       "target": "nsis",

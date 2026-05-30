@@ -136,6 +136,19 @@ jobs:
           body: |
             MoxxyAI Workspaces desktop build.
 
-            **Unsigned** — macOS Gatekeeper and Windows SmartScreen will warn on
-            first launch (right-click → Open on macOS; "More info → Run anyway"
-            on Windows). Signed builds will follow once signing secrets are set.
+            **Unsigned (ad-hoc signed only)** — these builds are not notarized,
+            so Gatekeeper / SmartScreen will warn on first launch.
+
+            **macOS:** right-click the app → **Open**, then confirm. If macOS
+            still says the app "is damaged" or "can't be opened", clear the
+            download quarantine and launch:
+
+            ```sh
+            xattr -dr com.apple.quarantine "/Applications/MoxxyAI Workspaces.app"
+            ```
+
+            **Windows:** "More info → Run anyway" on the SmartScreen prompt.
+
+            A clean, prompt-free install needs a Developer ID certificate +
+            notarization (set the signing secrets and drop
+            `CSC_IDENTITY_AUTO_DISCOVERY=false`).
