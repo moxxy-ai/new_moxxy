@@ -8,9 +8,15 @@
  * effectively ignored. This reads the file in the main process and builds the
  * correct attachment — images as `image`, everything text-like as `file` —
  * skipping anything binary, oversized, or unreadable.
+ *
+ * It also owns {@link persistImageBlob}: pasted/dropped images arrive as raw
+ * bytes (no path), so we stash them in a temp file and hand back a path the
+ * same {@link buildAttachments} pipeline can read on the next turn.
  */
 
-import { readFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { mkdir, readFile, readdir, stat, unlink, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import type { UserPromptAttachment } from '@moxxy/sdk';
 
@@ -56,4 +62,69 @@ export async function buildAttachments(
     }
   }
   return out;
+}
+
+/** MIME type → file extension for the image blobs we accept on paste. */
+const IMAGE_EXTENSIONS: Readonly<Record<string, string>> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/gif': 'gif',
+  'image/webp': 'webp',
+  'image/bmp': 'bmp',
+};
+
+/** Where pasted/dropped image blobs land before a turn reads them. */
+const ATTACHMENT_TMP_DIR = path.join(os.tmpdir(), 'moxxy-attachments');
+/** Sweep temp attachments older than this so pastes don't accumulate. */
+const ATTACHMENT_TTL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Persist a base64 image blob the renderer pasted or dropped (it can't touch
+ * the filesystem) to a temp file, returning a `{ path, name }` the existing
+ * attachment pipeline ships unchanged. Throws if the blob isn't an accepted
+ * image type or exceeds {@link MAX_IMAGE_BYTES} — the renderer surfaces the
+ * message as a transient notice.
+ */
+export async function persistImageBlob(
+  dataBase64: string,
+  mediaType: string,
+  name?: string,
+): Promise<{ path: string; name: string }> {
+  const ext = IMAGE_EXTENSIONS[mediaType.toLowerCase()];
+  if (!ext) throw new Error(`Can't attach ${mediaType || 'this'} — only images can be pasted.`);
+  const buf = Buffer.from(dataBase64, 'base64');
+  if (buf.byteLength === 0) throw new Error('Pasted image was empty.');
+  if (buf.byteLength > MAX_IMAGE_BYTES) {
+    throw new Error(
+      `Image is too large to attach (max ${Math.round(MAX_IMAGE_BYTES / (1024 * 1024))} MB).`,
+    );
+  }
+  await mkdir(ATTACHMENT_TMP_DIR, { recursive: true });
+  void pruneOldAttachments();
+  const filePath = path.join(ATTACHMENT_TMP_DIR, `${randomUUID()}.${ext}`);
+  await writeFile(filePath, buf);
+  const display = name && name.trim().length > 0 ? name : `pasted-image.${ext}`;
+  return { path: filePath, name: display };
+}
+
+/** Best-effort sweep of stale temp attachments. Never throws — a failed
+ *  prune just means the next save tries again. */
+async function pruneOldAttachments(): Promise<void> {
+  try {
+    const now = Date.now();
+    const entries = await readdir(ATTACHMENT_TMP_DIR);
+    await Promise.all(
+      entries.map(async (entry) => {
+        const full = path.join(ATTACHMENT_TMP_DIR, entry);
+        try {
+          const info = await stat(full);
+          if (now - info.mtimeMs > ATTACHMENT_TTL_MS) await unlink(full);
+        } catch {
+          /* already gone / racing another sweep */
+        }
+      }),
+    );
+  } catch {
+    /* dir missing or unreadable — nothing to prune */
+  }
 }

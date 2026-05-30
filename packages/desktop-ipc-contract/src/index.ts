@@ -355,6 +355,18 @@ export interface IpcCommands {
   /** Open a native file picker and return the absolute path the user
    *  chose. Null when cancelled. */
   'session.pickAttachment': () => Promise<string | null>;
+  /** Persist a pasted/dropped image blob (the renderer can't write
+   *  files) to a temp file the agent can read, and return it as a
+   *  {@link PromptAttachment} ready to ship on the next turn. Rejects
+   *  if the image exceeds the attachment size cap. */
+  'session.saveImageAttachment': (args: {
+    /** Base64-encoded image bytes (no `data:` prefix). */
+    dataBase64: string;
+    /** MIME type from the clipboard blob, e.g. `image/png`. */
+    mediaType: string;
+    /** Optional source filename; a friendly default is used otherwise. */
+    name?: string;
+  }) => Promise<PromptAttachment>;
 
   // ---- Workspace filesystem browsing ------------------------------------
   /** List one directory inside the workspace's cwd. Relative paths

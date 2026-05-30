@@ -16,6 +16,7 @@
 import { dialog, BrowserWindow as BrowserWindowApi } from 'electron';
 
 import type { RunnerPool } from '../runner-pool';
+import { persistImageBlob } from '../attachments.js';
 import {
   drivers,
   getInProcessPlugins,
@@ -134,4 +135,10 @@ export function registerSessionHandlers(pool: RunnerPool): void {
     if (result.canceled || result.filePaths.length === 0) return null;
     return result.filePaths[0]!;
   });
+  handle('session.saveImageAttachment', async ({ dataBase64, mediaType, name }) =>
+    // The renderer can't write files, so a pasted/dropped image's bytes
+    // are stashed to a temp file here; the returned path then rides the
+    // same attachment pipeline as a picked file.
+    persistImageBlob(dataBase64, mediaType, name),
+  );
 }

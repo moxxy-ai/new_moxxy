@@ -1,8 +1,10 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
+  type ClipboardEvent,
   type KeyboardEvent,
 } from 'react';
 import { Icon } from '@/lib/Icon';
@@ -18,10 +20,35 @@ import { ToolChip } from './composer/ToolChip';
 import { QueuedChip } from './composer/QueuedChip';
 import { AttachmentChip } from './composer/AttachmentChip';
 import { sendBtn } from './composer/composer-styles';
+import { toErrorMessage } from '@/lib/errors';
 
 interface ComposerAttachment {
   readonly path: string;
   readonly name: string;
+}
+
+/** Past this height the composer textarea stops growing and scrolls
+ *  internally (≈ 8 lines at the composer's font/line metrics). */
+const MAX_TEXTAREA_HEIGHT = 190;
+
+/** Read a Blob/File as base64 (no `data:` prefix) so image bytes can
+ *  ride across IPC. FileReader streams large blobs without the
+ *  binary-string pitfalls of `btoa(String.fromCharCode(...))`. */
+function fileToBase64(file: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error ?? new Error('read failed'));
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== 'string') {
+        reject(new Error('unexpected FileReader result'));
+        return;
+      }
+      const comma = result.indexOf(',');
+      resolve(comma >= 0 ? result.slice(comma + 1) : result);
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 interface ComposerProps {
@@ -50,6 +77,10 @@ interface ComposerProps {
  * Tooling chips: Attach (file picker → appends a file: reference to
  * the draft) and Voice (push-to-record with MediaRecorder, transcribed
  * via the runner's active transcriber — disabled if none is set).
+ *
+ * Pasting an image (e.g. a screenshot) attaches it: the bytes are
+ * persisted to a temp file by the main process and added as a regular
+ * attachment chip. The textarea also auto-grows to fit the draft.
  */
 export function Composer({
   ready,
@@ -63,6 +94,9 @@ export function Composer({
   const [draft, setDraft] = useState('');
   const [hasTranscriber, setHasTranscriber] = useState(false);
   const [noTranscriberMsg, setNoTranscriberMsg] = useState<string | null>(null);
+  /** Transient error surfaced under the composer when a pasted image
+   *  can't be attached (too large / unreadable). */
+  const [attachError, setAttachError] = useState<string | null>(null);
   const voice = useVoiceRecorder({
     onTranscript: (t) => setDraft((d) => (d ? `${d.trimEnd()} ${t}` : t)),
   });
@@ -120,12 +154,61 @@ export function Composer({
     };
   }, [ready]);
 
+  // Auto-grow: size the textarea to its content so the composer
+  // expands as the draft gains lines — whether from a Shift+Enter
+  // newline or a long line soft-wrapping. Reset to 'auto' before
+  // measuring so it also shrinks back when the draft is cleared or
+  // trimmed. Capped at MAX_TEXTAREA_HEIGHT, past which it scrolls.
+  useLayoutEffect(() => {
+    const ta = taRef.current;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    ta.style.height = `${Math.min(MAX_TEXTAREA_HEIGHT, ta.scrollHeight)}px`;
+  }, [draft]);
+
   const submit = useCallback(() => {
     if (!canSubmit) return;
     onSend(draft, attachments.length > 0 ? attachments : undefined);
     setDraft('');
     setAttachments([]);
   }, [canSubmit, draft, attachments, onSend]);
+
+  /** Persist a pasted/dropped image blob to a temp file via the main
+   *  process, then add the returned path as a regular attachment so it
+   *  rides the same send pipeline as picked files. */
+  const attachImageFile = useCallback(async (file: File): Promise<void> => {
+    try {
+      const dataBase64 = await fileToBase64(file);
+      const att = await api().invoke('session.saveImageAttachment', {
+        dataBase64,
+        mediaType: file.type,
+        ...(file.name ? { name: file.name } : {}),
+      });
+      addAttachment(att);
+      taRef.current?.focus();
+    } catch (err) {
+      setAttachError(toErrorMessage(err));
+      window.setTimeout(() => setAttachError(null), 3000);
+    }
+  }, []);
+
+  const onPaste = useCallback(
+    (e: ClipboardEvent<HTMLTextAreaElement>): void => {
+      // Grab image blobs off the clipboard (screenshots, copied images).
+      // If there are none, fall through to the browser's default paste so
+      // text keeps working untouched.
+      const images = Array.from(e.clipboardData.items).filter(
+        (it) => it.kind === 'file' && it.type.startsWith('image/'),
+      );
+      if (images.length === 0) return;
+      e.preventDefault();
+      for (const item of images) {
+        const file = item.getAsFile();
+        if (file) void attachImageFile(file);
+      }
+    },
+    [attachImageFile],
+  );
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): void => {
     // Enter alone submits; Shift+Enter inserts a newline (the browser
@@ -249,6 +332,7 @@ export function Composer({
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={onKeyDown}
+        onPaste={onPaste}
         placeholder={
           compacting
             ? 'Compacting context…'
@@ -259,10 +343,12 @@ export function Composer({
                 : 'Waiting for runner…'
         }
         disabled={!ready || compacting}
-        rows={Math.min(8, Math.max(1, draft.split('\n').length))}
+        rows={1}
         style={{
           width: '100%',
           resize: 'none',
+          maxHeight: MAX_TEXTAREA_HEIGHT,
+          overflowY: 'auto',
           padding: '4px 6px 6px',
           fontSize: 14.5,
           lineHeight: 1.55,
@@ -329,7 +415,7 @@ export function Composer({
           </button>
         )}
       </div>
-      {(voice.errorReason ?? noTranscriberMsg) && (
+      {(voice.errorReason ?? noTranscriberMsg ?? attachError) && (
         <p
           role="status"
           style={{
@@ -339,7 +425,7 @@ export function Composer({
             color: 'var(--color-red)',
           }}
         >
-          {voice.errorReason ?? noTranscriberMsg}
+          {voice.errorReason ?? noTranscriberMsg ?? attachError}
         </p>
       )}
       {actionsOpen && (
