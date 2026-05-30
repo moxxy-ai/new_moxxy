@@ -142,6 +142,26 @@ export class RunnerSupervisor extends EventEmitter {
     this.retryNotify();
   }
 
+  /** Tear down the current runner (if any) and loop back to re-resolve
+   *  the CLI + respawn — used after the CLI is updated so the new
+   *  binary is picked up immediately, without a relaunch. */
+  async restart(): Promise<void> {
+    if (this.session) {
+      const s = this.session;
+      this.session = null;
+      try {
+        await s.close();
+      } catch {
+        /* ignore */
+      }
+    }
+    if (this.child) {
+      this.child.kill();
+      this.child = null;
+    }
+    this.forceRetry();
+  }
+
   /** Run the supervision loop. Returns immediately; the loop runs
    *  in the background for the lifetime of the process. */
   async run(): Promise<void> {

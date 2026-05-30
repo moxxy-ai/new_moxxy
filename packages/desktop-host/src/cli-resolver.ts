@@ -28,6 +28,28 @@ export interface ResolveOptions {
   readonly extraPaths?: ReadonlyArray<string>;
 }
 
+/**
+ * The `dist/bin.js` path the desktop should run, preferring a writable,
+ * user-updated copy under `<userDataDir>/cli` over the read-only one
+ * bundled in resources. Mirrors the preference order the Electron main's
+ * boot block applies to `MOXXY_CLI_ENTRY`, factored out so the in-app
+ * "Update CLI" action can re-point at the freshly-installed copy without
+ * duplicating the path logic. Returns null when neither exists.
+ */
+export function preferredCliEntry(userDataDir: string, resourcesPath: string): string | null {
+  const updatedCli = path.join(
+    userDataDir,
+    'cli',
+    'node_modules',
+    '@moxxy',
+    'cli',
+    'dist',
+    'bin.js',
+  );
+  const bundledCli = path.join(resourcesPath, 'moxxy-cli', 'dist', 'bin.js');
+  return [updatedCli, bundledCli].find((p) => existsSync(p)) ?? null;
+}
+
 export function resolveMoxxyCli(opts: ResolveOptions = {}): CliInvocation | null {
   const envEntry = process.env.MOXXY_CLI_ENTRY;
   if (envEntry && isReadableFile(envEntry)) {

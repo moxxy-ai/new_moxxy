@@ -266,6 +266,16 @@ export interface IpcCommands {
    *  resolution loop. */
   'connection.retry': (args?: { workspaceId?: string }) => Promise<void>;
 
+  /** Version + on-disk path of the moxxy CLI the desktop is currently
+   *  running. Either field may be null if it can't be resolved. */
+  'app.cliInfo': () => Promise<{ version: string | null; path: string | null }>;
+  /** Install the latest published `@moxxy/cli` into the writable
+   *  userData copy, then restart every runner so the new binary is
+   *  used immediately. Streams npm output via
+   *  `onboarding.install.progress`. Returns the exit code (0 = ok) and
+   *  the post-update version. */
+  'app.updateCli': () => Promise<{ code: number; version: string | null }>;
+
   'onboarding.status': () => Promise<OnboardingStatus>;
   /** Probe Node.js — used by the first wizard step before we offer
    *  the install. */
