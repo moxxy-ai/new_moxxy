@@ -12,6 +12,7 @@
  * land.
  */
 
+import { useState } from 'react';
 import { useDesks } from '@/lib/useDesks';
 import { Icon } from '@/lib/Icon';
 import { WorkspaceFiles } from './WorkspaceFiles';
@@ -34,6 +35,8 @@ interface Props {
 export function ContextRail({ onClose, open, workspaceId }: Props): JSX.Element {
   const desks = useDesks();
   const active = desks.desks.find((d) => d.id === workspaceId);
+  // Bumping this re-reads the file tree (the button next to the FILES heading).
+  const [filesReload, setFilesReload] = useState(0);
 
   return (
     <section
@@ -63,9 +66,33 @@ export function ContextRail({ onClose, open, workspaceId }: Props): JSX.Element 
 
       <Divider />
 
-      <Section title="Files">
+      <Section
+        title="Files"
+        action={
+          active ? (
+            <button
+              type="button"
+              className="btn-icon"
+              aria-label="Reload files"
+              title="Reload files"
+              onClick={() => setFilesReload((k) => k + 1)}
+              style={{
+                width: 22,
+                height: 22,
+                borderRadius: 6,
+                color: 'var(--color-text-dim)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Icon name="rotate" size={13} />
+            </button>
+          ) : undefined
+        }
+      >
         {active ? (
-          <WorkspaceFiles workspaceId={active.id} />
+          <WorkspaceFiles workspaceId={active.id} reloadSignal={filesReload} />
         ) : (
           <div style={{ fontSize: 11.5, color: 'var(--color-text-dim)' }}>
             Pick a workspace to browse its files.
@@ -120,15 +147,20 @@ function Header({ onClose }: { readonly onClose: () => void }): JSX.Element {
 
 function Section({
   title,
+  action,
   children,
 }: {
   readonly title: string;
+  readonly action?: React.ReactNode;
   readonly children: React.ReactNode;
 }): JSX.Element {
   return (
     <section style={{ padding: '14px 16px 16px' }}>
       <header
         style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
           fontSize: 10.5,
           fontWeight: 700,
           color: 'var(--color-text-dim)',
@@ -137,7 +169,13 @@ function Section({
           marginBottom: 10,
         }}
       >
-        {title}
+        <span>{title}</span>
+        {action && (
+          <>
+            <span style={{ flex: 1 }} />
+            {action}
+          </>
+        )}
       </header>
       {children}
     </section>

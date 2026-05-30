@@ -49,8 +49,12 @@ export function emitInsertPath(detail: FileInsertDetail): void {
 
 export function WorkspaceFiles({
   workspaceId,
+  reloadSignal = 0,
 }: {
   readonly workspaceId: string;
+  /** Increment to re-read the root + every expanded folder (the rail's
+   *  reload button) — picks up files the agent wrote / the user added. */
+  readonly reloadSignal?: number;
 }): JSX.Element {
   const [cwd, setCwd] = useState<string | null>(null);
   const [nodes, setNodes] = useState<Record<string, DirNode>>({});
@@ -107,6 +111,17 @@ export function WorkspaceFiles({
     void load('.');
   }, [workspaceId, load]);
 
+  // Re-read the root + currently-expanded folders when the rail asks for a
+  // reload. `reloadSignal === 0` is the initial value, already covered above.
+  useEffect(() => {
+    if (reloadSignal === 0) return;
+    void load('.');
+    setExpanded((cur) => {
+      for (const p of cur) if (p !== '.') void load(p);
+      return cur;
+    });
+  }, [reloadSignal, load]);
+
   const toggle = (relPath: string): void => {
     setExpanded((cur) => {
       const next = new Set(cur);
@@ -120,36 +135,8 @@ export function WorkspaceFiles({
     });
   };
 
-  // Reload the root + every expanded folder — picks up files the agent
-  // wrote or the user added since the tree was first read.
-  const refresh = (): void => {
-    void load('.');
-    for (const p of expanded) if (p !== '.') void load(p);
-  };
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <button
-        type="button"
-        onClick={refresh}
-        title="Reload files"
-        style={{
-          alignSelf: 'flex-end',
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 5,
-          padding: '3px 8px',
-          marginBottom: 2,
-          fontSize: 11,
-          color: 'var(--color-text-dim)',
-          border: '1px solid var(--color-card-border)',
-          borderRadius: 7,
-          background: '#fff',
-        }}
-      >
-        <Icon name="rotate" size={12} />
-        Reload
-      </button>
       <DirRow
         path="."
         level={0}

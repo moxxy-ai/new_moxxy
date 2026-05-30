@@ -207,14 +207,18 @@ function McpTab({
                 srv.connected
                   ? 'Connected · tools attached'
                   : srv.enabled
-                    ? 'Enabled · connecting…'
+                    ? 'Enabled · not attached'
                     : 'Detached'
               }
               trailing={
+                // The toggle reflects the LIVE attach state, not the persisted
+                // `enabled` flag: detach only clears `connected`, so a switch
+                // bound to `enabled` would stay on after disabling. On →
+                // enableAndAttach, off → detach.
                 <Switch
-                  on={srv.enabled}
-                  label={`${srv.enabled ? 'Disable' : 'Enable'} ${srv.name}`}
-                  onClick={() => void onToggle(srv.name, !srv.enabled)}
+                  on={srv.connected}
+                  label={`${srv.connected ? 'Disable' : 'Enable'} ${srv.name}`}
+                  onClick={() => void onToggle(srv.name, !srv.connected)}
                 />
               }
             />
