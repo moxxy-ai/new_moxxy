@@ -9,8 +9,7 @@ import { ChatStoreBridge } from './lib/useChat';
 import { chatStore } from './lib/chatStore';
 import { usePrefs } from './lib/usePrefs';
 import { ConnectionScreen } from './connection/ConnectionScreen';
-import { OnboardingWizard } from './onboarding/OnboardingWizard';
-import { FirstRunWizard } from './onboarding/FirstRunWizard';
+import { Onboarding } from './onboarding/Onboarding';
 import { ChatSurface } from './chat/ChatSurface';
 import { WorkspaceSidebar, type View } from './shell/WorkspaceSidebar';
 import { ContextRail } from './shell/ContextRail';
@@ -70,7 +69,7 @@ export function App(): JSX.Element {
       <>
         <ConnectionBridge />
         <ChatStoreBridge />
-        <FirstRunWizard onComplete={() => setJustFinishedOnboarding(true)} />
+        <Onboarding onComplete={() => setJustFinishedOnboarding(true)} />
       </>
     );
   }
@@ -96,11 +95,11 @@ export function App(): JSX.Element {
       <>
         <ConnectionBridge />
         <ChatStoreBridge />
-        <OnboardingWizard
+        <Onboarding
           phase={phase}
-          // Nothing to do on completion: finishing the wizard (CLI
+          // Nothing to do on completion: finishing the recovery gate (CLI
           // installed / provider added) flips the connection phase, which
-          // re-renders this gate and drops the wizard on its own.
+          // re-renders this gate and drops it on its own.
           onComplete={() => undefined}
         />
       </>

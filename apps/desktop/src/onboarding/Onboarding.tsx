@@ -26,51 +26,158 @@ import { SignedIn, SignedOut, SignIn, useUser } from '@clerk/clerk-react';
 import { api } from '@/lib/api';
 import { usePrefs } from '@/lib/usePrefs';
 import { useDesks } from '@/lib/useDesks';
+import { useOnboarding } from '@/lib/useOnboarding';
+import { useStepFlow, type FlowStep } from '@/lib/step-flow';
 import { Icon } from '@/lib/Icon';
-
-type StepId = 'welcome' | 'auth' | 'cli' | 'provider' | 'workspace' | 'done';
-
-const STEPS: ReadonlyArray<{ id: StepId; label: string }> = [
-  { id: 'welcome', label: 'Welcome' },
-  { id: 'auth', label: 'Sign in' },
-  { id: 'cli', label: 'Install moxxy' },
-  { id: 'provider', label: 'Pick a provider' },
-  { id: 'workspace', label: 'First workspace' },
-  { id: 'done', label: 'You\'re set' },
-];
+import type { ConnectionPhase } from '@moxxy/desktop-ipc-contract';
 
 interface Props {
+  readonly phase?: ConnectionPhase;
   readonly onComplete: () => void;
 }
 
 const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
 
-export function FirstRunWizard({ onComplete }: Props): JSX.Element {
-  const [step, setStep] = useState<StepId>('welcome');
+/**
+ * Gate context the onboarding steps are evaluated against. `full` is the
+ * first-run case (nothing set up yet); otherwise we're a recovery gate
+ * (the app is running but a prerequisite — CLI / provider / node — went
+ * missing), and only the unmet steps apply.
+ */
+interface OnboardingCtx {
+  readonly full: boolean;
+  readonly cliInstalled: boolean;
+  readonly hasProvider: boolean;
+  readonly nodeInstalled: boolean;
+  readonly nodeProbed: boolean;
+  readonly cliMissing: boolean;
+  readonly signedIn: boolean;
+  readonly clerkConfigured: boolean;
+}
 
-  const content = (
-    <Shell step={step}>
-      {step === 'welcome' && <WelcomeStep onNext={() => setStep('auth')} />}
-      {step === 'auth' && (
-        <AuthStep onNext={() => setStep('cli')} onBack={() => setStep('welcome')} />
-      )}
-      {step === 'cli' && (
-        <CliStep onNext={() => setStep('provider')} onBack={() => setStep('auth')} />
-      )}
-      {step === 'provider' && (
-        <ProviderStep onNext={() => setStep('workspace')} onBack={() => setStep('cli')} />
-      )}
-      {step === 'workspace' && (
-        <WorkspaceStep onNext={() => setStep('done')} onBack={() => setStep('provider')} />
-      )}
-      {step === 'done' && <DoneStep onComplete={onComplete} />}
+/**
+ * One declarative onboarding flow, gated per step. First-run walks every
+ * step linearly; the recovery gate auto-resolves to whichever prerequisite
+ * is missing. Both are the same list with different `applies`/`satisfied`
+ * predicates over the same {@link useStepFlow} engine.
+ */
+const ONBOARDING_STEPS: ReadonlyArray<FlowStep<OnboardingCtx>> = [
+  { id: 'welcome', label: 'Welcome', applies: (c) => c.full },
+  {
+    id: 'auth',
+    label: 'Sign in',
+    applies: (c) => c.full,
+    satisfied: (c) => c.signedIn || !c.clerkConfigured,
+  },
+  {
+    id: 'node',
+    label: 'Install Node',
+    applies: (c) => c.nodeProbed && !c.nodeInstalled,
+    satisfied: (c) => c.nodeInstalled,
+  },
+  {
+    id: 'cli',
+    label: 'Install moxxy',
+    applies: (c) => c.full || c.cliMissing,
+    satisfied: (c) => c.cliInstalled,
+  },
+  {
+    id: 'provider',
+    label: 'Pick a provider',
+    applies: (c) => c.full || !c.hasProvider,
+    satisfied: (c) => c.hasProvider,
+  },
+  { id: 'workspace', label: 'First workspace', applies: (c) => c.full },
+  { id: 'done', label: "You're set", applies: (c) => c.full },
+];
+
+/**
+ * Unified onboarding surface. Shown both on true first run (until
+ * `prefs.onboardingComplete`) and as a recovery gate (CLI/provider/node
+ * missing). One step list, gated per step — see {@link ONBOARDING_STEPS}.
+ */
+export function Onboarding({ phase, onComplete }: Props): JSX.Element {
+  const { prefs } = usePrefs();
+  const ob = useOnboarding(phase);
+  const { user } = useUser();
+
+  const ctx: OnboardingCtx = {
+    full: !(prefs?.onboardingComplete ?? false),
+    cliInstalled: ob.status?.cliInstalled ?? false,
+    hasProvider: ob.status?.hasProvider ?? false,
+    nodeInstalled: ob.node?.installed ?? false,
+    nodeProbed: ob.node !== null,
+    cliMissing: phase?.phase === 'cli-missing',
+    signedIn: !!user,
+    clerkConfigured: !!CLERK_KEY,
+  };
+  // First run = a linear walk; a recovery gate auto-resolves to the
+  // unmet prerequisite and closes itself once satisfied.
+  const flow = useStepFlow(ONBOARDING_STEPS, ctx, {
+    mode: ctx.full ? 'linear' : 'auto',
+    onComplete,
+  });
+
+  return (
+    <Shell steps={flow.steps} currentIndex={flow.index}>
+      {renderStep(flow.currentId, flow.next, flow.isFirst ? null : flow.back, onComplete)}
     </Shell>
   );
+}
 
-  // ClerkProvider lives at the very top of the tree (main.tsx) so any
-  // component can use Clerk hooks. The brandedClerkAppearance prop is
-  // forwarded via <SignIn appearance={…}/> in the auth step below.
-  return content;
+function renderStep(
+  id: string | null,
+  next: () => void,
+  back: (() => void) | null,
+  onComplete: () => void,
+): JSX.Element {
+  const onBack = back ?? ((): void => undefined);
+  switch (id) {
+    case 'welcome':
+      return <WelcomeStep onNext={next} />;
+    case 'auth':
+      return <AuthStep onNext={next} onBack={onBack} />;
+    case 'node':
+      return <NodeStep onNext={next} onBack={onBack} />;
+    case 'cli':
+      return <CliStep onNext={next} onBack={onBack} />;
+    case 'provider':
+      return <ProviderStep onNext={next} onBack={onBack} />;
+    case 'workspace':
+      return <WorkspaceStep onNext={next} onBack={onBack} />;
+    case 'done':
+      return <DoneStep onComplete={onComplete} />;
+    default:
+      return <></>;
+  }
+}
+
+/** Node.js prerequisite — only applies when Node isn't detected. */
+function NodeStep({
+  onNext,
+  onBack,
+}: {
+  readonly onNext: () => void;
+  readonly onBack: () => void;
+}): JSX.Element {
+  const ob = useOnboarding();
+  const installed = ob.node?.installed ?? false;
+  return (
+    <StepCard
+      title="Install Node.js"
+      sub="Node.js is the runtime moxxy is built on — a free download from nodejs.org. Install it, then re-check."
+    >
+      {installed && <SuccessRow text={`Node ${ob.node?.version ?? ''} detected`} />}
+      <PrimaryButton onClick={() => void ob.openExternal('https://nodejs.org/en/download')}>
+        Open nodejs.org
+      </PrimaryButton>
+      <Nav
+        onBack={onBack}
+        onNext={installed ? onNext : () => void ob.refresh()}
+        nextLabel={installed ? 'Continue' : 'Re-check'}
+      />
+    </StepCard>
+  );
 }
 
 /**
@@ -225,13 +332,15 @@ const brandedClerkAppearance = {
 // ---------- Shell ----------------------------------------------------------
 
 function Shell({
-  step,
+  steps,
+  currentIndex,
   children,
 }: {
-  readonly step: StepId;
+  readonly steps: ReadonlyArray<{ readonly id: string; readonly label: string }>;
+  readonly currentIndex: number;
   readonly children: React.ReactNode;
 }): JSX.Element {
-  const idx = STEPS.findIndex((s) => s.id === step);
+  const idx = currentIndex;
   return (
     <div
       style={{
@@ -292,7 +401,7 @@ function Shell({
             gap: 6,
           }}
         >
-          {STEPS.map((s, i) => {
+          {steps.map((s, i) => {
             const done = i < idx;
             const current = i === idx;
             return (
