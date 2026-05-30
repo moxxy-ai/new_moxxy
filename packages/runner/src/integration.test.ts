@@ -6,7 +6,7 @@
  */
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Session, autoAllowResolver, silentLogger } from '@moxxy/core';
 import {
   defineMode,
@@ -16,7 +16,13 @@ import {
   defineTranscriber,
   z,
 } from '@moxxy/sdk';
-import type { AssistantMessageEvent, CommandOutput } from '@moxxy/sdk';
+import type {
+  AssistantMessageEvent,
+  CommandOutput,
+  ScheduleCreateInput,
+  ScheduleUpdateInput,
+  SchedulerView,
+} from '@moxxy/sdk';
 import { FakeProvider, textReply, toolUseReply } from '@moxxy/testing';
 import { toolUseModePlugin } from '@moxxy/mode-tool-use';
 import { startRunnerServer, type RunnerServer } from './server.js';
@@ -224,6 +230,55 @@ describe('runner end-to-end', () => {
       session: remote,
     });
     expect(result).toEqual({ kind: 'text', text: 'pong' });
+  });
+
+  it('proxies scheduler reads and mutations to the runner session', async () => {
+    const { session, socketPath } = await serve(new FakeProvider({ script: [textReply('hi')] }));
+    const schedule = {
+      id: 'manual-1',
+      name: 'Morning brief',
+      prompt: 'Summarize the morning context.',
+      enabled: true,
+      source: 'manual' as const,
+      skillName: null,
+      workflowName: null,
+      cron: '0 9 * * *',
+      runAt: null,
+      timeZone: 'Europe/Warsaw',
+      channel: 'tui',
+      model: null,
+      createdAt: '2026-05-30T07:00:00.000Z',
+      lastRunAt: null,
+      lastResult: null,
+      lastError: null,
+      nextFireAt: 1_780_000_000_000,
+      nextFireIso: '2026-06-01T07:00:00.000Z',
+      editable: true,
+      runnable: true,
+    };
+    const scheduler: SchedulerView = {
+      list: vi.fn(async () => [schedule]),
+      create: vi.fn(async (input: ScheduleCreateInput) => ({ ...schedule, ...input, id: 'manual-created' })),
+      update: vi.fn(async (_id: string, input: ScheduleUpdateInput) => ({ ...schedule, ...input })),
+      setEnabled: vi.fn(async (_id: string, enabled: boolean) => ({ ...schedule, enabled })),
+      delete: vi.fn(async () => ({ ok: true })),
+      runNow: vi.fn(async () => ({ ok: true, text: 'queued for run', inboxPath: '/tmp/inbox.md' })),
+    };
+    session.scheduler = scheduler;
+
+    const remote = await attach(socketPath);
+
+    await expect(remote.scheduler.list({ source: 'all', includeDisabled: true })).resolves.toEqual([schedule]);
+    expect(scheduler.list).toHaveBeenCalledWith({ source: 'all', includeDisabled: true });
+
+    await expect(remote.scheduler.create({ name: 'Manual', prompt: 'Do it', cron: '0 9 * * *' })).resolves.toMatchObject({
+      id: 'manual-created',
+      name: 'Manual',
+    });
+    expect(scheduler.create).toHaveBeenCalledWith({ name: 'Manual', prompt: 'Do it', cron: '0 9 * * *' });
+
+    await expect(remote.scheduler.setEnabled('manual-1', false)).resolves.toMatchObject({ enabled: false });
+    await expect(remote.scheduler.runNow('manual-1')).resolves.toMatchObject({ ok: true, text: 'queued for run' });
   });
 
   it('broadcasts a turn started by one client to other attached clients', async () => {

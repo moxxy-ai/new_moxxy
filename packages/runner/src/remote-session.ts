@@ -24,6 +24,10 @@ import type {
   ProvidersClientView,
   RequirementsClientView,
   RunTurnOptions,
+  ScheduleCreateInput,
+  ScheduleListOptions,
+  SchedulerView,
+  ScheduleUpdateInput,
   SessionId,
   SessionInfo,
   SessionLogReader,
@@ -52,6 +56,12 @@ import {
   type InfoChangedNotification,
   type PermissionCheckParams,
   type RunTurnResult,
+  type SchedulerCreateResult,
+  type SchedulerDeleteResult,
+  type SchedulerListResult,
+  type SchedulerRunNowResult,
+  type SchedulerSetEnabledResult,
+  type SchedulerUpdateResult,
   type TurnCompleteNotification,
 } from './protocol.js';
 
@@ -137,6 +147,7 @@ export class RemoteSession implements ClientSession {
   readonly transcribers: TranscribersClientView;
   readonly requirements: RequirementsClientView;
   readonly permissions: PermissionsClientView;
+  readonly scheduler: SchedulerView;
   /**
    * Turns that completed before their `runTurn` stream was registered. A fast
    * turn can finish on the runner before the client processes the `runTurn`
@@ -199,6 +210,7 @@ export class RemoteSession implements ClientSession {
     this.transcribers = this.makeTranscribersView();
     this.requirements = { check: () => ({ ready: false, issues: [] }) };
     this.permissions = this.makePermissionsView();
+    this.scheduler = this.makeSchedulerView();
   }
 
   /**
@@ -431,6 +443,26 @@ export class RemoteSession implements ClientSession {
           })
           .catch(() => undefined);
       },
+    };
+  }
+
+  private makeSchedulerView(): SchedulerView {
+    return {
+      list: (options: ScheduleListOptions = {}) =>
+        this.peer.request<SchedulerListResult>(RunnerMethod.SchedulerList, options),
+      create: (input: ScheduleCreateInput) =>
+        this.peer.request<SchedulerCreateResult>(RunnerMethod.SchedulerCreate, input),
+      update: (id: string, input: ScheduleUpdateInput) =>
+        this.peer.request<SchedulerUpdateResult>(RunnerMethod.SchedulerUpdate, { id, input }),
+      setEnabled: (id: string, enabled: boolean) =>
+        this.peer.request<SchedulerSetEnabledResult>(RunnerMethod.SchedulerSetEnabled, {
+          id,
+          enabled,
+        }),
+      delete: (id: string) =>
+        this.peer.request<SchedulerDeleteResult>(RunnerMethod.SchedulerDelete, { id }),
+      runNow: (id: string) =>
+        this.peer.request<SchedulerRunNowResult>(RunnerMethod.SchedulerRunNow, { id }),
     };
   }
 }

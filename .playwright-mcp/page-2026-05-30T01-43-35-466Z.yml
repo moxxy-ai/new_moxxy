@@ -1,0 +1,701 @@
+- generic [ref=e3]:
+  - generic [ref=e6]:
+    - generic [ref=e7]: Soon
+    - 'link "virtual_office: the desktop app where you watch your agents work is on the way" [ref=e8] [cursor=pointer]':
+      - /url: /#desktop
+    - img [ref=e9]
+    - button "Dismiss banner" [ref=e11]:
+      - img [ref=e12]
+  - navigation [ref=e15]:
+    - generic [ref=e16]:
+      - link "moxxy moxxy" [ref=e17] [cursor=pointer]:
+        - /url: /
+        - img "moxxy" [ref=e18]
+        - generic [ref=e19]: moxxy
+      - generic [ref=e20]:
+        - link "Build" [ref=e21] [cursor=pointer]:
+          - /url: /#build
+        - link "Channels" [ref=e22] [cursor=pointer]:
+          - /url: /#channels
+        - link "Rooms" [ref=e23] [cursor=pointer]:
+          - /url: /#rooms
+        - link "Plugins" [ref=e24] [cursor=pointer]:
+          - /url: /#author
+        - link "Desktop new" [ref=e25] [cursor=pointer]:
+          - /url: /#desktop
+          - text: Desktop
+          - generic [ref=e26]: new
+      - generic [ref=e27]:
+        - link "Docs" [ref=e28] [cursor=pointer]:
+          - /url: https://docs.moxxy.ai
+          - img [ref=e29]
+          - text: Docs
+        - link "GitHub" [ref=e31] [cursor=pointer]:
+          - /url: https://github.com/moxxy-ai/new_moxxy
+          - img [ref=e32]
+          - text: GitHub
+  - generic [ref=e37]:
+    - generic [ref=e38]:
+      - generic [ref=e39]:
+        - generic [ref=e40]:
+          - generic [ref=e41]: ● open source
+          - generic [ref=e42]: self-hosted
+        - heading "A virtual office for your AI." [level=1] [ref=e43]:
+          - text: A virtual office
+          - text: for your AI.
+        - paragraph [ref=e44]: Meet moxxy, an assistant you assemble from blocks. Give every agent its own desk and a locked room to work in, then reach it from your terminal, Telegram, or the web. It all runs on your machine.
+        - generic [ref=e45]:
+          - link "Open your office" [ref=e46] [cursor=pointer]:
+            - /url: "#quickstart"
+            - text: Open your office
+            - img [ref=e47]
+          - button "npm install -g @moxxy/cli" [ref=e49] [cursor=pointer]:
+            - img [ref=e50]
+            - code [ref=e52]: npm install -g @moxxy/cli
+      - img "moxxy, your AI assistant, waving" [ref=e55]
+    - generic [ref=e56]: a peek at the floor · her team at work
+    - generic [ref=e60]:
+      - img [ref=e69]
+      - generic [ref=e85]:
+        - img [ref=e90]
+        - text: provider
+      - generic [ref=e106]:
+        - img [ref=e111]
+        - text: memory
+      - generic [ref=e120]:
+        - img [ref=e124]
+        - text: voice
+      - generic [ref=e127]:
+        - img [ref=e128]
+        - generic [ref=e146]:
+          - generic [ref=e147]: "> remind me 9am"
+          - generic [ref=e148]: ✓ scheduled
+          - generic [ref=e149]: "> reply▌"
+        - generic [ref=e157]: scheduler
+      - generic [ref=e158]:
+        - img [ref=e159]
+        - generic [ref=e177]:
+          - generic [ref=e178]: "research: arxiv"
+          - generic [ref=e179]: ↳ 12 sources
+          - generic [ref=e180]: ↳ synthesizing
+          - generic [ref=e181]:
+            - generic [ref=e182]: ●
+            - generic [ref=e183]: ●
+            - generic [ref=e184]: ●
+        - generic [ref=e192]: researcher
+      - generic [ref=e193]:
+        - img [ref=e194]
+        - generic [ref=e212]:
+          - generic [ref=e213]: "> build me a"
+          - generic [ref=e214]: dashboard
+          - generic [ref=e215]: ▣ present_view
+          - generic [ref=e216]: → localhost:7
+        - generic [ref=e224]: builder
+      - img [ref=e225]
+  - generic [ref=e233]:
+    - generic [ref=e234]:
+      - generic [ref=e235]:
+        - generic [ref=e236]:
+          - generic [ref=e237]: "01"
+          - generic [ref=e239]: Modular
+        - heading "Build a worker, one block at a time" [level=2] [ref=e240]
+        - paragraph [ref=e241]: "Provider, loop strategy, tools, memory, channels, skills: every block is a swappable plugin. Install a package, it snaps in and hot-reloads. Bring your own model, your own loop, your own tools."
+      - list [ref=e242]:
+        - listitem [ref=e243]:
+          - img [ref=e245]
+          - generic [ref=e248]: provider
+          - generic [ref=e249]: anthropic · openai · codex
+        - listitem [ref=e250]:
+          - img [ref=e252]
+          - generic [ref=e256]: loop
+          - generic [ref=e257]: tool-use · plan-execute · bmad
+        - listitem [ref=e258]:
+          - img [ref=e260]
+          - generic [ref=e262]: tools
+          - generic [ref=e263]: read · edit · bash · web · mcp
+        - listitem [ref=e264]:
+          - img [ref=e266]
+          - generic [ref=e274]: memory
+          - generic [ref=e275]: journal + vector recall
+        - listitem [ref=e276]:
+          - img [ref=e278]
+          - generic [ref=e280]: channels
+          - generic [ref=e281]: tui · telegram · http · web
+        - listitem [ref=e282]:
+          - img [ref=e284]
+          - generic [ref=e286]: skills
+          - generic [ref=e287]: markdown, self-authored
+      - generic [ref=e288]:
+        - img [ref=e289]
+        - text: Don't like a block?
+        - generic [ref=e294]: Pull it out, snap in another.
+    - generic [ref=e295]:
+      - img [ref=e297]
+      - generic [ref=e311]:
+        - generic [ref=e313]:
+          - img [ref=e319]
+          - text: provider
+        - generic [ref=e323]:
+          - img [ref=e329]
+          - text: loop
+        - generic [ref=e334]:
+          - img [ref=e340]
+          - text: tools
+        - generic [ref=e343]:
+          - img [ref=e349]
+          - text: memory
+        - generic [ref=e358]:
+          - img [ref=e364]
+          - text: channels
+        - generic [ref=e367]:
+          - img [ref=e373]
+          - text: skills
+      - generic [ref=e376]: one Session · many surfaces
+  - generic [ref=e378]:
+    - generic [ref=e379]:
+      - generic [ref=e380]:
+        - generic [ref=e381]: "02"
+        - generic [ref=e383]: Channels
+      - heading "Reach your agents through any door" [level=2] [ref=e384]
+      - paragraph [ref=e385]: One Session, many surfaces. The same agent answers from your terminal, your phone, an HTTP endpoint, or the web, all on the same shared memory.
+    - generic [ref=e386]:
+      - generic [ref=e387]:
+        - img [ref=e392]
+        - heading "Terminal" [level=3] [ref=e395]
+        - paragraph [ref=e396]: An interactive TUI right where you work.
+        - code [ref=e397]: $ moxxy
+      - generic [ref=e398]:
+        - img [ref=e403]
+        - heading "Telegram" [level=3] [ref=e407]
+        - paragraph [ref=e408]: Message it from your phone. Voice notes get transcribed.
+        - code [ref=e409]: $ moxxy telegram
+      - generic [ref=e410]:
+        - img [ref=e415]
+        - heading "HTTP" [level=3] [ref=e419]
+        - paragraph [ref=e420]: POST /v1/turn, JSON or SSE streaming, bearer auth.
+        - code [ref=e421]: $ moxxy channels http
+      - generic [ref=e422]:
+        - img [ref=e427]
+        - heading "Webhooks" [level=3] [ref=e432]
+        - paragraph [ref=e433]: Let any external system fire a prompt on a signed POST.
+        - code [ref=e434]: $ moxxy serve
+      - generic [ref=e435]:
+        - img [ref=e440]
+        - heading "Web" [level=3] [ref=e444]
+        - paragraph [ref=e445]: Agents build you a live web app and hand back a URL.
+        - code [ref=e446]: $ auto-attaches
+      - generic [ref=e447]:
+        - img [ref=e452]
+        - heading "Scheduler" [level=3] [ref=e456]
+        - paragraph [ref=e457]: Time-driven prompts on a cron or a one-shot timestamp.
+        - code [ref=e458]: $ moxxy schedule add
+  - generic [ref=e461]:
+    - generic [ref=e462]:
+      - generic [ref=e463]:
+        - generic [ref=e464]: "03"
+        - generic [ref=e466]: Isolation
+      - heading "Give every worker its own locked room" [level=2] [ref=e467]
+      - paragraph [ref=e468]: Opt-in capability sandboxing. A tool declares exactly what it needs, fs paths, hosts, env keys, time, memory, and an Isolator holds it to that. Start in-process; drop in worker, subprocess, or wasm walls without changing a line.
+    - generic [ref=e469]:
+      - generic [ref=e470]:
+        - generic [ref=e471]:
+          - generic [ref=e472]:
+            - img [ref=e473]
+            - generic [ref=e476]: researcher
+          - generic [ref=e477]: inproc
+        - img [ref=e483]
+        - generic [ref=e498]:
+          - generic [ref=e499]:
+            - img [ref=e500]
+            - generic [ref=e502]: fs
+            - generic [ref=e503]:
+              - img [ref=e504]
+              - text: read ./docs
+          - generic [ref=e506]:
+            - img [ref=e507]
+            - generic [ref=e511]: net
+            - generic [ref=e512]:
+              - img [ref=e513]
+              - text: arxiv.org
+          - generic [ref=e515]:
+            - img [ref=e516]
+            - generic [ref=e519]: time
+            - generic [ref=e520]:
+              - img [ref=e521]
+              - text: 30s
+      - generic [ref=e523]:
+        - generic [ref=e524]:
+          - generic [ref=e525]:
+            - img [ref=e526]
+            - generic [ref=e529]: builder
+          - generic [ref=e530]: worker
+        - img [ref=e536]
+        - generic [ref=e551]:
+          - generic [ref=e552]:
+            - img [ref=e553]
+            - generic [ref=e555]: fs
+            - generic [ref=e556]:
+              - img [ref=e557]
+              - text: ./project
+          - generic [ref=e559]:
+            - img [ref=e560]
+            - generic [ref=e563]: mem
+            - generic [ref=e564]:
+              - img [ref=e565]
+              - text: 256mb
+          - generic [ref=e567]:
+            - img [ref=e568]
+            - generic [ref=e572]: net
+            - generic [ref=e573]:
+              - img [ref=e574]
+              - text: denied
+      - generic [ref=e577]:
+        - generic [ref=e578]:
+          - generic [ref=e579]:
+            - img [ref=e580]
+            - generic [ref=e583]: ops
+          - generic [ref=e584]: subprocess
+        - img [ref=e590]
+        - generic [ref=e605]:
+          - generic [ref=e606]:
+            - img [ref=e607]
+            - generic [ref=e610]: env
+            - generic [ref=e611]:
+              - img [ref=e612]
+              - text: 1 key
+          - generic [ref=e614]:
+            - img [ref=e615]
+            - generic [ref=e619]: net
+            - generic [ref=e620]:
+              - img [ref=e621]
+              - text: denied
+          - generic [ref=e624]:
+            - img [ref=e625]
+            - generic [ref=e627]: fs
+            - generic [ref=e628]:
+              - img [ref=e629]
+              - text: denied
+    - generic [ref=e632]:
+      - generic [ref=e633]:
+        - generic [ref=e634]: thicker walls, same interface
+        - generic [ref=e635]:
+          - generic [ref=e636]:
+            - generic [ref=e637]: none
+            - generic [ref=e638]: →
+          - generic [ref=e639]:
+            - generic [ref=e640]: inproc
+            - generic [ref=e641]: →
+          - generic [ref=e642]:
+            - generic [ref=e643]: worker
+            - generic [ref=e644]: →
+          - generic [ref=e645]:
+            - generic [ref=e646]: subprocess
+            - generic [ref=e647]: →
+          - generic [ref=e649]: wasm
+        - paragraph [ref=e650]: Off by default. Flip it on per agent. Every tier registers behind the same SDK contract, so a tool that runs in-process today can run in a subprocess tomorrow without touching its code.
+        - generic [ref=e651]:
+          - generic [ref=e652]:
+            - generic [ref=e653]: none
+            - generic [ref=e654]: "passthrough: no bounds, raw speed for trusted tools."
+          - generic [ref=e655]:
+            - generic [ref=e656]: inproc
+            - generic [ref=e657]: in-process capability checks plus a hard timeout.
+          - generic [ref=e658]:
+            - generic [ref=e659]: worker
+            - generic [ref=e660]: "a worker thread: memory and JS-state isolation."
+          - generic [ref=e661]:
+            - generic [ref=e662]: subprocess
+            - generic [ref=e663]: a kernel-enforced process boundary.
+          - generic [ref=e664]:
+            - generic [ref=e665]: wasm
+            - generic [ref=e666]: zero ambient authority, sandboxed by default.
+      - generic [ref=e667]:
+        - generic [ref=e668]:
+          - img [ref=e670]
+          - generic [ref=e673]:
+            - heading "A front desk on every tool call" [level=3] [ref=e674]
+            - paragraph [ref=e675]: Nothing runs until it's been cleared.
+        - paragraph [ref=e676]: Every tool call is gated, allow or deny, just this once or always. The rules you approve stick, so moxxy stops asking and gets on with the work.
+        - generic [ref=e677]:
+          - generic [ref=e679]: permission requested
+          - generic [ref=e681]:
+            - generic [ref=e682]: Bash
+            - generic [ref=e683]: curl https://api.weather.gov
+          - generic [ref=e684]:
+            - generic [ref=e685]: allow once
+            - generic [ref=e686]:
+              - img [ref=e687]
+              - text: allow always
+            - generic [ref=e689]: deny
+          - generic [ref=e690]:
+            - img [ref=e691]
+            - text: allow-always →
+            - generic [ref=e693]: ~/.moxxy/permissions.json
+  - generic [ref=e696]:
+    - generic [ref=e697]:
+      - generic [ref=e698]:
+        - generic [ref=e699]: "04"
+        - generic [ref=e701]: What's in the office
+      - heading "Everything your assistant needs to work" [level=2] [ref=e702]
+      - paragraph [ref=e703]: Memory, a vault, voice, a workshop for building apps, and a team to delegate to. All built in, all swappable.
+    - generic [ref=e704]:
+      - generic [ref=e705]:
+        - generic [ref=e706]:
+          - img [ref=e708]
+          - generic [ref=e713]: present_view
+        - heading "It builds you apps" [level=3] [ref=e714]
+        - paragraph [ref=e715]: Ask for a tool and the agent authors a live web app mid-conversation, then hands you a URL. No code runs that you didn't allow.
+        - generic [ref=e721]: moxxy-7f2a.trycloudflare.com
+      - generic [ref=e727]:
+        - img [ref=e730]
+        - heading "Long-term memory" [level=3] [ref=e738]
+        - paragraph [ref=e739]: A Markdown journal with vector recall. It remembers what matters across sessions.
+      - generic [ref=e740]:
+        - img [ref=e743]
+        - heading "A safe for secrets" [level=3] [ref=e746]
+        - paragraph [ref=e747]:
+          - text: AES-256 vault, unlocked by your OS keychain. Reference keys as
+          - code [ref=e748]: "${vault:NAME}"
+          - text: .
+      - generic [ref=e749]:
+        - img [ref=e752]
+        - heading "Talk to it" [level=3] [ref=e755]
+        - paragraph [ref=e756]: Telegram voice notes and raw audio route through a swappable transcriber. Whisper ships in the box.
+      - generic [ref=e757]:
+        - img [ref=e760]
+        - heading "Any MCP server" [level=3] [ref=e762]
+        - paragraph [ref=e763]: Register a Model Context Protocol server and its tools become your agent's tools.
+      - generic [ref=e764]:
+        - generic [ref=e765]:
+          - img [ref=e767]
+          - generic [ref=e772]: subagents
+        - heading "Hire a whole team" [level=3] [ref=e773]
+        - paragraph [ref=e774]: One agent fans work out to subagents for parallel jobs, research, drafting, review, then brings the answers back.
+        - generic [ref=e775]:
+          - img [ref=e777]
+          - img [ref=e792]
+          - img [ref=e807]
+          - img [ref=e822]
+          - generic [ref=e836]: + dispatch_agent
+      - generic [ref=e837]:
+        - img [ref=e840]
+        - heading "Learns new skills" [level=3] [ref=e842]
+        - paragraph [ref=e843]: Skills are prompt-only Markdown. When nothing fits, the agent writes itself a new one.
+      - generic [ref=e844]:
+        - img [ref=e847]
+        - heading "Always on" [level=3] [ref=e849]
+        - paragraph [ref=e850]: Install it as a background service. Channels, scheduler, and webhooks stay up across reboots.
+      - generic [ref=e851]:
+        - img [ref=e854]
+        - heading "Saved workflows" [level=3] [ref=e858]
+        - paragraph [ref=e859]: Chain skills, prompts, and tools into pipelines you can name, schedule, and re-run.
+      - generic [ref=e860]:
+        - img [ref=e863]
+        - heading "Replayable by design" [level=3] [ref=e867]
+        - paragraph [ref=e868]: Every interaction appends to an immutable event log, so any session can be replayed.
+  - generic [ref=e871]:
+    - generic [ref=e872]:
+      - generic [ref=e873]:
+        - generic [ref=e874]: "05"
+        - generic [ref=e876]: Extend
+      - heading "Build your own plugin" [level=2] [ref=e877]
+      - paragraph [ref=e878]: Everything in moxxy is a plugin. Bundle a provider, a loop strategy, skills, and tools, each a few lines of typed TypeScript or a plain Markdown file. Drop a moxxy block in package.json and it's auto-discovered and hot-reloaded, no restart.
+    - generic [ref=e879]:
+      - generic [ref=e880]:
+        - button "Plugin bundle blocks & ship" [ref=e881] [cursor=pointer]:
+          - img [ref=e884]
+          - generic [ref=e894]:
+            - generic [ref=e895]: Plugin
+            - generic [ref=e896]: bundle blocks & ship
+        - button "Provider bring your own model" [ref=e897] [cursor=pointer]:
+          - img [ref=e899]
+          - generic [ref=e902]:
+            - generic [ref=e903]: Provider
+            - generic [ref=e904]: bring your own model
+        - button "Loop strategy your own agent loop" [ref=e905] [cursor=pointer]:
+          - img [ref=e907]
+          - generic [ref=e911]:
+            - generic [ref=e912]: Loop strategy
+            - generic [ref=e913]: your own agent loop
+        - button "Skill teach it a new trick" [ref=e914] [cursor=pointer]:
+          - img [ref=e916]
+          - generic [ref=e918]:
+            - generic [ref=e919]: Skill
+            - generic [ref=e920]: teach it a new trick
+        - button "Tool give it a new ability" [ref=e921] [cursor=pointer]:
+          - img [ref=e923]
+          - generic [ref=e925]:
+            - generic [ref=e926]: Tool
+            - generic [ref=e927]: give it a new ability
+      - generic [ref=e928]:
+        - generic [ref=e929]:
+          - generic [ref=e935]: index.ts
+          - generic [ref=e936]: definePlugin
+        - generic [ref=e939]:
+          - generic [ref=e940]:
+            - generic [ref=e941]: "1"
+            - generic [ref=e942]: "import { definePlugin } from '@moxxy/sdk'"
+          - generic [ref=e943]:
+            - generic [ref=e944]: "2"
+            - generic [ref=e945]: "import { mistral } from './provider'"
+          - generic [ref=e946]:
+            - generic [ref=e947]: "3"
+            - generic [ref=e948]: "import { reflect } from './mode'"
+          - generic [ref=e949]:
+            - generic [ref=e950]: "4"
+            - generic [ref=e951]: "import { getWeather } from './tool'"
+          - generic [ref=e953]: "5"
+          - generic [ref=e955]:
+            - generic [ref=e956]: "6"
+            - generic [ref=e957]: "export default definePlugin({"
+          - generic [ref=e958]:
+            - generic [ref=e959]: "7"
+            - generic [ref=e960]: "name: '@you/moxxy-toolkit',"
+          - generic [ref=e961]:
+            - generic [ref=e962]: "8"
+            - generic [ref=e963]: "providers: [mistral],"
+          - generic [ref=e964]:
+            - generic [ref=e965]: "9"
+            - generic [ref=e966]: "modes: [reflect],"
+          - generic [ref=e967]:
+            - generic [ref=e968]: "10"
+            - generic [ref=e969]: "tools: [getWeather],"
+          - generic [ref=e970]:
+            - generic [ref=e971]: "11"
+            - generic [ref=e972]: "})"
+          - generic [ref=e974]: "12"
+          - generic [ref=e976]:
+            - generic [ref=e977]: "13"
+            - generic [ref=e978]: "// package.json: moxxy auto-discovers it"
+          - generic [ref=e979]:
+            - generic [ref=e980]: "14"
+            - generic [ref=e981]: "// \"moxxy\": { \"plugin\": { \"entry\": \"./dist/index.js\" } }"
+  - generic [ref=e984]:
+    - generic [ref=e985]:
+      - generic [ref=e986]:
+        - generic [ref=e987]: "06"
+        - generic [ref=e989]: Desktop · coming soon
+      - heading "Watch your team work the floor" [level=2] [ref=e990]
+      - paragraph [ref=e991]: The Virtual Office desktop app gives every agent a desk and its own walled-off room. See who's busy, drop into any conversation, and hire another worker when the queue backs up.
+    - generic [ref=e992]:
+      - generic [ref=e994]: ▲ in the workshop · soon
+      - generic [ref=e995]:
+        - generic [ref=e996]:
+          - generic [ref=e1002]: moxxy · virtual office
+          - generic [ref=e1003]: "@moxxy/desktop"
+        - generic [ref=e1004]:
+          - generic [ref=e1005]:
+            - generic [ref=e1006]: your team
+            - generic [ref=e1007]:
+              - generic [ref=e1008]:
+                - generic [ref=e1010]: scheduler
+                - generic [ref=e1011]: working
+              - generic [ref=e1012]:
+                - generic [ref=e1014]: researcher
+                - generic [ref=e1015]: working
+              - generic [ref=e1016]:
+                - generic [ref=e1018]: builder
+                - generic [ref=e1019]: idle
+              - generic [ref=e1020]:
+                - generic [ref=e1022]: ops
+                - generic [ref=e1023]: locked
+              - button "hire" [ref=e1024]:
+                - img [ref=e1025]
+                - text: hire
+          - generic [ref=e1027]:
+            - generic [ref=e1028]:
+              - generic [ref=e1029]:
+                - img [ref=e1030]
+                - generic [ref=e1033]: scheduler
+              - img [ref=e1036]
+              - generic [ref=e1054]:
+                - generic [ref=e1055]: "> remind me at 9"
+                - generic [ref=e1056]: ✓ scheduled
+                - generic [ref=e1057]: "> draft reply▌"
+            - generic [ref=e1062]:
+              - generic [ref=e1063]:
+                - img [ref=e1064]
+                - generic [ref=e1067]: researcher
+              - img [ref=e1070]
+              - generic [ref=e1088]:
+                - generic [ref=e1089]: "> remind me at 9"
+                - generic [ref=e1090]: ✓ scheduled
+                - generic [ref=e1091]: "> draft reply▌"
+            - generic [ref=e1096]:
+              - generic [ref=e1097]:
+                - img [ref=e1098]
+                - generic [ref=e1101]: builder
+              - img [ref=e1104]
+              - generic [ref=e1122]:
+                - generic [ref=e1123]: "> remind me at 9"
+                - generic [ref=e1124]: ✓ scheduled
+                - generic [ref=e1125]: "> draft reply▌"
+            - generic [ref=e1130]:
+              - generic [ref=e1131]:
+                - img [ref=e1132]
+                - generic [ref=e1135]: ops
+              - img [ref=e1138]
+              - generic [ref=e1156]:
+                - generic [ref=e1157]: "> remind me at 9"
+                - generic [ref=e1158]: ✓ scheduled
+                - generic [ref=e1159]: "> draft reply▌"
+    - generic [ref=e1164]:
+      - link "Follow along on GitHub" [ref=e1165] [cursor=pointer]:
+        - /url: https://github.com/moxxy-ai/new_moxxy
+        - img [ref=e1166]
+        - text: Follow along on GitHub
+      - link "Read the docs" [ref=e1169] [cursor=pointer]:
+        - /url: https://docs.moxxy.ai
+        - img [ref=e1170]
+        - text: Read the docs
+  - generic [ref=e1174]:
+    - generic [ref=e1175]:
+      - generic [ref=e1176]:
+        - generic [ref=e1177]: "07"
+        - generic [ref=e1179]: Get started
+      - heading "Open your office in three commands" [level=2] [ref=e1180]
+      - paragraph [ref=e1181]: Self-hosted means it runs on your machine, with your keys. No account, no proxy, no waiting list.
+    - generic [ref=e1182]:
+      - generic [ref=e1183]:
+        - generic [ref=e1186]: ~/your-machine
+        - button "copy" [ref=e1187]:
+          - img [ref=e1188]
+          - text: copy
+      - generic [ref=e1191]:
+        - generic [ref=e1192]:
+          - generic [ref=e1193]: $
+          - generic [ref=e1194]: npm install -g @moxxy/cli
+        - generic [ref=e1195]:
+          - generic [ref=e1196]: $
+          - generic [ref=e1197]: moxxy init
+        - generic [ref=e1199]: "✓ provider: anthropic ✓ key → vault"
+        - generic [ref=e1200]:
+          - generic [ref=e1201]: $
+          - generic [ref=e1202]: moxxy
+        - generic [ref=e1203]:
+          - generic [ref=e1204]: ">"
+          - generic [ref=e1205]: build me a search engine for arXiv
+        - generic [ref=e1207]: ▣ present_view → building…
+        - generic [ref=e1208]:
+          - generic [ref=e1209]: web surface https://moxxy-7f2a.trycloudflare.com
+          - generic [ref=e1210]: ▌
+    - generic [ref=e1211]:
+      - generic [ref=e1212]:
+        - generic [ref=e1213]:
+          - generic [ref=e1214]: "1"
+          - img [ref=e1215]
+          - heading "Install" [level=3] [ref=e1219]
+        - paragraph [ref=e1220]: One global package. Node 20.10+ is all you need.
+        - code [ref=e1221]: $ npm i -g @moxxy/cli
+      - generic [ref=e1222]:
+        - generic [ref=e1223]:
+          - generic [ref=e1224]: "2"
+          - img [ref=e1225]
+          - heading "Give it a brain" [level=3] [ref=e1228]
+        - paragraph [ref=e1229]: Pick a provider and paste a key. It lands in the encrypted vault, not a config file.
+        - code [ref=e1230]: $ moxxy init
+      - generic [ref=e1231]:
+        - generic [ref=e1232]:
+          - generic [ref=e1233]: "3"
+          - img [ref=e1234]
+          - heading "Put it to work" [level=3] [ref=e1239]
+        - paragraph [ref=e1240]: Launch the TUI, or wire up Telegram and HTTP for the same agent.
+        - code [ref=e1241]: $ moxxy
+    - generic [ref=e1242]:
+      - button "npm install -g @moxxy/cli" [ref=e1243] [cursor=pointer]:
+        - img [ref=e1244]
+        - generic [ref=e1247]: npm install -g @moxxy/cli
+      - link "Read the docs" [ref=e1248] [cursor=pointer]:
+        - /url: https://docs.moxxy.ai
+        - text: Read the docs
+        - img [ref=e1249]
+    - generic [ref=e1252]: node ≥ 20.10 · macos · linux · windows
+  - contentinfo [ref=e1253]:
+    - generic [ref=e1255]:
+      - generic [ref=e1256]:
+        - generic [ref=e1257]:
+          - generic [ref=e1258]:
+            - img "moxxy" [ref=e1259]
+            - generic [ref=e1260]: moxxy
+          - paragraph [ref=e1261]: A virtual office for your AI. Assemble an assistant from swappable blocks, give it a room of its own, and run it all on your machine.
+        - generic [ref=e1262]:
+          - heading "The office" [level=4] [ref=e1263]
+          - list [ref=e1264]:
+            - listitem [ref=e1265]:
+              - link "Build a worker" [ref=e1266] [cursor=pointer]:
+                - /url: /#build
+            - listitem [ref=e1267]:
+              - link "Channels" [ref=e1268] [cursor=pointer]:
+                - /url: /#channels
+            - listitem [ref=e1269]:
+              - link "Isolated rooms" [ref=e1270] [cursor=pointer]:
+                - /url: /#rooms
+            - listitem [ref=e1271]:
+              - link "Desktop app" [ref=e1272] [cursor=pointer]:
+                - /url: /#desktop
+            - listitem [ref=e1273]:
+              - link "Quickstart" [ref=e1274] [cursor=pointer]:
+                - /url: /#quickstart
+        - generic [ref=e1275]:
+          - heading "Documentation" [level=4] [ref=e1276]
+          - list [ref=e1277]:
+            - listitem [ref=e1278]:
+              - link "Quickstart" [ref=e1279] [cursor=pointer]:
+                - /url: https://docs.moxxy.ai/quickstart
+            - listitem [ref=e1280]:
+              - link "Architecture" [ref=e1281] [cursor=pointer]:
+                - /url: https://docs.moxxy.ai/architecture
+            - listitem [ref=e1282]:
+              - link "Loop strategies" [ref=e1283] [cursor=pointer]:
+                - /url: https://docs.moxxy.ai/guides/loop-strategies
+            - listitem [ref=e1284]:
+              - link "Memory" [ref=e1285] [cursor=pointer]:
+                - /url: https://docs.moxxy.ai/guides/memory
+            - listitem [ref=e1286]:
+              - link "Authoring a plugin" [ref=e1287] [cursor=pointer]:
+                - /url: https://docs.moxxy.ai/guides/authoring-a-plugin
+            - listitem [ref=e1288]:
+              - link "Authoring a skill" [ref=e1289] [cursor=pointer]:
+                - /url: https://docs.moxxy.ai/guides/authoring-a-skill
+        - generic [ref=e1290]:
+          - heading "Channels & ops" [level=4] [ref=e1291]
+          - list [ref=e1292]:
+            - listitem [ref=e1293]:
+              - link "Telegram" [ref=e1294] [cursor=pointer]:
+                - /url: https://docs.moxxy.ai/guides/telegram-channel
+            - listitem [ref=e1295]:
+              - link "HTTP" [ref=e1296] [cursor=pointer]:
+                - /url: https://docs.moxxy.ai/guides/http-channel
+            - listitem [ref=e1297]:
+              - link "Webhooks" [ref=e1298] [cursor=pointer]:
+                - /url: https://docs.moxxy.ai/guides/webhooks
+            - listitem [ref=e1299]:
+              - link "Scheduler" [ref=e1300] [cursor=pointer]:
+                - /url: https://docs.moxxy.ai/guides/scheduler
+            - listitem [ref=e1301]:
+              - link "Run as a service" [ref=e1302] [cursor=pointer]:
+                - /url: https://docs.moxxy.ai/guides/running-as-a-service
+            - listitem [ref=e1303]:
+              - link "MCP servers" [ref=e1304] [cursor=pointer]:
+                - /url: https://docs.moxxy.ai/guides/mcp-servers
+      - generic [ref=e1305]:
+        - generic [ref=e1306]:
+          - link "GitHub" [ref=e1307] [cursor=pointer]:
+            - /url: https://github.com/moxxy-ai/new_moxxy
+            - img [ref=e1308]
+            - text: GitHub
+          - link "Docs" [ref=e1311] [cursor=pointer]:
+            - /url: https://docs.moxxy.ai
+            - img [ref=e1312]
+            - text: Docs
+          - link "Discord" [ref=e1314] [cursor=pointer]:
+            - /url: https://discord.gg/gbc4QfKFjv
+            - img [ref=e1315]
+            - text: Discord
+          - link "X" [ref=e1317] [cursor=pointer]:
+            - /url: https://x.com/moxxy_ai
+            - img [ref=e1318]
+            - text: X
+        - generic [ref=e1320]:
+          - paragraph [ref=e1321]: © 2026 moxxy · TypeScript · Node ≥ 20.10
+          - paragraph [ref=e1322]: open source · self-hosted

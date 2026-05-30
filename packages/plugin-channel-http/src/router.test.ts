@@ -163,6 +163,21 @@ describe('routeRequest', () => {
     }
   });
 
+  it('matches Virtual Office scheduler endpoints', () => {
+    const cases = [
+      ['GET', '/v1/schedules'],
+      ['GET', '/v1/schedules?source=workflow&includeDisabled=true'],
+      ['POST', '/v1/schedules'],
+      ['PUT', '/v1/schedules/morning-brief'],
+      ['POST', '/v1/schedules/morning-brief/enabled'],
+      ['DELETE', '/v1/schedules/morning-brief'],
+      ['POST', '/v1/schedules/morning-brief/run'],
+    ] as const;
+    for (const [method, url] of cases) {
+      expect(routeRequest(makeIncoming({ method, url }))).not.toBeNull();
+    }
+  });
+
   it('matches Virtual Office desk persistence endpoints', () => {
     expect(routeRequest(makeIncoming({ method: 'GET', url: '/v1/desk/4' }))).toBe(handleDeskGet);
     expect(routeRequest(makeIncoming({ method: 'PUT', url: '/v1/desk/4' }))).toBe(handleDeskPut);
@@ -440,6 +455,231 @@ describe('Virtual Office workflow endpoints', () => {
     await dispatchRoute(makeIncoming({ method: 'DELETE', url: '/v1/workflows/daily-digest', headers: { authorization: 'Bearer x' } }), deleteRes, ctx);
     expect(deleteRes._status).toBe(200);
     expect(workflows.delete).toHaveBeenCalledWith('daily-digest');
+  });
+});
+
+describe('Virtual Office scheduler endpoints', () => {
+  const manualSchedule = {
+    id: 'manual-1',
+    name: 'Morning brief',
+    prompt: 'Summarize the morning context.',
+    enabled: true,
+    source: 'manual',
+    skillName: null,
+    workflowName: null,
+    cron: '0 9 * * *',
+    runAt: null,
+    timeZone: 'Europe/Warsaw',
+    channel: 'tui',
+    model: null,
+    createdAt: '2026-05-30T07:00:00.000Z',
+    lastRunAt: null,
+    lastResult: null,
+    lastError: null,
+    nextFireAt: 1_780_000_000_000,
+    nextFireIso: '2026-06-01T07:00:00.000Z',
+    editable: true,
+    runnable: true,
+  };
+
+  const workflowSchedule = {
+    ...manualSchedule,
+    id: 'workflow-1',
+    name: 'daily-research',
+    prompt: 'Run workflow daily-research.',
+    source: 'workflow',
+    workflowName: 'daily-research',
+    editable: false,
+  };
+
+  const skillSchedule = {
+    ...manualSchedule,
+    id: 'skill-1',
+    name: 'sync-skill',
+    prompt: 'Run sync skill.',
+    source: 'skill',
+    skillName: 'sync-skill',
+    editable: false,
+  };
+
+  function schedulerCtx(overrides: Record<string, unknown> = {}) {
+    const scheduler = {
+      list: vi.fn(async () => [manualSchedule, workflowSchedule, skillSchedule]),
+      create: vi.fn(async (input: unknown) => ({ ...manualSchedule, ...input, id: 'manual-created' })),
+      update: vi.fn(async (_id: string, input: unknown) => ({ ...manualSchedule, ...input })),
+      setEnabled: vi.fn(async (_id: string, enabled: boolean) => ({ ...manualSchedule, enabled })),
+      delete: vi.fn(async () => ({ ok: true })),
+      runNow: vi.fn(async () => ({ ok: true, text: 'queued for run', inboxPath: '/tmp/inbox.md' })),
+      ...overrides,
+    };
+    return {
+      scheduler,
+      ctx: { session: { scheduler }, authToken: 'x', logger: silentLogger } as never,
+    };
+  }
+
+  it('returns 404 when scheduler support is unavailable', async () => {
+    const res = makeResponse();
+    await dispatchRoute(
+      makeIncoming({
+        method: 'GET',
+        url: '/v1/schedules',
+        headers: { authorization: 'Bearer x' },
+      }),
+      res,
+      { session: {}, authToken: 'x', logger: silentLogger } as never,
+    );
+
+    expect(res._status).toBe(404);
+    expect(JSON.parse(res._body)).toMatchObject({ error: 'not_found' });
+  });
+
+  it('lists schedules through the session scheduler view with source filters', async () => {
+    const { scheduler, ctx } = schedulerCtx();
+
+    const res = makeResponse();
+    await dispatchRoute(
+      makeIncoming({
+        method: 'GET',
+        url: '/v1/schedules?source=workflow&includeDisabled=true',
+        headers: { authorization: 'Bearer x' },
+      }),
+      res,
+      ctx,
+    );
+
+    expect(res._status).toBe(200);
+    expect(scheduler.list).toHaveBeenCalledWith({ source: 'workflow', includeDisabled: true });
+    expect(JSON.parse(res._body)).toEqual([manualSchedule, workflowSchedule, skillSchedule]);
+  });
+
+  it('creates manual schedules and refreshable schedule entries', async () => {
+    const { scheduler, ctx } = schedulerCtx();
+
+    const res = makeResponse();
+    await dispatchRoute(
+      makeIncoming({
+        method: 'POST',
+        url: '/v1/schedules',
+        headers: { authorization: 'Bearer x' },
+        body: JSON.stringify({
+          name: 'Manual from UI',
+          prompt: 'Check invoices.',
+          cron: '30 8 * * 1-5',
+          timeZone: 'Europe/Warsaw',
+          enabled: true,
+        }),
+      }),
+      res,
+      ctx,
+    );
+
+    expect(res._status).toBe(200);
+    expect(scheduler.create).toHaveBeenCalledWith({
+      name: 'Manual from UI',
+      prompt: 'Check invoices.',
+      cron: '30 8 * * 1-5',
+      timeZone: 'Europe/Warsaw',
+      enabled: true,
+    });
+    expect(JSON.parse(res._body)).toMatchObject({ id: 'manual-created', source: 'manual' });
+  });
+
+  it('updates, enables and deletes manual schedules only', async () => {
+    const { scheduler, ctx } = schedulerCtx();
+
+    const updateRes = makeResponse();
+    await dispatchRoute(
+      makeIncoming({
+        method: 'PUT',
+        url: '/v1/schedules/manual-1',
+        headers: { authorization: 'Bearer x' },
+        body: JSON.stringify({ name: 'Morning brief updated', enabled: false }),
+      }),
+      updateRes,
+      ctx,
+    );
+    expect(updateRes._status).toBe(200);
+    expect(scheduler.update).toHaveBeenCalledWith('manual-1', { name: 'Morning brief updated', enabled: false });
+
+    const enabledRes = makeResponse();
+    await dispatchRoute(
+      makeIncoming({
+        method: 'POST',
+        url: '/v1/schedules/manual-1/enabled',
+        headers: { authorization: 'Bearer x' },
+        body: JSON.stringify({ enabled: false }),
+      }),
+      enabledRes,
+      ctx,
+    );
+    expect(enabledRes._status).toBe(200);
+    expect(scheduler.setEnabled).toHaveBeenCalledWith('manual-1', false);
+
+    const deleteRes = makeResponse();
+    await dispatchRoute(
+      makeIncoming({
+        method: 'DELETE',
+        url: '/v1/schedules/manual-1',
+        headers: { authorization: 'Bearer x' },
+      }),
+      deleteRes,
+      ctx,
+    );
+    expect(deleteRes._status).toBe(200);
+    expect(scheduler.delete).toHaveBeenCalledWith('manual-1');
+  });
+
+  it('rejects write operations for workflow and skill managed schedules', async () => {
+    const { scheduler, ctx } = schedulerCtx();
+
+    const updateRes = makeResponse();
+    await dispatchRoute(
+      makeIncoming({
+        method: 'PUT',
+        url: '/v1/schedules/workflow-1',
+        headers: { authorization: 'Bearer x' },
+        body: JSON.stringify({ name: 'Changed elsewhere' }),
+      }),
+      updateRes,
+      ctx,
+    );
+    expect(updateRes._status).toBe(409);
+    expect(JSON.parse(updateRes._body)).toMatchObject({ error: 'read_only_schedule' });
+    expect(scheduler.update).not.toHaveBeenCalled();
+
+    const deleteRes = makeResponse();
+    await dispatchRoute(
+      makeIncoming({
+        method: 'DELETE',
+        url: '/v1/schedules/skill-1',
+        headers: { authorization: 'Bearer x' },
+      }),
+      deleteRes,
+      ctx,
+    );
+    expect(deleteRes._status).toBe(409);
+    expect(JSON.parse(deleteRes._body)).toMatchObject({ error: 'read_only_schedule' });
+    expect(scheduler.delete).not.toHaveBeenCalled();
+  });
+
+  it('runs any existing schedule on demand', async () => {
+    const { scheduler, ctx } = schedulerCtx();
+
+    const res = makeResponse();
+    await dispatchRoute(
+      makeIncoming({
+        method: 'POST',
+        url: '/v1/schedules/workflow-1/run',
+        headers: { authorization: 'Bearer x' },
+      }),
+      res,
+      ctx,
+    );
+
+    expect(res._status).toBe(200);
+    expect(scheduler.runNow).toHaveBeenCalledWith('workflow-1');
+    expect(JSON.parse(res._body)).toMatchObject({ ok: true, text: 'queued for run' });
   });
 });
 

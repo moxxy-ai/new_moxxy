@@ -123,6 +123,34 @@ const workflowEnabledRequestSchema = z.object({
   enabled: z.boolean(),
 });
 
+const scheduleSourceQuerySchema = z.enum(['all', 'manual', 'skill', 'workflow']).default('all');
+
+const scheduleCreateRequestSchema = z.object({
+  name: z.string().min(1),
+  prompt: z.string().min(1),
+  cron: z.string().optional(),
+  runAt: z.union([z.number(), z.string()]).optional(),
+  timeZone: z.string().optional(),
+  channel: z.string().optional(),
+  model: z.string().optional(),
+  enabled: z.boolean().optional(),
+});
+
+const scheduleUpdateRequestSchema = z.object({
+  name: z.string().min(1).optional(),
+  prompt: z.string().min(1).optional(),
+  cron: z.string().nullable().optional(),
+  runAt: z.union([z.number(), z.string()]).nullable().optional(),
+  timeZone: z.string().nullable().optional(),
+  channel: z.string().nullable().optional(),
+  model: z.string().nullable().optional(),
+  enabled: z.boolean().optional(),
+});
+
+const scheduleEnabledRequestSchema = z.object({
+  enabled: z.boolean(),
+});
+
 const deskIdSchema = z.string().trim().regex(/^[A-Za-z0-9_-]{1,64}$/);
 
 const deskStateSchema = z.object({
@@ -167,6 +195,12 @@ export function routeRequest(req: IncomingMessage): RouteHandler | null {
   if (req.method === 'GET' && pathname === '/v1/graveyard') return handleGraveyard;
   if (req.method === 'GET' && pathname === '/v1/commands') return handleCommands;
   if (req.method === 'POST' && pathname === '/v1/commands') return handleRunCommand;
+  if (req.method === 'GET' && pathname === '/v1/schedules') return handleSchedulesList;
+  if (req.method === 'POST' && pathname === '/v1/schedules') return handleScheduleCreate;
+  if (req.method === 'POST' && /^\/v1\/schedules\/[^/]+\/enabled$/.test(pathname)) return handleScheduleSetEnabled;
+  if (req.method === 'POST' && /^\/v1\/schedules\/[^/]+\/run$/.test(pathname)) return handleScheduleRun;
+  if (req.method === 'PUT' && /^\/v1\/schedules\/[^/]+$/.test(pathname)) return handleScheduleUpdate;
+  if (req.method === 'DELETE' && /^\/v1\/schedules\/[^/]+$/.test(pathname)) return handleScheduleDelete;
   if (req.method === 'GET' && pathname === '/v1/workflows') return handleWorkflowsList;
   if (req.method === 'GET' && pathname === '/v1/workflows/capabilities') return handleWorkflowsCapabilities;
   if (req.method === 'POST' && pathname === '/v1/workflows/draft') return handleWorkflowDraft;
@@ -863,11 +897,218 @@ function workflowsView(res: ServerResponse, ctx: RouterContext): NonNullable<Ses
   return null;
 }
 
+function schedulerView(res: ServerResponse, ctx: RouterContext): NonNullable<Session['scheduler']> | null {
+  if (ctx.session.scheduler) return ctx.session.scheduler;
+  reply(res, 404, { error: 'not_found', message: 'scheduler is not available in this session' });
+  return null;
+}
+
 function replyWorkflowError(res: ServerResponse, err: unknown): void {
   reply(res, 502, {
     error: 'workflow_failed',
     message: err instanceof Error ? err.message : String(err),
   });
+}
+
+function replyScheduleError(res: ServerResponse, err: unknown): void {
+  const message = err instanceof Error ? err.message : String(err);
+  if (message === 'read_only_schedule') {
+    replyReadOnlySchedule(res);
+    return;
+  }
+  if (message === 'schedule_not_found') {
+    reply(res, 404, { error: 'not_found', message: 'schedule not found' });
+    return;
+  }
+  reply(res, 502, { error: 'schedule_failed', message });
+}
+
+function replyReadOnlySchedule(res: ServerResponse): void {
+  reply(res, 409, {
+    error: 'read_only_schedule',
+    message: 'Only manual schedules can be edited from Virtual Office.',
+  });
+}
+
+async function scheduleForWrite(
+  scheduler: NonNullable<Session['scheduler']>,
+  id: string,
+  res: ServerResponse,
+): Promise<boolean> {
+  const current = (await scheduler.list({ source: 'all', includeDisabled: true })).find((entry) => entry.id === id);
+  if (!current) {
+    reply(res, 404, { error: 'not_found', message: 'schedule not found' });
+    return false;
+  }
+  if (current.source !== 'manual' || !current.editable) {
+    replyReadOnlySchedule(res);
+    return false;
+  }
+  return true;
+}
+
+export async function handleSchedulesList(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: RouterContext,
+): Promise<void> {
+  if (!checkAuth(req, ctx.authToken)) {
+    reply(res, 401, { error: 'unauthorized' });
+    return;
+  }
+  const scheduler = schedulerView(res, ctx);
+  if (!scheduler) return;
+  let source: z.infer<typeof scheduleSourceQuerySchema>;
+  try {
+    const url = new URL(req.url ?? '/v1/schedules', 'http://localhost');
+    source = scheduleSourceQuerySchema.parse(url.searchParams.get('source') ?? 'all');
+  } catch (err) {
+    reply(res, 400, { error: 'bad_request', message: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+  const includeDisabled = new URL(req.url ?? '/v1/schedules', 'http://localhost')
+    .searchParams.get('includeDisabled') === 'true';
+  try {
+    reply(res, 200, await scheduler.list({ source, includeDisabled }));
+  } catch (err) {
+    replyScheduleError(res, err);
+  }
+}
+
+export async function handleScheduleCreate(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: RouterContext,
+): Promise<void> {
+  if (!checkAuth(req, ctx.authToken)) {
+    reply(res, 401, { error: 'unauthorized' });
+    return;
+  }
+  const scheduler = schedulerView(res, ctx);
+  if (!scheduler) return;
+  let body: z.infer<typeof scheduleCreateRequestSchema>;
+  try {
+    const raw = await readBody(req);
+    body = scheduleCreateRequestSchema.parse(raw.trim() ? JSON.parse(raw) : {});
+  } catch (err) {
+    reply(res, 400, { error: 'bad_request', message: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+  try {
+    reply(res, 200, await scheduler.create(body));
+  } catch (err) {
+    replyScheduleError(res, err);
+  }
+}
+
+export async function handleScheduleUpdate(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: RouterContext,
+): Promise<void> {
+  if (!checkAuth(req, ctx.authToken)) {
+    reply(res, 401, { error: 'unauthorized' });
+    return;
+  }
+  const scheduler = schedulerView(res, ctx);
+  if (!scheduler) return;
+  const id = pathPart(req, 3);
+  let body: z.infer<typeof scheduleUpdateRequestSchema>;
+  try {
+    const raw = await readBody(req);
+    body = scheduleUpdateRequestSchema.parse(raw.trim() ? JSON.parse(raw) : {});
+  } catch (err) {
+    reply(res, 400, { error: 'bad_request', message: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+  try {
+    if (!(await scheduleForWrite(scheduler, id, res))) return;
+    const updated = await scheduler.update(id, body);
+    if (!updated) {
+      reply(res, 404, { error: 'not_found', message: 'schedule not found' });
+      return;
+    }
+    reply(res, 200, updated);
+  } catch (err) {
+    replyScheduleError(res, err);
+  }
+}
+
+export async function handleScheduleSetEnabled(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: RouterContext,
+): Promise<void> {
+  if (!checkAuth(req, ctx.authToken)) {
+    reply(res, 401, { error: 'unauthorized' });
+    return;
+  }
+  const scheduler = schedulerView(res, ctx);
+  if (!scheduler) return;
+  const id = pathPart(req, 3);
+  let body: z.infer<typeof scheduleEnabledRequestSchema>;
+  try {
+    const raw = await readBody(req);
+    body = scheduleEnabledRequestSchema.parse(raw.trim() ? JSON.parse(raw) : {});
+  } catch (err) {
+    reply(res, 400, { error: 'bad_request', message: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+  try {
+    if (!(await scheduleForWrite(scheduler, id, res))) return;
+    const updated = await scheduler.setEnabled(id, body.enabled);
+    if (!updated) {
+      reply(res, 404, { error: 'not_found', message: 'schedule not found' });
+      return;
+    }
+    reply(res, 200, updated);
+  } catch (err) {
+    replyScheduleError(res, err);
+  }
+}
+
+export async function handleScheduleDelete(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: RouterContext,
+): Promise<void> {
+  if (!checkAuth(req, ctx.authToken)) {
+    reply(res, 401, { error: 'unauthorized' });
+    return;
+  }
+  const scheduler = schedulerView(res, ctx);
+  if (!scheduler) return;
+  const id = pathPart(req, 3);
+  try {
+    if (!(await scheduleForWrite(scheduler, id, res))) return;
+    reply(res, 200, await scheduler.delete(id));
+  } catch (err) {
+    replyScheduleError(res, err);
+  }
+}
+
+export async function handleScheduleRun(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: RouterContext,
+): Promise<void> {
+  if (!checkAuth(req, ctx.authToken)) {
+    reply(res, 401, { error: 'unauthorized' });
+    return;
+  }
+  const scheduler = schedulerView(res, ctx);
+  if (!scheduler) return;
+  const id = pathPart(req, 3);
+  try {
+    const exists = (await scheduler.list({ source: 'all', includeDisabled: true })).some((entry) => entry.id === id);
+    if (!exists) {
+      reply(res, 404, { error: 'not_found', message: 'schedule not found' });
+      return;
+    }
+    reply(res, 200, await scheduler.runNow(id));
+  } catch (err) {
+    replyScheduleError(res, err);
+  }
 }
 
 export async function handleWorkflowsList(

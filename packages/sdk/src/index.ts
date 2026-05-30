@@ -58,6 +58,14 @@ export type {
   WorkflowDraftView,
   WorkflowCapabilityItemView,
   WorkflowCapabilitiesView,
+  ScheduleSourceView,
+  ScheduleSourceFilterView,
+  ScheduleEntryView,
+  ScheduleListOptions,
+  ScheduleCreateInput,
+  ScheduleUpdateInput,
+  ScheduleRunNowView,
+  SchedulerView,
 } from './session-like.js';
 
 export type {

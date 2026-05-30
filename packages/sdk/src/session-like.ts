@@ -176,6 +176,75 @@ export interface WorkflowCapabilitiesView {
   readonly workflows: ReadonlyArray<WorkflowCapabilityItemView>;
 }
 
+export type ScheduleSourceView = 'manual' | 'skill' | 'workflow';
+export type ScheduleSourceFilterView = ScheduleSourceView | 'all';
+
+export interface ScheduleEntryView {
+  readonly id: string;
+  readonly name: string;
+  readonly prompt: string;
+  readonly enabled: boolean;
+  readonly source: ScheduleSourceView;
+  readonly skillName: string | null;
+  readonly workflowName: string | null;
+  readonly cron: string | null;
+  readonly runAt: number | null;
+  readonly timeZone: string | null;
+  readonly channel: string | null;
+  readonly model: string | null;
+  readonly createdAt: string;
+  readonly lastRunAt: string | null;
+  readonly lastResult: 'ok' | 'error' | null;
+  readonly lastError: string | null;
+  readonly nextFireAt: number | null;
+  readonly nextFireIso: string | null;
+  readonly editable: boolean;
+  readonly runnable: boolean;
+}
+
+export interface ScheduleListOptions {
+  readonly source?: ScheduleSourceFilterView;
+  readonly includeDisabled?: boolean;
+}
+
+export interface ScheduleCreateInput {
+  readonly name: string;
+  readonly prompt: string;
+  readonly cron?: string;
+  readonly runAt?: number | string;
+  readonly timeZone?: string;
+  readonly channel?: string;
+  readonly model?: string;
+  readonly enabled?: boolean;
+}
+
+export interface ScheduleUpdateInput {
+  readonly name?: string;
+  readonly prompt?: string;
+  readonly cron?: string | null;
+  readonly runAt?: number | string | null;
+  readonly timeZone?: string | null;
+  readonly channel?: string | null;
+  readonly model?: string | null;
+  readonly enabled?: boolean;
+}
+
+export interface ScheduleRunNowView {
+  readonly ok: boolean;
+  readonly text: string;
+  readonly inboxPath?: string;
+  readonly error?: string;
+}
+
+export interface SchedulerView {
+  list(options?: ScheduleListOptions): Promise<ReadonlyArray<ScheduleEntryView>>;
+  create(input: ScheduleCreateInput): Promise<ScheduleEntryView>;
+  update(id: string, input: ScheduleUpdateInput): Promise<ScheduleEntryView | null>;
+  setEnabled(id: string, enabled: boolean): Promise<ScheduleEntryView | null>;
+  delete(id: string): Promise<{ readonly ok: boolean }>;
+  runNow(id: string): Promise<ScheduleRunNowView>;
+}
+
 /**
  * The slice of the workflows API a channel needs to drive the `/workflows`
  * modal (list, enable/disable toggle, run). Present on a local Session when
@@ -238,4 +307,6 @@ export interface SessionLike {
   mcpAdmin?: McpAdminView;
   /** Workflows slice backing the `/workflows` modal. */
   workflows?: WorkflowsView;
+  /** Scheduler slice backing the Virtual Office Schedules screen. */
+  scheduler?: SchedulerView;
 }

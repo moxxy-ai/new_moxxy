@@ -28,11 +28,23 @@ import {
   permissionAddAllowParamsSchema,
   providerSetActiveParamsSchema,
   runTurnParamsSchema,
+  schedulerCreateParamsSchema,
+  schedulerDeleteParamsSchema,
+  schedulerListParamsSchema,
+  schedulerRunNowParamsSchema,
+  schedulerSetEnabledParamsSchema,
+  schedulerUpdateParamsSchema,
   setResolverParamsSchema,
   transcribeParamsSchema,
   type AttachResult,
   type CommandRunResult,
   type RunTurnResult,
+  type SchedulerCreateResult,
+  type SchedulerDeleteResult,
+  type SchedulerListResult,
+  type SchedulerRunNowResult,
+  type SchedulerSetEnabledResult,
+  type SchedulerUpdateResult,
   type TranscribeResult,
 } from './protocol.js';
 
@@ -128,6 +140,12 @@ export class RunnerServer {
     peer.handle(RunnerMethod.PermissionAddAllow, (raw) => this.handlePermissionAddAllow(raw));
     peer.handle(RunnerMethod.CommandRun, (raw) => this.handleCommandRun(client, raw));
     peer.handle(RunnerMethod.Transcribe, (raw) => this.handleTranscribe(raw));
+    peer.handle(RunnerMethod.SchedulerList, (raw) => this.handleSchedulerList(raw));
+    peer.handle(RunnerMethod.SchedulerCreate, (raw) => this.handleSchedulerCreate(raw));
+    peer.handle(RunnerMethod.SchedulerUpdate, (raw) => this.handleSchedulerUpdate(raw));
+    peer.handle(RunnerMethod.SchedulerSetEnabled, (raw) => this.handleSchedulerSetEnabled(raw));
+    peer.handle(RunnerMethod.SchedulerDelete, (raw) => this.handleSchedulerDelete(raw));
+    peer.handle(RunnerMethod.SchedulerRunNow, (raw) => this.handleSchedulerRunNow(raw));
 
     peer.onClose(() => this.onDisconnect(client));
   }
@@ -283,6 +301,41 @@ export class RunnerServer {
       ...(params.language ? { language: params.language } : {}),
       ...(params.prompt ? { prompt: params.prompt } : {}),
     });
+  }
+
+  private async handleSchedulerList(raw: unknown): Promise<SchedulerListResult> {
+    const params = schedulerListParamsSchema.parse(raw);
+    return this.requireScheduler().list(params);
+  }
+
+  private async handleSchedulerCreate(raw: unknown): Promise<SchedulerCreateResult> {
+    const params = schedulerCreateParamsSchema.parse(raw);
+    return this.requireScheduler().create(params);
+  }
+
+  private async handleSchedulerUpdate(raw: unknown): Promise<SchedulerUpdateResult> {
+    const params = schedulerUpdateParamsSchema.parse(raw);
+    return this.requireScheduler().update(params.id, params.input);
+  }
+
+  private async handleSchedulerSetEnabled(raw: unknown): Promise<SchedulerSetEnabledResult> {
+    const params = schedulerSetEnabledParamsSchema.parse(raw);
+    return this.requireScheduler().setEnabled(params.id, params.enabled);
+  }
+
+  private async handleSchedulerDelete(raw: unknown): Promise<SchedulerDeleteResult> {
+    const params = schedulerDeleteParamsSchema.parse(raw);
+    return this.requireScheduler().delete(params.id);
+  }
+
+  private async handleSchedulerRunNow(raw: unknown): Promise<SchedulerRunNowResult> {
+    const params = schedulerRunNowParamsSchema.parse(raw);
+    return this.requireScheduler().runNow(params.id);
+  }
+
+  private requireScheduler(): NonNullable<Session['scheduler']> {
+    if (!this.session.scheduler) throw new Error('scheduler is not available on the runner');
+    return this.session.scheduler;
   }
 
   private broadcastInfo(): void {
