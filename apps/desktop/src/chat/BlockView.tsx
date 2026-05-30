@@ -491,31 +491,117 @@ function SubagentView({
 }: {
   readonly block: Extract<FoldedBlock, { kind: 'subagent' }>;
 }): JSX.Element {
+  const [open, setOpen] = useState(false);
   const running = block.completedAtMs === null && block.error === null;
   const accent = block.error
     ? 'var(--color-red)'
     : running
       ? 'var(--color-primary)'
       : 'var(--color-green)';
+  const tint = block.error ? '#fee2e2' : running ? 'var(--color-primary-soft)' : '#ecfdf5';
+  const statusText = running ? 'running' : block.error ? 'failed' : 'done';
+  const elapsed =
+    block.completedAtMs !== null ? Math.round((block.completedAtMs - block.startedAtMs) / 100) / 10 : null;
   return (
     <div
       data-testid="block-subagent"
-      className="mono"
-      style={{
-        alignSelf: 'flex-start',
-        marginLeft: 46,
-        fontSize: 12,
-        color: 'var(--color-text-dim)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-      }}
+      style={{ alignSelf: 'stretch', display: 'flex', gap: 12, maxWidth: '92%' }}
     >
-      <span style={{ color: accent }}>◆</span>
-      <span style={{ color: 'var(--color-text-muted)' }}>agent {block.label}</span>
-      <span>· {running ? 'running' : block.error ? 'failed' : 'done'}</span>
-      <span>· {block.toolCallCount} tool calls</span>
-      {block.error && <span style={{ color: 'var(--color-red)' }}>· {oneLine(block.error)}</span>}
+      <span
+        aria-hidden
+        style={{
+          width: 34,
+          height: 34,
+          flexShrink: 0,
+          borderRadius: 10,
+          background: tint,
+          color: accent,
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Icon name="agent" size={18} />
+      </span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '2px 0',
+            width: '100%',
+            textAlign: 'left',
+          }}
+        >
+          <span style={{ fontWeight: 600, fontSize: 13.5 }}>
+            Agent
+            <span style={{ color: 'var(--color-text-dim)', fontWeight: 500, marginLeft: 6 }}>
+              · {block.label}
+            </span>
+          </span>
+          <span className="mono" style={{ fontSize: 11, color: accent, fontWeight: 600 }}>
+            {statusText}
+          </span>
+          <span className="mono" style={{ fontSize: 11, color: 'var(--color-text-dim)' }}>
+            · {block.toolCallCount} tool {block.toolCallCount === 1 ? 'call' : 'calls'}
+          </span>
+          <span style={{ flex: 1 }} />
+          {running && (
+            <span
+              aria-hidden
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: accent,
+                animation: 'moxxy-thinking 1.1s ease-in-out infinite',
+              }}
+            />
+          )}
+          <span
+            aria-hidden
+            style={{
+              color: 'var(--color-text-dim)',
+              transform: open ? 'rotate(90deg)' : 'none',
+              transition: 'transform 120ms ease',
+              display: 'inline-flex',
+            }}
+          >
+            <Icon name="chevron-right" size={14} />
+          </span>
+        </button>
+        {open && (
+          <div
+            style={{
+              marginTop: 6,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
+              fontSize: 12,
+              color: 'var(--color-text-muted)',
+            }}
+          >
+            <div className="mono" style={{ fontSize: 11, color: 'var(--color-text-dim)' }}>
+              {block.toolCallCount} tool {block.toolCallCount === 1 ? 'call' : 'calls'}
+              {block.stopReason ? ` · ${block.stopReason}` : ''}
+              {elapsed !== null ? ` · ${elapsed}s` : ''}
+            </div>
+            {block.error ? (
+              <pre style={{ ...preStyle, color: 'var(--color-red)' }}>{block.error}</pre>
+            ) : block.finalPreview ? (
+              <pre style={preStyle}>{block.finalPreview}</pre>
+            ) : (
+              <div style={{ fontStyle: 'italic', color: 'var(--color-text-dim)' }}>
+                {running ? 'Working…' : 'No output captured.'}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

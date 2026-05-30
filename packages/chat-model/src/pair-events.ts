@@ -246,7 +246,10 @@ export function pairToolEvents(
           error: null,
         };
         subagents.set(childSessionId, block);
-        pushBlock(block);
+        // Subagents always render at the top level — a spawned agent is a
+        // first-class actor, not a child of whatever skill spawned it.
+        // Pushing to root (not pushBlock) keeps it out of the skill scope.
+        root.push(block);
         continue;
       }
       const block = subagents.get(childSessionId);
