@@ -3,6 +3,14 @@
   "private": true,
   "version": "0.0.2",
   "description": "moxxy desktop — Electron app that connects to moxxy via @moxxy/runner and renders a TUI-equivalent chat surface.",
+  "homepage": "https://moxxy.ai",
+  "author": "Michal Makowski <michal.makowski97@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/moxxy-ai/moxxy.git",
+    "directory": "apps/desktop"
+  },
   "type": "module",
   "main": "dist-electron/main/index.js",
   "scripts": {
@@ -55,6 +63,13 @@
     "directories": {
       "output": "release"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "moxxy-ai",
+        "repo": "moxxy"
+      }
+    ],
     "files": [
       "dist-electron/**",
       "dist/**"

@@ -77,13 +77,24 @@ jobs:
       - name: Build workspace
         run: pnpm build
 
-      # The public dev Clerk key — safe to bake into a dev release.
-      - name: Provision .env (shell)
-        if: runner.os != 'Windows'
-        run: cp apps/desktop/.env.example apps/desktop/.env
-      - name: Provision .env (windows)
-        if: runner.os == 'Windows'
-        run: Copy-Item apps/desktop/.env.example apps/desktop/.env
+      # Bake the Clerk publishable key into the build — Vite inlines
+      # VITE_CLERK_PUBLISHABLE_KEY at build time, so it must be present now.
+      # Prefer the CLERK_PUBLISHABLE_KEY repo secret (set a pk_live_ key
+      # there for real releases); fall back to the public pk_test_ key in
+      # .env.example so forks / PR builds without the secret still build.
+      # `shell: bash` runs on all three runners (Windows included).
+      - name: Provision .env
+        shell: bash
+        env:
+          CLERK_PUBLISHABLE_KEY: ${{ secrets.CLERK_PUBLISHABLE_KEY }}
+        run: |
+          if [ -n "$CLERK_PUBLISHABLE_KEY" ]; then
+            echo "VITE_CLERK_PUBLISHABLE_KEY=$CLERK_PUBLISHABLE_KEY" > apps/desktop/.env
+            echo "Using CLERK_PUBLISHABLE_KEY secret."
+          else
+            echo "CLERK_PUBLISHABLE_KEY not set; falling back to the public test key in .env.example."
+            cp apps/desktop/.env.example apps/desktop/.env
+          fi
 
       # electron-builder reads the per-OS targets from apps/desktop's
       # package.json#build and emits to apps/desktop/release/.
