@@ -277,7 +277,7 @@ export class PluginHost implements PluginHostHandle {
   private applyPlugin(plugin: Plugin, manifest?: ResolvedPluginManifest): LoadedRecord {
     const toolNames = (plugin.tools ?? []).map((t: ToolDef) => t.name);
     const providerNames = (plugin.providers ?? []).map((p: ProviderDef) => p.name);
-    const modeNames = (plugin.modes ?? []).map((l: ModeDef) => l.name);
+    const modeNames = (plugin.modes ?? []).map((m: ModeDef) => m.name);
     const compactorNames = (plugin.compactors ?? []).map((c: CompactorDef) => c.name);
     const cacheStrategyNames = (plugin.cacheStrategies ?? []).map((c: CacheStrategyDef) => c.name);
     const viewRendererNames = (plugin.viewRenderers ?? []).map((v: ViewRendererDef) => v.name);
@@ -294,7 +294,7 @@ export class PluginHost implements PluginHostHandle {
 
     for (const tool of plugin.tools ?? []) this.opts.tools.register(tool);
     for (const provider of plugin.providers ?? []) this.opts.providers.register(provider);
-    for (const loop of plugin.modes ?? []) this.opts.modes.register(loop);
+    for (const mode of plugin.modes ?? []) this.opts.modes.register(mode);
     for (const compactor of plugin.compactors ?? []) this.opts.compactors.register(compactor);
     for (const cacheStrategy of plugin.cacheStrategies ?? [])
       this.opts.cacheStrategies.register(cacheStrategy);
