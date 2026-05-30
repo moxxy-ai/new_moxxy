@@ -42,6 +42,7 @@ function buildHelp(session: Session | null): string {
       {
         title: 'FLAGS',
         rows: [
+          ['--browser', 'force the loopback/browser flow even without a TTY (opens the browser automatically)'],
           ['--no-browser', 'force the headless device-code flow (auto when no TTY)'],
         ],
       },
@@ -110,11 +111,17 @@ async function loginProvider(argv: ParsedArgv, providerName: string): Promise<nu
   // flow that's about to start.
   await vault.open();
 
-  // Headless mode triggers when:
-  //   - stdin isn't a TTY (CI, ssh -T, docker exec without -t), OR
+  // Headless (device-code) mode triggers when:
   //   - the user passes `--no-browser` (e.g. running on a remote box and
-  //     wanting to complete the flow from their laptop's browser).
-  const headless = hasBoolFlag(argv, 'no-browser') || process.stdin.isTTY !== true;
+  //     wanting to complete the flow from their laptop's browser), OR
+  //   - stdin isn't a TTY (CI, ssh -T, docker exec without -t) AND the
+  //     caller didn't force the browser flow with `--browser`.
+  // `--browser` lets a GUI host (the desktop app) spawn `moxxy login` with
+  // piped stdio yet still get the loopback flow that opens the browser
+  // automatically — no manual code copying.
+  const headless =
+    hasBoolFlag(argv, 'no-browser') ||
+    (!hasBoolFlag(argv, 'browser') && process.stdin.isTTY !== true);
   const ctx = buildProviderAuthContext(vault, { headless });
 
   try {

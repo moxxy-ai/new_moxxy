@@ -115,7 +115,7 @@ export async function runProviderLogin(
   const cli = resolveMoxxyCli({ extraPaths: augmentedPaths() });
   if (!cli) throw new Error('moxxy CLI not found — run the install step first');
 
-  emit(window, `$ moxxy login ${provider}`);
+  emit(window, `$ moxxy login ${provider} --browser`);
 
   // GUI launches lack the shell PATH, so moxxy's `#!/usr/bin/env node`
   // shebang can't find node → `moxxy login` died with
@@ -124,15 +124,21 @@ export async function runProviderLogin(
   const cliDir = cli.kind === 'direct' ? dirname(cli.bin) : dirname(cli.entry);
   const env = { ...process.env, PATH: spawnPath([cliDir]) };
 
+  // `--browser` forces the loopback flow (which opens the system browser
+  // automatically + catches the localhost callback) instead of the headless
+  // device-code flow `moxxy login` would otherwise pick because we spawn it
+  // with piped stdio (no TTY). The desktop is a GUI — no code copying.
+  const loginArgs = ['login', provider, '--browser'];
+
   return new Promise<number>((resolve, reject) => {
     let proc;
     if (cli.kind === 'direct') {
-      proc = spawn(cli.bin, ['login', provider], { stdio: ['ignore', 'pipe', 'pipe'], env });
+      proc = spawn(cli.bin, loginArgs, { stdio: ['ignore', 'pipe', 'pipe'], env });
     } else {
       // No system `node` on a GUI launch — run the bundled CLI with
       // Electron's own Node (ELECTRON_RUN_AS_NODE), merged onto the PATH env.
       const { command, env: nodeEnv } = nodeLauncher();
-      proc = spawn(command, [cli.entry, 'login', provider], {
+      proc = spawn(command, [cli.entry, ...loginArgs], {
         stdio: ['ignore', 'pipe', 'pipe'],
         env: { ...env, ...nodeEnv },
       });
