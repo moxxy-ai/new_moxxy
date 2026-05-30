@@ -72,13 +72,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # The desktop bundles its workspace deps, so the rest of the repo
-      # must be built first (turbo handles ordering + cache).
-      - name: Build workspace
-        run: pnpm build
-
-      # Bake the Clerk publishable key into the build — Vite inlines
-      # VITE_CLERK_PUBLISHABLE_KEY at build time, so it must be present now.
+      # Bake the Clerk publishable key BEFORE building. `pnpm build` runs
+      # electron-vite, which INLINES VITE_CLERK_PUBLISHABLE_KEY into the
+      # renderer bundle — so .env must already exist here. Provisioning it
+      # after the build is a no-op (the bundle is baked, and the package
+      # step only repackages dist/), which is exactly how shipped builds
+      # ended up keyless and white-screened (useUser threw with no
+      # <ClerkProvider>).
       # Prefer the CLERK_PUBLISHABLE_KEY repo secret (set a pk_live_ key
       # there for real releases); fall back to the public pk_test_ key in
       # .env.example so forks / PR builds without the secret still build.
@@ -95,6 +95,12 @@ jobs:
             echo "CLERK_PUBLISHABLE_KEY not set; falling back to the public test key in .env.example."
             cp apps/desktop/.env.example apps/desktop/.env
           fi
+
+      # The desktop bundles its workspace deps, so the rest of the repo
+      # must be built first (turbo handles ordering + cache). .env above is
+      # in place, so electron-vite bakes the Clerk key into the renderer.
+      - name: Build workspace
+        run: pnpm build
 
       # electron-builder reads the per-OS targets from apps/desktop's
       # package.json#build and emits to apps/desktop/release/.
