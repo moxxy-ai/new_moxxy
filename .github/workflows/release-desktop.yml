@@ -107,6 +107,10 @@ jobs:
       # run via Electron's Node). electron-builder ships resources/moxxy-cli
       # via extraResources.
       - name: Bundle moxxy CLI
+        # `shell: bash` so `rm -rf` works on the Windows runner too (its
+        # default shell is PowerShell, where `rm -rf` is invalid). Git Bash
+        # ships on GitHub's windows-latest image.
+        shell: bash
         run: |
           rm -rf apps/desktop/resources/moxxy-cli
           pnpm --filter @moxxy/cli --legacy deploy --prod apps/desktop/resources/moxxy-cli
