@@ -17,4 +17,8 @@ export {
   toggleFocusWindow,
   isFocusOpen,
 } from './focus-window.js';
-export { installContentSecurityPolicy, lockDownNavigation } from './security.js';
+export {
+  installContentSecurityPolicy,
+  lockDownNavigation,
+  isSafeExternalUrl,
+} from './security.js';

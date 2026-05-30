@@ -31,8 +31,9 @@ import {
   toggleFocusWindow,
   installContentSecurityPolicy,
   lockDownNavigation,
+  isSafeExternalUrl,
 } from '@moxxy/desktop-host';
-import { ipcMain, Tray, Menu, nativeImage, globalShortcut, session } from 'electron';
+import { ipcMain, Tray, Menu, nativeImage, globalShortcut, session, shell } from 'electron';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -116,8 +117,12 @@ async function createWindow(): Promise<void> {
         };
       }
     } catch {
-      /* malformed URL → deny */
+      return { action: 'deny' };
     }
+    // Any other http/https link (e.g. a markdown link in the chat, opened
+    // via target="_blank") goes to the user's default browser rather than an
+    // in-app window. Non-http(s) schemes are refused outright.
+    if (isSafeExternalUrl(url)) void shell.openExternal(url);
     return { action: 'deny' };
   });
 

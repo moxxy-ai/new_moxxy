@@ -170,6 +170,10 @@ class ChatStore {
   private cachedUnread: ReadonlyArray<string> = [];
   private unreadDirty = true;
   private persistence: ChatPersistence | null = null;
+  /** Turn ids whose events must NOT enter the visible transcript — used by
+   *  background generations (e.g. AI skill drafting) that run as a real
+   *  runner turn but should never show up in the chat. */
+  private hiddenTurns = new Set<string>();
 
   /** Wire the durable backend (called once at boot by ChatStoreBridge). */
   setPersistence(p: ChatPersistence): void {
@@ -237,6 +241,17 @@ class ChatStore {
    *  Reference-stable until the next response lands (safe for useSyncExternalStore). */
   getUsage(workspaceId: string): UsageSnapshot {
     return this.slots.get(workspaceId)?.usage ?? EMPTY_USAGE;
+  }
+
+  /** Mark a turn's events as background-only — they will be dropped from the
+   *  visible transcript (and never persisted). For AI skill drafting etc. */
+  hideTurn(turnId: string): void {
+    this.hiddenTurns.add(turnId);
+  }
+
+  /** Stop hiding a turn (call once the background work has finished). */
+  unhideTurn(turnId: string): void {
+    this.hiddenTurns.delete(turnId);
   }
 
   /** Toggle the manual-compaction lock for a workspace (composer disable). */
@@ -390,6 +405,14 @@ class ChatStore {
 
   dispatch(workspaceId: string, action: ChatAction): void {
     const slot = this.ensure(workspaceId);
+
+    // Background turns (e.g. AI skill drafting) never touch the transcript —
+    // drop every event/lifecycle tagged with a hidden turn id.
+    if (action.type === 'event' && this.hiddenTurns.has(action.event.turnId)) return;
+    if (action.type === 'turn_complete' && this.hiddenTurns.has(action.turnId)) {
+      this.hiddenTurns.delete(action.turnId);
+      return;
+    }
 
     // provider_response carries token usage but is not a rendered/persisted
     // event, so it never lands in the log. Fold its usage into the side-channel

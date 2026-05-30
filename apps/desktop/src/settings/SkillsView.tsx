@@ -636,10 +636,10 @@ function GenerateSkillModal({
   const [error, setError] = useState<string | null>(null);
   const [turnId, setTurnId] = useState<string | null>(null);
 
-  // The generation turn streams events through chatStore for the
-  // active workspace just like any normal turn — but we mirror the
-  // assistant chunks into local state too so the modal can preview
-  // them without subscribing to the entire chat reducer.
+  // The generation runs as a real runner turn (the only path to the model
+  // from this thin client), but the turn is HIDDEN from the transcript via
+  // chatStore.hideTurn — so it never pollutes the chat. We mirror the
+  // assistant chunks into local state for the in-modal preview.
   useEffect(() => {
     if (!turnId) return;
     const offEvent = api().subscribe(
@@ -657,6 +657,7 @@ function GenerateSkillModal({
       'runner.turn.complete',
       ({ turnId: id, error: err }: { workspaceId: string; turnId: string; error: string | null }) => {
         if (id !== turnId) return;
+        chatStore.unhideTurn(id);
         if (err) {
           setPhase('error');
           setError(err);
@@ -668,6 +669,7 @@ function GenerateSkillModal({
     return () => {
       offEvent();
       offDone();
+      chatStore.unhideTurn(turnId);
     };
   }, [turnId]);
 
@@ -681,10 +683,12 @@ function GenerateSkillModal({
         workspaceId,
         prompt: SKILL_PROMPT_TEMPLATE(description.trim()),
       });
+      // Hide BEFORE we start reading: the runner echoes a user_prompt + the
+      // assistant output for this turn, and none of it should reach the
+      // transcript. We deliberately do NOT dispatch send_started either, so
+      // the chat never shows a phantom "sending" turn.
+      chatStore.hideTurn(id);
       setTurnId(id);
-      // Mark the workspace busy; the runner echoes the seed prompt as a
-      // user_prompt event, so the transcript fills itself in.
-      chatStore.dispatch(workspaceId, { type: 'send_started', turnId: id });
     } catch (e) {
       setPhase('error');
       setError(toErrorMessage(e));
@@ -721,7 +725,7 @@ function GenerateSkillModal({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 11.5, color: 'var(--color-text-dim)' }}>
             {workspaceId
-              ? "Generation runs as a normal turn in the active workspace."
+              ? 'Generated privately — it stays here in the editor and never shows in the chat.'
               : 'No active workspace — open one before generating.'}
           </span>
           <button
