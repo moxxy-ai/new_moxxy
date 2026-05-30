@@ -18,6 +18,61 @@ import type {
 import { EventProjector } from './projector.js';
 import { actionPrompt, type ClientFrame, type ServerFrame } from './protocol.js';
 
+function isAddrInUse(err: unknown): boolean {
+  return (
+    !!err &&
+    typeof err === 'object' &&
+    (err as { code?: string }).code === 'EADDRINUSE'
+  );
+}
+
+/** Best-effort: kill the process bound to a TCP port so the next
+ *  bind succeeds. lsof + SIGTERM → SIGKILL grace. macOS / Linux. */
+async function freeTcpPort(port: number): Promise<void> {
+  if (process.platform === 'win32') return;
+  const { spawn } = await import('node:child_process');
+  const pids = await new Promise<ReadonlyArray<number>>((resolve) => {
+    let out = '';
+    try {
+      const child = spawn('lsof', ['-t', `-iTCP:${port}`, '-sTCP:LISTEN'], {
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+      child.stdout.on('data', (b) => {
+        out += b.toString();
+      });
+      child.on('error', () => resolve([]));
+      child.on('close', () => {
+        const found = new Set<number>();
+        for (const line of out.split('\n')) {
+          const n = parseInt(line.trim(), 10);
+          if (Number.isFinite(n) && n > 0) found.add(n);
+        }
+        resolve([...found]);
+      });
+    } catch {
+      resolve([]);
+    }
+  });
+  for (const pid of pids) {
+    if (pid === process.pid) continue;
+    try {
+      process.kill(pid, 'SIGTERM');
+    } catch {
+      /* may already be gone */
+    }
+  }
+  await new Promise((r) => setTimeout(r, 400));
+  for (const pid of pids) {
+    if (pid === process.pid) continue;
+    try {
+      process.kill(pid, 0);
+      process.kill(pid, 'SIGKILL');
+    } catch {
+      /* dead */
+    }
+  }
+}
+
 /** Where `scripts/build-web.mjs` writes the browser bundle (relative to dist/channel.js). */
 const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'public');
 
@@ -137,16 +192,7 @@ export class WebChannel implements Channel<WebStartOpts> {
     this.wss = wss;
     wss.on('connection', (ws) => this.onConnection(ws));
 
-    await new Promise<void>((resolve, reject) => {
-      server.once('error', reject);
-      server.listen(this.port, this.host, () => {
-        // Resolve the actual bound port (handles port 0 / ephemeral).
-        const addr = server.address();
-        if (addr && typeof addr === 'object') this.port = (addr as AddressInfo).port;
-        this.logger?.info?.('web channel listening', { url: this.url });
-        resolve();
-      });
-    });
+    await this.bindServerWithRetry(server);
 
     await this.openTunnel();
     this.publishSurface?.({ url: this.shareUrl, nextViewId: () => `v_srv_${++this.viewSeq}` });
@@ -154,6 +200,42 @@ export class WebChannel implements Channel<WebStartOpts> {
 
     const running = new Promise<void>((resolve) => server.once('close', () => resolve()));
     return { running, stop: () => this.stop() };
+  }
+
+  /**
+   * Bind the HTTP server, with one round of recovery if the port is
+   * already in use. A stale `moxxy serve` from a prior install often
+   * leaves 4040 bound even after its unix socket has been released;
+   * killing whatever PID holds the port lets the fresh server boot
+   * cleanly instead of crashing with EADDRINUSE.
+   */
+  private async bindServerWithRetry(server: ReturnType<typeof createServer>): Promise<void> {
+    const tryListen = (): Promise<void> =>
+      new Promise<void>((resolve, reject) => {
+        const onError = (err: Error): void => {
+          server.off('listening', onListening);
+          reject(err);
+        };
+        const onListening = (): void => {
+          server.off('error', onError);
+          const addr = server.address();
+          if (addr && typeof addr === 'object') this.port = (addr as AddressInfo).port;
+          this.logger?.info?.('web channel listening', { url: this.url });
+          resolve();
+        };
+        server.once('error', onError);
+        server.once('listening', onListening);
+        server.listen(this.port, this.host);
+      });
+
+    try {
+      await tryListen();
+    } catch (err) {
+      if (!isAddrInUse(err)) throw err;
+      this.logger?.warn?.(`web channel port ${this.port} in use; freeing and retrying`);
+      await freeTcpPort(this.port).catch(() => undefined);
+      await tryListen();
+    }
   }
 
   /**

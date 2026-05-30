@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MoxxyAI Workspaces</title>
+    <link
+      rel="preconnect"
+      href="https://fonts.googleapis.com"
+    />
+    <link
+      rel="preconnect"
+      href="https://fonts.gstatic.com"
+      crossorigin
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <style>
+      html, body { margin: 0; background: rgb(252, 252, 255); color: #0f172a;
+        font-family: 'Inter', -apple-system, system-ui, sans-serif; }
+      #splash-fallback { position: fixed; inset: 0; display: flex;
+        flex-direction: column; align-items: center; justify-content: center;
+        gap: 1.25rem; }
+      #splash-fallback .mark { width: 160px; height: 160px;
+        background: url('/avatar.gif') center/contain no-repeat;
+        animation: splash-bob 2.2s ease-in-out infinite; }
+      #splash-fallback .label { font-size: 0.85rem; color: #475569;
+        letter-spacing: 0.04em; font-family: 'JetBrains Mono', monospace; }
+      @keyframes splash-bob {
+        0%, 100% { transform: translateY(0); }
+        50%      { transform: translateY(-8px); }
+      }
+    </style>
+    <link rel="icon" type="image/png" href="/logo.png" />
+    <div id="root">
+      <div id="splash-fallback">
+        <div class="mark" aria-label="moxxy"></div>
+        <div class="label">Starting moxxy…</div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

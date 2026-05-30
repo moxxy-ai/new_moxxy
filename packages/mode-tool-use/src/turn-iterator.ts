@@ -4,6 +4,7 @@ import {
   collectProviderStream,
   createStuckLoopDetector,
   dispatchToolCall,
+  isContextOverflowError,
   projectMessages,
   runCompactionIfNeeded,
   runElisionIfNeeded,
@@ -24,6 +25,12 @@ export async function* runToolUseMode(ctx: ModeContext): AsyncIterable<MoxxyEven
   // common "model keeps calling the same tool" case ~10 iterations in.
   const maxIterations = ctx.maxIterations ?? 500;
   const detector = createStuckLoopDetector();
+  // Reactive-compaction budget per overflow episode. If the provider keeps
+  // rejecting for context size even after compacting this many times, give up
+  // (the overflow is in the recent, un-compactable tail). Reset on any clean
+  // provider call so a long turn can recover from multiple overflow episodes.
+  const MAX_REACTIVE_COMPACTIONS = 2;
+  let reactiveCompactions = 0;
 
   for (let iteration = 1; iteration <= maxIterations; iteration++) {
     if (ctx.signal.aborted) {
@@ -83,6 +90,28 @@ export async function* runToolUseMode(ctx: ModeContext): AsyncIterable<MoxxyEven
     });
 
     if (error) {
+      // The request was too big for the model's window: our token estimate
+      // lagged the provider's real tokenizer, so the proactive compactor
+      // didn't fire. Force a compaction and retry rather than dying — this is
+      // the auto-compact-on-overflow path.
+      if (
+        isContextOverflowError(error.message) &&
+        reactiveCompactions < MAX_REACTIVE_COMPACTIONS
+      ) {
+        reactiveCompactions += 1;
+        const compacted = await runCompactionIfNeeded(ctx, { force: true });
+        if (compacted) {
+          yield await ctx.emit({
+            type: 'error',
+            sessionId: ctx.sessionId,
+            turnId: ctx.turnId,
+            source: 'system',
+            kind: 'retryable',
+            message: 'context window exceeded — compacted older turns, retrying',
+          });
+          continue;
+        }
+      }
       yield await ctx.emit({
         type: 'error',
         sessionId: ctx.sessionId,
@@ -94,6 +123,8 @@ export async function* runToolUseMode(ctx: ModeContext): AsyncIterable<MoxxyEven
       if (!error.retryable) return;
       continue;
     }
+    // Clean provider call — reset the overflow-recovery budget.
+    reactiveCompactions = 0;
 
     const stuck = yield* emitRequestsAndDetectStuck(ctx, toolUses, detector);
     if (stuck) return;
@@ -149,8 +180,12 @@ async function* emitRequestsAndDetectStuck(
       name: t.name,
       input: t.input,
     });
-    const repeats = detector.record(t.name, t.input);
-    if (repeats >= detector.repeatThreshold) {
+    const sig = detector.record(t.name, t.input);
+    if (sig.stuck) {
+      const how =
+        sig.kind === 'near'
+          ? 'against the same target (only volatile args like maxBytes varied)'
+          : 'with identical input';
       yield await ctx.emit({
         type: 'error',
         sessionId: ctx.sessionId,
@@ -159,8 +194,8 @@ async function* emitRequestsAndDetectStuck(
         kind: 'fatal',
         message:
           `tool-use loop aborted — detected stuck pattern: tool "${t.name}" called ` +
-          `${repeats} times with identical input in the last ${detector.windowSize} ` +
-          `tool calls. The model is likely looping on the same call; reset or rephrase.`,
+          `${sig.count} times ${how}. The model is likely looping on the same call; ` +
+          `reset or rephrase.`,
       });
       return true;
     }

@@ -40,10 +40,23 @@ export interface SessionLogReader extends EventLogReader {
   subscribe(fn: (event: MoxxyEvent) => void | Promise<void>): () => void;
 }
 
-/** Serializable provider metadata (models + context windows) for display. */
+/** How a provider authenticates. UIs use this to decide whether to
+ *  show an API-key field or kick off an OAuth flow. */
+export type ProviderAuthKind = 'api-key' | 'oauth';
+
+/** Serializable provider metadata (models + context windows + auth)
+ *  for display. */
 export interface ProviderInfo {
   readonly name: string;
   readonly models: ReadonlyArray<ModelDescriptor>;
+  /** 'oauth' when the provider declares an oauth login on its plugin
+   *  definition, 'api-key' otherwise. Defaults to 'api-key' for
+   *  providers that don't declare. */
+  readonly authKind: ProviderAuthKind;
+  /** True when the provider's plugin can list its models live (e.g.
+   *  via /v1/models). Lets the desktop's model picker show a
+   *  "Fetch live" affordance only where it makes sense. */
+  readonly supportsLiveModelDiscovery: boolean;
 }
 
 /** Serializable tool metadata for status lines / slash menus / compact rendering. */

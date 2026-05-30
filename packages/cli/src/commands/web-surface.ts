@@ -35,6 +35,11 @@ export async function coAttachWebSurface(opts: CoAttachWebOptions): Promise<Chan
   const { primary, session, vault, config } = opts;
   const write = opts.write ?? ((line: string) => process.stdout.write(line));
   if (primary === 'web') return null;
+  // Opt-out for embedded runners (e.g. the desktop app, which owns
+  // its own UI and just needs the unix-socket RPC). Without this,
+  // multiple parallel runners all try to bind the web surface's
+  // fixed port (4040) and the second one crashes with EADDRINUSE.
+  if (process.env.MOXXY_NO_WEB_SURFACE === '1') return null;
   const webCfg = ((config.channels as Record<string, unknown> | undefined)?.web ?? {}) as Record<string, unknown>;
   if (webCfg.coAttach === false) return null; // explicit opt-out
   const def = session.channels.get('web');

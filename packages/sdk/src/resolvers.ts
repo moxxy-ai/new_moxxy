@@ -1,4 +1,10 @@
-import type { PendingToolCall, PermissionContext, PermissionDecision, PermissionResolver } from './permission.js';
+import type {
+  PendingToolCall,
+  PermissionContext,
+  PermissionDecision,
+  PermissionResolver,
+  PermissionRule,
+} from './permission.js';
 
 export const autoAllowResolver: PermissionResolver = {
   name: 'auto-allow',
@@ -106,4 +112,53 @@ export function createDeferredPermissionResolver(
       pending.clear();
     },
   };
+}
+
+/**
+ * Evaluate a tool's OWN declared {@link PermissionRule} against a call.
+ *
+ * Tools can ship a `permission` rule to express their author's policy — e.g.
+ * `reload_skills` / `load_tool` declare `{ action: 'allow' }` because they're
+ * safe, internal, idempotent operations that should never prompt. That rule
+ * was previously stored on the ToolDef but never consulted, so in headless
+ * runs (where the channel resolver denies by default) even these safe tools
+ * were blocked. The session resolver now consults this BETWEEN the user's
+ * `permissions.json` policy and the channel resolver, so:
+ *
+ *   user policy (deny/allow)  >  tool-declared rule  >  channel resolver
+ *
+ * Returns a decision for a matching `allow`/`deny` rule, or `null` to defer
+ * (no rule, pattern didn't match, or `action: 'prompt'` — the interactive
+ * resolver should handle those).
+ */
+export function evaluateToolRule(
+  rule: PermissionRule | undefined,
+  call: PendingToolCall,
+): PermissionDecision | null {
+  if (!rule || !toolRuleMatches(rule, call)) return null;
+  switch (rule.action) {
+    case 'allow':
+      return { mode: 'allow', reason: rule.reason ?? 'tool-declared allow' };
+    case 'deny':
+      return { mode: 'deny', reason: rule.reason ?? 'tool-declared deny' };
+    case 'prompt':
+      return null; // defer to the interactive resolver
+  }
+}
+
+function toolRuleMatches(rule: PermissionRule, call: PendingToolCall): boolean {
+  const p = rule.pattern;
+  if (!p) return true; // no pattern → applies to every call of this tool
+  if (p.name !== undefined && !patternMatch(p.name, call.name)) return false;
+  if (p.inputMatches) {
+    const input = (call.input ?? {}) as Record<string, unknown>;
+    for (const [key, matcher] of Object.entries(p.inputMatches)) {
+      if (!patternMatch(matcher, String(input[key] ?? ''))) return false;
+    }
+  }
+  return true;
+}
+
+function patternMatch(pattern: string | RegExp, candidate: string): boolean {
+  return pattern instanceof RegExp ? pattern.test(candidate) : pattern === candidate;
 }

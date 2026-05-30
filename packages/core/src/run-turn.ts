@@ -27,6 +27,9 @@ export async function* runTurn(
   const waiters: Array<() => void> = [];
   let done = false;
   let strategyError: unknown = null;
+  // A mode can ask (via ctx.requestModeSwitch) to hand off to another mode
+  // once this turn finishes — applied after the strategy drains, below.
+  let requestedModeSwitch: string | null = null;
 
   const wake = (): void => waiters.shift()?.();
   const unsubscribe = session.log.subscribe((event) => {
@@ -80,6 +83,9 @@ export async function* runTurn(
         parentSignal: effectiveSignal,
         parentModel: model,
       }),
+      requestModeSwitch: (modeName: string) => {
+        requestedModeSwitch = modeName;
+      },
       emit: (event: EmittedEvent) => session.log.append(event),
     };
 
@@ -109,6 +115,18 @@ export async function* runTurn(
   } finally {
     unsubscribe();
     if (strategyPromise) await strategyPromise;
+    // Apply a mode hand-off the strategy requested, now that the turn has
+    // fully drained. Only on clean completion (a thrown/aborted turn keeps
+    // the current mode); an unknown target is ignored so a bad name can't
+    // wedge the session. The registry's setActive triggers the runner's
+    // InfoChanged broadcast, so channels see the new mode.
+    if (requestedModeSwitch && !strategyError) {
+      try {
+        session.modes.setActive(requestedModeSwitch);
+      } catch {
+        /* unregistered target — leave the active mode unchanged */
+      }
+    }
   }
 
   if (strategyError) throw strategyError;

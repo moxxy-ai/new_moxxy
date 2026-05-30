@@ -33,6 +33,7 @@ import { WorkflowExecutorRegistry } from './registries/workflow-executors.js';
 import { RequirementRegistry } from './requirements.js';
 import { PermissionEngine } from './permissions/engine.js';
 import { autoAllowResolver } from './permissions/resolvers.js';
+import { evaluateToolRule } from '@moxxy/sdk';
 import type {
   ApprovalResolver,
   CredentialResolver,
@@ -42,6 +43,7 @@ import type {
   PendingToolCall,
   PermissionContext,
   PermissionResolver,
+  PermissionRule,
 } from '@moxxy/sdk';
 import { createLogger, silentLogger, type Logger } from './logger.js';
 
@@ -177,6 +179,7 @@ export class Session implements ClientSession, SessionRuntime {
     this.resolver = wrapWithPolicy(
       opts.permissionResolver ?? autoAllowResolver,
       this.permissions,
+      (name) => this.tools.get(name)?.permission,
     );
     this.dispatcher = new HookDispatcherImpl({
       logger: this.logger,
@@ -229,7 +232,11 @@ export class Session implements ClientSession, SessionRuntime {
   setPermissionResolver(resolver: PermissionResolver): void {
     // Re-wrap so policy rules continue to short-circuit prompts when a
     // channel installs its own resolver mid-session.
-    this.resolver = wrapWithPolicy(resolver, this.permissions);
+    this.resolver = wrapWithPolicy(
+      resolver,
+      this.permissions,
+      (name) => this.tools.get(name)?.permission,
+    );
   }
 
   /** Install/replace the generic approval resolver. Pass null to clear. */
@@ -301,7 +308,19 @@ export class Session implements ClientSession, SessionRuntime {
       sessionId: this.id,
       cwd: this.cwd,
       activeProvider: active,
-      providers: this.providers.list().map((p) => ({ name: p.name, models: p.models })),
+      providers: this.providers.list().map((p) => ({
+        name: p.name,
+        models: p.models,
+        authKind: p.auth?.kind === 'oauth' ? 'oauth' : 'api-key',
+        // Built-in providers ship hard-coded model lists, so live
+        // discovery on /v1/models isn't required from the host. Admin-
+        // registered providers (kind: 'apiKey' without a builtin def)
+        // are the ones the desktop's "Fetch live" affordance targets;
+        // they advertise this via the provider-admin factory by
+        // setting `supportsLiveModelDiscovery: true` on their def.
+        supportsLiveModelDiscovery:
+          (p as { supportsLiveModelDiscovery?: boolean }).supportsLiveModelDiscovery === true,
+      })),
       activeMode,
       modes: this.modes.list().map((m) => m.name),
       tools: this.tools.list().map((t) => ({
@@ -318,7 +337,13 @@ export class Session implements ClientSession, SessionRuntime {
         ...(c.pendingNotice ? { pendingNotice: c.pendingNotice } : {}),
       })),
       readyProviders: ready ? [...ready] : active ? [active] : [],
-      hasTranscriber: this.transcribers.tryGetActive() != null,
+      // hasTranscriber reports whether any backend is *registered*,
+      // not whether one is active. The active selection is per-flow
+      // (the TUI activates Codex on its first voice toggle; the
+      // desktop relies on handleTranscribe's candidate fallback).
+      // For UI affordance gating (showing / hiding a mic button),
+      // any registered transcriber means "voice is wired."
+      hasTranscriber: this.transcribers.list().length > 0,
       activeTranscriber: this.transcribers.getActiveName(),
     };
   }
@@ -344,6 +369,7 @@ export class Session implements ClientSession, SessionRuntime {
 function wrapWithPolicy(
   inner: PermissionResolver,
   engine: PermissionEngine,
+  getToolRule: (name: string) => PermissionRule | undefined,
 ): PermissionResolver {
   // Use a Proxy so any extra methods on the underlying resolver
   // (`abortAll`, channel-specific helpers) remain accessible — only
@@ -352,8 +378,14 @@ function wrapWithPolicy(
     get(target, prop, receiver) {
       if (prop === 'check') {
         return async (call: PendingToolCall, ctx: PermissionContext) => {
+          // Precedence: user policy (permissions.json) wins, then the
+          // tool's own declared rule (so a tool marked `allow` is never
+          // blocked in headless runs), then the channel resolver's
+          // prompt / deny-by-default path.
           const policy = engine.check(call);
           if (policy) return policy;
+          const toolDecision = evaluateToolRule(getToolRule(call.name), call);
+          if (toolDecision) return toolDecision;
           return target.check(call, ctx);
         };
       }

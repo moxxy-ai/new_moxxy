@@ -32,6 +32,12 @@ export default defineConfig({
     // (tools-builtin/src/read.ts) still resolves next to the bundled bin.
     // Out-of-process isolators (worker/subprocess/wasm) re-import this URL.
     'read-handler': '../tools-builtin/src/read-handler.ts',
+    // Playwright browser sidecar, run as a child process via
+    // `node dist/sidecar.js`. plugin-browser's `defaultSidecarPath()` resolves
+    // it next to its own module — which, once bundled into bin.js, is dist/ —
+    // so it MUST be emitted here too. Without it, `browser_session` spawns a
+    // missing file and the sidecar exits code=1.
+    sidecar: '../plugin-browser/src/sidecar.ts',
   },
   format: ['esm'],
   platform: 'node',

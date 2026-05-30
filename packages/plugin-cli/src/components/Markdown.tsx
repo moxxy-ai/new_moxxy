@@ -1,7 +1,6 @@
 import React from 'react';
 import { Box, Text } from 'ink';
-import { parseBlocks } from './markdown/parse-blocks.js';
-import type { Block } from './markdown/types.js';
+import { parseBlocks, type Block } from '@moxxy/chat-model/markdown';
 import { InlineText } from './markdown/inline.js';
 import { TableBlock } from './markdown/table.js';
 

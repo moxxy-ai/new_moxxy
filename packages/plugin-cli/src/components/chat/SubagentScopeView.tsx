@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
 import { Colors, Glyphs } from '../../theme.js';
-import { DotColors, formatElapsed, truncate } from './format.js';
-import type { SubagentBlock } from './types.js';
+import { DotColors, formatElapsed, truncate, type SubagentBlock } from '@moxxy/chat-model';
 
 export const SubagentScopeView: React.FC<{ scope: SubagentBlock }> = ({ scope }) => {
   const [now, setNow] = useState(() => Date.now());

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
+import { formatElapsed } from '@moxxy/chat-model';
 import { Colors, Glyphs, contextColor } from '../theme.js';
 import { Spinner } from './Spinner.js';
 import { ModeFooter } from './ModeFooter.js';
@@ -119,14 +120,3 @@ const ContextMeter: React.FC<{ used: number; total: number }> = ({ used, total }
     </Box>
   );
 };
-
-function formatElapsed(ms: number): string {
-  const totalSec = Math.max(0, Math.floor(ms / 1000));
-  if (totalSec < 60) return `${totalSec}s`;
-  const min = Math.floor(totalSec / 60);
-  const sec = totalSec % 60;
-  if (min < 60) return `${min}m ${sec.toString().padStart(2, '0')}s`;
-  const hr = Math.floor(min / 60);
-  const remMin = min % 60;
-  return `${hr}h ${remMin.toString().padStart(2, '0')}m`;
-}

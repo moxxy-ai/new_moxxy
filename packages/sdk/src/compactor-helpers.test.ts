@@ -4,6 +4,7 @@ import {
   asSessionId,
   asTurnId,
   estimateContextTokens,
+  isContextOverflowError,
   runCompactionIfNeeded,
   type CompactorDef,
   type EmittedEvent,
@@ -128,6 +129,46 @@ describe('runCompactionIfNeeded', () => {
     await runCompactionIfNeeded(ctx);
     expect(ctx.emitted).toHaveLength(1);
     expect(ctx.emitted[0]).toMatchObject({ type: 'error', kind: 'retryable' });
+  });
+
+  it('force compacts even when shouldCompact returns false', async () => {
+    const compact = vi.fn(async () => ({
+      type: 'compaction' as const,
+      replacedRange: [0, 1] as [number, number],
+      summary: 'summary',
+      tokensSaved: 500,
+    }));
+    const compactor: CompactorDef = {
+      name: 'gated',
+      shouldCompact: () => false, // gate says no…
+      compact,
+    };
+    const ctx = makeCtx({ compactor });
+    const did = await runCompactionIfNeeded(ctx, { force: true }); // …but force overrides
+    expect(did).toBe(true);
+    expect(compact).toHaveBeenCalledOnce();
+    expect(ctx.emitted.some((e) => e.type === 'compaction')).toBe(true);
+  });
+});
+
+describe('isContextOverflowError', () => {
+  it('matches common provider context-overflow phrasings', () => {
+    for (const msg of [
+      'input exceeds context window',
+      "This model's maximum context length is 200000 tokens",
+      'context_length_exceeded',
+      'prompt is too long: 250000 tokens > 200000 maximum',
+      'Please reduce the length of the messages',
+      'too many input tokens',
+    ]) {
+      expect(isContextOverflowError(msg)).toBe(true);
+    }
+  });
+
+  it('does not match unrelated errors', () => {
+    for (const msg of ['rate limit exceeded', 'network timeout', '500 internal server error', 'invalid api key']) {
+      expect(isContextOverflowError(msg)).toBe(false);
+    }
   });
 });
 

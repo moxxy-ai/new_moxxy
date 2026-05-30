@@ -1,0 +1,130 @@
+name: Release Desktop
+
+# Build the desktop installers (.dmg / .exe / .deb + AppImage) on a
+# matrix of native runners, then attach them to a GitHub Release.
+#
+# Trigger: push a tag like `desktop-v0.1.0`, or run manually. Installers
+# are UNSIGNED for now (Gatekeeper/SmartScreen will warn). To ship signed
+# builds later, add the signing secrets and drop CSC_IDENTITY_AUTO_DISCOVERY.
+on:
+  push:
+    tags:
+      - 'desktop-v*'
+  workflow_dispatch:
+
+concurrency:
+  group: release-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: Guard — no live Clerk key committed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # A pk_live_ Clerk key must never live in the repo (only the public
+      # pk_test_ belongs in .env.example). Fail loudly if one slips in.
+      - name: Scan for a live Clerk key
+        run: |
+          # Match the prefix followed by real key chars so this workflow's
+          # own mentions of the bare prefix don't trip it.
+          if grep -rInE --exclude-dir=.git 'pk_live_[A-Za-z0-9]{6,}' .; then
+            echo "::error::A live Clerk key is committed — remove it." >&2
+            exit 1
+          fi
+
+  build:
+    name: Build (${{ matrix.os }})
+    needs: guard
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            artifact: dmg
+          - os: windows-latest
+            artifact: exe
+          - os: ubuntu-latest
+            artifact: deb-appimage
+    env:
+      # Unsigned: don't let electron-builder hunt for a signing identity
+      # (which would fail the build with no certs configured).
+      CSC_IDENTITY_AUTO_DISCOVERY: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.0
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The desktop bundles its workspace deps, so the rest of the repo
+      # must be built first (turbo handles ordering + cache).
+      - name: Build workspace
+        run: pnpm build
+
+      # The public dev Clerk key — safe to bake into a dev release.
+      - name: Provision .env (shell)
+        if: runner.os != 'Windows'
+        run: cp apps/desktop/.env.example apps/desktop/.env
+      - name: Provision .env (windows)
+        if: runner.os == 'Windows'
+        run: Copy-Item apps/desktop/.env.example apps/desktop/.env
+
+      # electron-builder reads the per-OS targets from apps/desktop's
+      # package.json#build and emits to apps/desktop/release/.
+      - name: Package installers
+        run: pnpm --filter @moxxy/desktop exec electron-builder --publish never
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.artifact }}
+          path: |
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.exe
+            apps/desktop/release/*.deb
+            apps/desktop/release/*.AppImage
+          if-no-files-found: ignore
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/desktop-v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all installers
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          draft: true
+          generate_release_notes: true
+          body: |
+            MoxxyAI Workspaces desktop build.
+
+            **Unsigned** — macOS Gatekeeper and Windows SmartScreen will warn on
+            first launch (right-click → Open on macOS; "More info → Run anyway"
+            on Windows). Signed builds will follow once signing secrets are set.

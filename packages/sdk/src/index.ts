@@ -151,6 +151,7 @@ export {
   createCallbackResolver,
   createAllowListResolver,
   createDeferredPermissionResolver,
+  evaluateToolRule,
   type CallbackResolverOptions,
   type PermissionPromptHandler,
   type DeferredPermissionResolver,
@@ -176,11 +177,16 @@ export {
   type ProjectMessagesOptions,
   type ProjectedMessages,
   type StuckLoopDetector,
+  type StuckSignal,
 } from './mode-helpers.js';
 export { dispatchToolCall } from './tool-dispatch.js';
 
 export type { TokenBudget, CompactContext, CompactorDef } from './compactor.js';
-export { estimateContextTokens, runCompactionIfNeeded } from './compactor-helpers.js';
+export {
+  estimateContextTokens,
+  runCompactionIfNeeded,
+  isContextOverflowError,
+} from './compactor-helpers.js';
 export {
   runElisionIfNeeded,
   resolveElisionSettings,
@@ -343,5 +349,11 @@ export {
   type InstallHint,
   type InstallTarget,
 } from './install-hints.js';
+
+export {
+  checkTranscriberReady,
+  pickFirstAvailableTranscriber,
+  resolveTranscriber,
+} from './voice.js';
 
 export { z } from 'zod';

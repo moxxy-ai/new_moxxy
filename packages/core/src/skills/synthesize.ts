@@ -235,6 +235,10 @@ export function buildSynthesizeSkillPlugin(
           'Rescan all skill sources (builtin + plugin + ~/.moxxy/skills + ./.moxxy/skills), ' +
           'registering any new or changed skills.',
         inputSchema: z.object({}),
+        // Safe, idempotent, local-only rescan — never prompt. Without this the
+        // tool inherits the channel resolver's default, which denies in
+        // headless runs (the skill-author flow couldn't activate a new skill).
+        permission: { action: 'allow' },
         handler: async () => {
           const { discoverSkills } = await import('./loader.js');
           // Discover first, swap second: never empty the registry while

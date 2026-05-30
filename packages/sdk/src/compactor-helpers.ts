@@ -96,19 +96,22 @@ function safeJsonLen(v: unknown): number {
  * compactor bug can't kill the turn. Failures emit a non-fatal
  * `error` event for observability.
  */
-export async function runCompactionIfNeeded(ctx: ModeContext): Promise<void> {
+export async function runCompactionIfNeeded(
+  ctx: ModeContext,
+  opts: { readonly force?: boolean } = {},
+): Promise<boolean> {
   const compactor = ctx.compactor;
-  if (!compactor) return;
+  if (!compactor) return false;
 
   // Resolve the active model's descriptor so we use the *real* context
   // window. `Number.MAX_SAFE_INTEGER` (the old /compact behavior) made
   // threshold-based compactors always look comfortable, even at 99%.
   const descriptor = ctx.provider.models.find((m) => m.id === ctx.model);
   const contextWindow = descriptor?.contextWindow;
-  if (!contextWindow || contextWindow <= 0) return;
+  if (!contextWindow || contextWindow <= 0) return false;
 
   const events = ctx.log.slice();
-  if (events.length === 0) return;
+  if (events.length === 0) return false;
 
   const budget = {
     contextWindow,
@@ -116,21 +119,27 @@ export async function runCompactionIfNeeded(ctx: ModeContext): Promise<void> {
     reserveForOutput: descriptor?.maxOutputTokens ?? 0,
   } as const;
 
-  let shouldRun = false;
-  try {
-    shouldRun = compactor.shouldCompact(ctx.log, budget);
-  } catch (err) {
-    await ctx.emit({
-      type: 'error',
-      sessionId: ctx.sessionId,
-      turnId: ctx.turnId,
-      source: 'system',
-      kind: 'retryable',
-      message: `compactor.shouldCompact threw: ${err instanceof Error ? err.message : String(err)}`,
-    });
-    return;
+  // `force` skips the threshold gate — used reactively after the provider
+  // rejects a request for being over the context window (our estimate can
+  // lag the provider's real tokenizer), so we compact and retry rather than
+  // failing the turn.
+  if (!opts.force) {
+    let shouldRun = false;
+    try {
+      shouldRun = compactor.shouldCompact(ctx.log, budget);
+    } catch (err) {
+      await ctx.emit({
+        type: 'error',
+        sessionId: ctx.sessionId,
+        turnId: ctx.turnId,
+        source: 'system',
+        kind: 'retryable',
+        message: `compactor.shouldCompact threw: ${err instanceof Error ? err.message : String(err)}`,
+      });
+      return false;
+    }
+    if (!shouldRun) return false;
   }
-  if (!shouldRun) return;
 
   try {
     const result = await compactor.compact(events, {
@@ -138,7 +147,7 @@ export async function runCompactionIfNeeded(ctx: ModeContext): Promise<void> {
       budget,
       signal: ctx.signal,
     });
-    if (result.tokensSaved <= 0 || result.summary.trim().length === 0) return;
+    if (result.tokensSaved <= 0 || result.summary.trim().length === 0) return false;
     // `compactor.compact` declares `Omit<CompactionEvent, keyof EventBase>`,
     // but every shipped compactor (and the SDK examples) fills sessionId /
     // turnId / source. Defensive-fill from ctx so a compactor that obeyed
@@ -150,6 +159,7 @@ export async function runCompactionIfNeeded(ctx: ModeContext): Promise<void> {
       ...result,
     } as EmittedEvent;
     await ctx.emit(emittable);
+    return true;
   } catch (err) {
     await ctx.emit({
       type: 'error',
@@ -159,5 +169,29 @@ export async function runCompactionIfNeeded(ctx: ModeContext): Promise<void> {
       kind: 'retryable',
       message: `compactor.compact threw: ${err instanceof Error ? err.message : String(err)}`,
     });
+    return false;
   }
+}
+
+/**
+ * Heuristic: does this provider error mean "the request was too big for the
+ * model's context window"? Providers phrase it many ways (OpenAI "maximum
+ * context length is N tokens", Anthropic "prompt is too long", the runner's
+ * own "input exceeds context window"), and it usually arrives as a
+ * non-retryable 400 — so the turn loop matches on it to compact + retry
+ * instead of dying.
+ */
+const CONTEXT_OVERFLOW_PATTERNS: ReadonlyArray<RegExp> = [
+  /context[\s_-]{0,2}(window|length)/i,
+  /maximum context/i,
+  /context_length_exceeded/i,
+  /exceeds?\b[^.]{0,24}context/i,
+  /input[^.]{0,24}(exceeds|too long|too large|too many)/i,
+  /too many (input )?tokens/i,
+  /prompt is too long/i,
+  /reduce the length/i,
+];
+
+export function isContextOverflowError(message: string): boolean {
+  return CONTEXT_OVERFLOW_PATTERNS.some((re) => re.test(message));
 }

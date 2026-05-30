@@ -2,9 +2,8 @@ import React, { useMemo, useRef } from 'react';
 import { Box, Static } from 'ink';
 import type { MoxxyEvent } from '@moxxy/sdk';
 import { BlockLine } from './chat/BlockLine.js';
-import { isSettled, pairToolEvents, type CompactToolMap } from './chat/pair-events.js';
+import { isSettled, pairToolEvents, type Block, type CompactToolMap } from '@moxxy/chat-model';
 import { StreamingPreview, tailForViewport } from './chat/StreamingPreview.js';
-import type { Block } from './chat/types.js';
 
 export interface ChatViewProps {
   readonly events: ReadonlyArray<MoxxyEvent>;

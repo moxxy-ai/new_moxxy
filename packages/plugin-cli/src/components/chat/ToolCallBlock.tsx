@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
 import type { ToolCallRequestedEvent, ToolResultEvent } from '@moxxy/sdk';
 import { Colors, Glyphs } from '../../theme.js';
-import { dotColorForTool, oneLine, stringify, summarizeArgs, truncate } from './format.js';
+import { dotColorForTool, oneLine, stringify, summarizeArgs, truncate } from '@moxxy/chat-model';
 
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LOGO_LINES } from '@moxxy/plugin-cli';
+import { LOGO_LINES, LOGO_WIDTH, WORDMARK_LINES } from '@moxxy/plugin-cli';
 import { colorsEnabled } from './colors.js';
 import { renderLogo } from './logo.js';
 
@@ -8,41 +8,41 @@ function strip(s: string): string {
   return s.replace(/\x1b\[[0-9;]*m/g, '');
 }
 
+// First non-blank rendered line, ANSI stripped — the top of the mark.
+function firstLine(out: string): string {
+  return strip(out).split('\n').filter((l) => l.trim())[0]!;
+}
+
 describe('renderLogo', () => {
-  it('default output is left-aligned with no leading pad (init wizard banner relies on this)', () => {
-    const out = strip(renderLogo(80));
-    const lines = out.split('\n').filter((l) => l.trim());
-    // First glyph line begins with the logo art's own 3-space indent — and
-    // nothing more. The clack `┌` corner connects under a left-flush banner.
-    expect(lines[0]).toBe(LOGO_LINES[0]);
+  it('shows the full mascot on a wide terminal, left-aligned with no leading pad', () => {
+    // The init wizard banner relies on the default being left-flush so the
+    // clack `┌` corner connects under it.
+    expect(firstLine(renderLogo(80))).toBe(LOGO_LINES[0]);
   });
 
   it('center adds symmetric leading padding sized to the terminal width', () => {
-    const width = 80;
-    const out = strip(renderLogo(width, { center: true }));
-    const first = out.split('\n').filter((l) => l.trim())[0]!;
-    const logoWidth = LOGO_LINES[0]!.length; // 24
-    const expectedPad = Math.floor((width - logoWidth) / 2);
-    expect(first).toBe(' '.repeat(expectedPad) + LOGO_LINES[0]);
+    const width = 100;
+    const expectedPad = Math.floor((width - LOGO_WIDTH) / 2);
+    expect(firstLine(renderLogo(width, { center: true }))).toBe(
+      ' '.repeat(expectedPad) + LOGO_LINES[0],
+    );
   });
 
-  it('two-tone preserves the art and (when color is on) wraps only the `:` fill runs', () => {
-    const fillLine = LOGO_LINES.find((l) => l.includes(':'))!;
-    const strokeOnly = LOGO_LINES.find((l) => !l.includes(':'))!;
-    const raw = renderLogo(80, { twoTone: true });
+  it('falls back to the MOXXY wordmark on a mid-width terminal', () => {
+    expect(firstLine(renderLogo(50))).toBe(WORDMARK_LINES[0]);
+  });
+
+  it('falls back to a one-line text mark on ultra-narrow terminals', () => {
+    expect(strip(renderLogo(20))).toContain('moxxy');
+  });
+
+  it('dims every glyph (gray + dim) when color is on, and strips back to the raw art', () => {
+    const raw = renderLogo(80);
     // Stripping color must always round-trip back to the exact ASCII art.
-    const styled = raw.split('\n').find((l) => l.includes(':'))!;
-    expect(strip(styled)).toBe(fillLine);
+    expect(firstLine(raw)).toBe(LOGO_LINES[0]);
     if (colorsEnabled) {
-      // Fill chars carry dim+gray codes; pure-stroke lines stay bare.
-      expect(styled).toContain('\x1b[2m');
-      expect(styled).toContain('\x1b[90m');
-      expect(raw.split('\n').find((l) => strip(l) === strokeOnly)).toBe(strokeOnly);
+      expect(raw).toContain('\x1b[2m'); // dim
+      expect(raw).toContain('\x1b[90m'); // gray
     }
-  });
-
-  it('falls back to the compact mark on ultra-narrow terminals', () => {
-    expect(strip(renderLogo(15))).toContain('|X|  moxxy');
-    expect(strip(renderLogo(15, { center: true }))).toContain('  |X|  moxxy');
   });
 });

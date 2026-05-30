@@ -24,12 +24,16 @@ import {
   abortParamsSchema,
   attachParamsSchema,
   commandRunParamsSchema,
+  mcpDetachParamsSchema,
+  mcpEnableAndAttachParamsSchema,
   modeSetActiveParamsSchema,
   permissionAddAllowParamsSchema,
   providerSetActiveParamsSchema,
   runTurnParamsSchema,
   setResolverParamsSchema,
   transcribeParamsSchema,
+  workflowRunParamsSchema,
+  workflowSetEnabledParamsSchema,
   type AttachResult,
   type CommandRunResult,
   type RunTurnResult,
@@ -70,6 +74,7 @@ export class RunnerServer {
   private readonly turnControllers = new Map<TurnId, AbortController>();
   private readonly scope = new AsyncLocalStorage<TurnScope>();
   private readonly logUnsub: () => void;
+  private readonly modesUnsub: () => void;
   /**
    * Resolvers for unscoped (local) turns - the fall-through path. Seeded from
    * whatever was installed before we wrapped the session, then kept current by
@@ -89,6 +94,9 @@ export class RunnerServer {
     this.installRoutingResolvers();
     this.transport.onConnection((t) => this.onConnection(t));
     this.logUnsub = session.log.subscribe((event) => this.broadcastEvent(event));
+    // Mirror active-mode changes to clients — covers both the SetMode RPC and a
+    // mode handing off to another mode post-turn (BMAD → tool-use).
+    this.modesUnsub = session.modes.onActiveChange(() => this.broadcastInfo());
   }
 
   get address(): string {
@@ -99,6 +107,7 @@ export class RunnerServer {
     if (this.closed) return;
     this.closed = true;
     this.logUnsub();
+    this.modesUnsub();
     for (const client of this.clients) client.peer.close();
     this.clients.clear();
     await this.transport.close();
@@ -128,6 +137,16 @@ export class RunnerServer {
     peer.handle(RunnerMethod.PermissionAddAllow, (raw) => this.handlePermissionAddAllow(raw));
     peer.handle(RunnerMethod.CommandRun, (raw) => this.handleCommandRun(client, raw));
     peer.handle(RunnerMethod.Transcribe, (raw) => this.handleTranscribe(raw));
+    peer.handle(RunnerMethod.McpListServers, () => this.handleMcpListServers());
+    peer.handle(RunnerMethod.McpEnableAndAttach, (raw) =>
+      this.handleMcpEnableAndAttach(raw),
+    );
+    peer.handle(RunnerMethod.McpDetach, (raw) => this.handleMcpDetach(raw));
+    peer.handle(RunnerMethod.WorkflowList, () => this.handleWorkflowList());
+    peer.handle(RunnerMethod.WorkflowSetEnabled, (raw) =>
+      this.handleWorkflowSetEnabled(raw),
+    );
+    peer.handle(RunnerMethod.WorkflowRun, (raw) => this.handleWorkflowRun(raw));
 
     peer.onClose(() => this.onDisconnect(client));
   }
@@ -226,8 +245,9 @@ export class RunnerServer {
 
   private handleModeSetActive(raw: unknown): Record<string, never> {
     const { name } = modeSetActiveParamsSchema.parse(raw);
+    // setActive fires onActiveChange → broadcastInfo (wired in the ctor), so
+    // no explicit broadcast needed here.
     this.session.modes.setActive(name);
-    this.broadcastInfo();
     return {};
   }
 
@@ -275,14 +295,95 @@ export class RunnerServer {
 
   private async handleTranscribe(raw: unknown): Promise<TranscribeResult> {
     const params = transcribeParamsSchema.parse(raw);
-    const transcriber = this.session.transcribers.tryGetActive();
-    if (!transcriber) throw new Error('no active transcriber on the runner');
     const audio = new Uint8Array(Buffer.from(params.audio, 'base64'));
-    return transcriber.transcribe(audio, {
+    const opts = {
       ...(params.mimeType ? { mimeType: params.mimeType } : {}),
       ...(params.language ? { language: params.language } : {}),
       ...(params.prompt ? { prompt: params.prompt } : {}),
-    });
+    };
+    // Build an ordered list of candidates: the active transcriber
+    // first (if any), then every other registered one — that way an
+    // "active but uncredentialled" transcriber (e.g. plain Whisper
+    // without OPENAI_API_KEY) doesn't shadow an OAuth-backed one
+    // that would actually succeed. Identical to what the TUI does
+    // by hardcoding to Codex, but agnostic to transcriber name.
+    const candidates = this.transcribeCandidates();
+    if (candidates.length === 0) throw new Error('no active transcriber on the runner');
+    let lastErr: unknown = new Error('no active transcriber on the runner');
+    for (const def of candidates) {
+      try {
+        const transcriber = this.session.transcribers.setActive(def.name);
+        const result = await transcriber.transcribe(audio, opts);
+        // Surface the change so remote clients observe activeTranscriber
+        // tracking the one that actually worked.
+        this.broadcastInfo();
+        return result;
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    throw lastErr;
+  }
+
+  /** Ordered candidate list for a transcribe call.
+   *  - First the active one (if any) — respects an explicit host /
+   *    user choice.
+   *  - Then every other registered transcriber. */
+  private transcribeCandidates(): ReadonlyArray<{ readonly name: string }> {
+    const activeName = this.session.transcribers.getActiveName();
+    const all = this.session.transcribers.list();
+    if (!activeName) return all.map((d) => ({ name: d.name }));
+    const head = all.find((d) => d.name === activeName);
+    const tail = all.filter((d) => d.name !== activeName);
+    return head
+      ? [{ name: head.name }, ...tail.map((d) => ({ name: d.name }))]
+      : tail.map((d) => ({ name: d.name }));
+  }
+
+  // --- MCP (delegates to session.mcpAdmin if the plugin is loaded) ----------
+
+  private async handleMcpListServers(): Promise<unknown[]> {
+    const admin = this.session.mcpAdmin;
+    if (!admin) return [];
+    return [...(await admin.listServers())];
+  }
+
+  private async handleMcpEnableAndAttach(
+    raw: unknown,
+  ): Promise<{ toolNames: ReadonlyArray<string> } | null> {
+    const params = mcpEnableAndAttachParamsSchema.parse(raw);
+    const admin = this.session.mcpAdmin;
+    if (!admin) throw new Error('mcp admin not available on this runner');
+    return admin.enableAndAttach(params.name);
+  }
+
+  private async handleMcpDetach(raw: unknown): Promise<boolean> {
+    const params = mcpDetachParamsSchema.parse(raw);
+    const admin = this.session.mcpAdmin;
+    if (!admin) throw new Error('mcp admin not available on this runner');
+    return admin.detach(params.name);
+  }
+
+  // --- Workflows (delegates to session.workflows if the plugin is loaded) ---
+
+  private async handleWorkflowList(): Promise<unknown[]> {
+    const view = this.session.workflows;
+    if (!view) return [];
+    return [...(await view.list())];
+  }
+
+  private async handleWorkflowSetEnabled(raw: unknown): Promise<void> {
+    const params = workflowSetEnabledParamsSchema.parse(raw);
+    const view = this.session.workflows;
+    if (!view) throw new Error('workflows plugin not loaded');
+    await view.setEnabled(params.name, params.enabled);
+  }
+
+  private async handleWorkflowRun(raw: unknown): Promise<unknown> {
+    const params = workflowRunParamsSchema.parse(raw);
+    const view = this.session.workflows;
+    if (!view) throw new Error('workflows plugin not loaded');
+    return view.run(params.name);
   }
 
   private broadcastInfo(): void {
@@ -385,5 +486,11 @@ export async function startRunnerServer(
 ): Promise<RunnerServer> {
   const transport =
     opts.transport ?? (await createUnixSocketServer(opts.socketPath ?? runnerSocketPath()));
+  // DO NOT auto-activate any transcriber at boot. The TUI's
+  // useVoiceInput depends on Codex specifically and would throw
+  // "another transcriber is active" if we promoted something else
+  // first. Active-transcriber selection is a per-client / per-flow
+  // concern; the runner's handleTranscribe handles fallback at
+  // request time instead.
   return new RunnerServer(session, transport);
 }

@@ -54,7 +54,12 @@ If you're a Claude Code agent or any other autonomous agent: read this file firs
 
 @moxxy/config      defineConfig + loader (cosmiconfig-style discovery + zod validation)
 @moxxy/testing     FakeProvider + record/replay harness
+@moxxy/chat-model  UI-neutral chat model: event→block fold (tool/skill/subagent grouping) + format helpers + markdown AST + a chunked append log; shared by the Ink TUI and the desktop
 @moxxy/cli         the `moxxy` binary
+
+apps/desktop                 Electron desktop app — attaches to @moxxy/runner, renders a TUI-equivalent chat surface
+@moxxy/desktop-ipc-contract  typed IPC boundary (channel names + payloads + Zod validation) shared by the desktop's main / preload / renderer
+@moxxy/desktop-host          the desktop's Electron main process: runner pool + supervisor, session driver, IPC handlers, append-only NDJSON chat log, security gates
 ```
 
 **State model.** Every interaction appends to an immutable event log; derived state is a pure fold. Any session can be replayed from its log.

@@ -65,6 +65,10 @@ module.exports = {
           // Standalone executables shipped via a package's `bin` field
           // (consumed by spawning a child process, not by being imported).
           'src/sidecar\\.ts$',
+          // Electron process entry points — invoked by the Electron
+          // runtime / loaded as a window preload, never imported.
+          'apps/desktop/electron/main/index\\.ts$',
+          'apps/desktop/electron/preload/index\\.ts$',
         ],
       },
       to: {},
@@ -72,7 +76,7 @@ module.exports = {
   ],
   options: {
     doNotFollow: { path: 'node_modules' },
-    includeOnly: '^packages/.*/src',
+    includeOnly: '^(packages/.*/src|apps/desktop/electron)',
     exclude: {
       path: '(dist/|node_modules/|\\.turbo/|\\.test\\.ts$|\\.test-d\\.ts$|__fixtures__/)',
     },

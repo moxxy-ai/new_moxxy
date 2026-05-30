@@ -7,6 +7,14 @@ import type { MoxxyRequirement } from '@moxxy/sdk';
 export const BUILTIN_REQUIREMENTS: Readonly<
   Record<string, ReadonlyArray<MoxxyRequirement>>
 > = {
+  "@moxxy/mode-deep-research": [
+    {
+      "kind": "plugin",
+      "name": "@moxxy/plugin-subagents",
+      "state": "registered",
+      "hint": "Enable @moxxy/plugin-subagents — deep-research fans out sub-queries via ctx.subagents."
+    }
+  ],
   "@moxxy/plugin-stt-whisper-codex": [
     {
       "kind": "plugin",

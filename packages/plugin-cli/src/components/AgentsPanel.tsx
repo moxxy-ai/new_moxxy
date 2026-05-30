@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import type { AgentDef, MoxxyEvent } from '@moxxy/sdk';
+import { formatElapsed } from '@moxxy/chat-model';
 import { Colors } from '../theme.js';
 import { Modal, type ModalTab } from './Modal.js';
 import { useScrollableList } from './useScrollableList.js';
@@ -301,10 +302,4 @@ function oneLine(s: string): string {
 
 function truncate(s: string, n: number): string {
   return s.length <= n ? s : s.slice(0, n - 1) + '…';
-}
-
-function formatElapsed(ms: number): string {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  if (s < 60) return `${s}s`;
-  return `${Math.floor(s / 60)}m ${(s % 60).toString().padStart(2, '0')}s`;
 }

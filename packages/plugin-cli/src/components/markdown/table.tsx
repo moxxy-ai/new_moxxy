@@ -1,7 +1,6 @@
 import React from 'react';
 import { Box, Text } from 'ink';
-import type { Align } from './types.js';
-import { stripInline } from './inline.js';
+import { stripInline, type Align } from '@moxxy/chat-model/markdown';
 
 /**
  * Render a GFM table. Computes per-column widths from the content,
