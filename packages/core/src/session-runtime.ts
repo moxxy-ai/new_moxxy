@@ -44,7 +44,13 @@ export interface SessionRuntime {
   readonly tools: ToolRegistry;
   readonly skills: SkillRegistry;
   readonly providers: { getActive(): LLMProvider };
-  readonly modes: { getActive(): ModeDef; list(): ReadonlyArray<ModeDef> };
+  readonly modes: {
+    getActive(): ModeDef;
+    list(): ReadonlyArray<ModeDef>;
+    /** Post-turn mode hand-off (BMAD → tool-use). Throws on an unknown name;
+     *  run-turn guards the call. */
+    setActive(name: string): void;
+  };
   readonly compactors: { getActive(): CompactorDef | null };
   readonly cacheStrategies: { getActive(): CacheStrategyDef | null };
   readonly resolver: PermissionResolver;

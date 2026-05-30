@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MoxxyAI · Focus</title>
+    <style>
+      /* Reset — transparent everywhere, fill viewport, no scrollbars.
+       * The renderer's React tree paints the visible chrome (white
+       * tile, rounded corners, shadow). */
+      html,
+      body,
+      #root {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        width: 100%;
+        background: transparent;
+        overflow: hidden;
+        font-family:
+          'Inter',
+          -apple-system,
+          system-ui,
+          'Helvetica Neue',
+          sans-serif;
+        color: #0f172a;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      /* Always show a click target while the JS bundle loads. The
+       * React tree replaces this on mount; if main fails to load,
+       * at least the user sees something. */
+      #boot-fallback {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        font-weight: 800;
+        color: #ec4899;
+        background: rgba(255, 255, 255, 0.96);
+        border-radius: 12px;
+        -webkit-app-region: drag;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div id="boot-fallback">m</div>
+    </div>
+    <script type="module" src="/src/focus/focus-main.tsx"></script>
+  </body>
+</html>

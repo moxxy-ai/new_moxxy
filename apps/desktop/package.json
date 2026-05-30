@@ -1,0 +1,81 @@
+{
+  "name": "@moxxy/desktop",
+  "private": true,
+  "version": "0.0.1",
+  "description": "moxxy desktop — Electron app that connects to moxxy via @moxxy/runner and renders a TUI-equivalent chat surface.",
+  "type": "module",
+  "main": "dist-electron/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "package": "electron-vite build && electron-builder",
+    "package:dir": "electron-vite build && electron-builder --dir",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist dist-electron .turbo node_modules/.vite"
+  },
+  "dependencies": {
+    "@clerk/clerk-react": "^5.0.0",
+    "@moxxy/chat-model": "workspace:*",
+    "@moxxy/desktop-host": "workspace:*",
+    "@moxxy/desktop-ipc-contract": "workspace:*",
+    "@moxxy/plugin-stt-whisper-codex": "workspace:*",
+    "@moxxy/plugin-vault": "workspace:*",
+    "@moxxy/runner": "workspace:*",
+    "@moxxy/sdk": "workspace:*",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-markdown": "^9.0.1",
+    "react-virtuoso": "^4.12.0",
+    "remark-gfm": "^4.0.0"
+  },
+  "devDependencies": {
+    "@moxxy/tsconfig": "workspace:*",
+    "@testing-library/jest-dom": "^6.6.0",
+    "@testing-library/react": "^16.1.0",
+    "@testing-library/user-event": "^14.5.2",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "^4.3.4",
+    "@vitest/coverage-v8": "^2.1.8",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "jsdom": "^25.0.1",
+    "typescript": "catalog:",
+    "vite": "^5.4.0",
+    "vitest": "catalog:"
+  },
+  "build": {
+    "appId": "ai.moxxy.desktop",
+    "productName": "MoxxyAI Workspaces",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist-electron/**",
+      "dist/**"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": "dmg",
+      "icon": "public/logo.png"
+    },
+    "linux": {
+      "target": [
+        "deb",
+        "AppImage"
+      ],
+      "category": "Utility",
+      "maintainer": "MoxxyAI <noreply@moxxy.ai>",
+      "icon": "public/logo.png"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "public/logo.png"
+    }
+  }
+}

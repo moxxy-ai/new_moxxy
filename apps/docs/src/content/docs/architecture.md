@@ -22,6 +22,8 @@ description: The shape of moxxy — sdk, core, plugins, channels.
 @moxxy/plugin-webhooks    <— external-event triggers (verified HTTP listener)
 @moxxy/plugin-security    <— pluggable capability isolation (opt-in)
 @moxxy/cli             <— the `moxxy` binary
+@moxxy/chat-model      <— UI-neutral chat model (event→block fold + markdown AST); shared by the TUI + desktop
+apps/desktop           <— Electron desktop app (@moxxy/desktop-host main process + @moxxy/desktop-ipc-contract IPC)
 ```
 
 ## State model

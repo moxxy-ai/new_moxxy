@@ -5,9 +5,14 @@ import { EventLine } from './EventLine.js';
 import { LiveToolBlock } from './LiveToolBlock.js';
 import { ToolCallBlock } from './ToolCallBlock.js';
 import { SubagentScopeView } from './SubagentScopeView.js';
-import type { Block, SkillScopeBlock } from './types.js';
-import { blocksEquivalent, countToolCalls } from './pair-events.js';
-import { DotColors, truncate } from './format.js';
+import {
+  blocksEquivalent,
+  countToolCalls,
+  DotColors,
+  truncate,
+  type Block,
+  type SkillScopeBlock,
+} from '@moxxy/chat-model';
 
 const NAME_DISPLAY_MAX = 48;
 

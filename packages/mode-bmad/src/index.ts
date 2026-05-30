@@ -236,4 +236,10 @@ async function* runImplementationPhaseSection(
     subtype: 'bmad_phase_completed',
     payload: { phase: 'implementation', persona: 'Developer', stories: artifacts.stories.length },
   });
+
+  // The BMAD workflow is complete — hand control back to the normal tool-use
+  // mode so the user's NEXT message isn't trapped re-running the workflow.
+  // Applied by the runner after this turn drains (no-op if tool-use isn't
+  // registered); the InfoChanged broadcast updates each channel's mode badge.
+  ctx.requestModeSwitch?.('tool-use');
 }

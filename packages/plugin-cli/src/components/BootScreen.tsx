@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { Box, Text } from 'ink';
-import { LOGO_LINES, pickExamples, pickSlogan } from '../logo-data.js';
+import { pickExamples, pickSlogan, selectLogo } from '../logo-data.js';
 import { Colors, Glyphs } from '../theme.js';
 import { LogoLine } from './LogoLine.js';
 
@@ -82,7 +82,7 @@ export const BootScreen: React.FC<BootScreenProps> = ({ events, startedAt, error
   // shuffle the picks; the useMemo is for clarity.
   const examples = useMemo(() => pickExamples(READY_EXAMPLE_COUNT), []);
   const width = process.stdout.columns ?? 80;
-  const useFullLogo = width >= 60;
+  const { lines } = selectLogo(width);
 
   const seen = new Map<BootEventId, BootEvent>();
   for (const e of events) seen.set(e.id, e);
@@ -93,15 +93,11 @@ export const BootScreen: React.FC<BootScreenProps> = ({ events, startedAt, error
 
   return (
     <Box flexDirection="column" alignItems="center" width="100%" marginTop={1}>
-      {useFullLogo ? (
-        <Box flexDirection="column" alignItems="center">
-          {LOGO_LINES.map((line, i) => (
-            <LogoLine key={i} text={line} />
-          ))}
-        </Box>
-      ) : (
-        <Text>{width >= 40 ? 'M O X X Y' : 'MOXXY'}</Text>
-      )}
+      <Box flexDirection="column" alignItems="center">
+        {lines.map((line, i) => (
+          <LogoLine key={i} text={line} />
+        ))}
+      </Box>
       <Box marginTop={1}>
         <Text dimColor italic>{slogan}</Text>
       </Box>

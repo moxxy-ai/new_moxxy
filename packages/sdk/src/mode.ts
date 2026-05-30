@@ -88,6 +88,14 @@ export interface ModeContext {
    * Absent in synthetic test contexts that don't model a full Session.
    */
   readonly subagents?: SubagentSpawner;
+  /**
+   * Request the session switch its active mode AFTER this turn fully drains.
+   * Used by terminal workflow modes (BMAD finishing its last phase) to hand
+   * control back to a normal mode so the next message isn't trapped in the
+   * workflow. The switch is applied post-turn by the runner; an unknown /
+   * unregistered mode name is ignored. Absent in synthetic test contexts.
+   */
+  readonly requestModeSwitch?: (modeName: string) => void;
   emit(event: EmittedEvent): Promise<MoxxyEvent>;
 }
 

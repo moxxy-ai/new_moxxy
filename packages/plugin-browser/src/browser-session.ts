@@ -100,6 +100,11 @@ class Sidecar {
    *  install-progress feedback in their own logger/UI. A Set (not a single
    *  slot) so concurrent browser_session calls don't clobber each other. */
   private readonly stderrListeners = new Set<(line: string) => void>();
+  /** Last few sidecar stderr lines, kept so the `exit` handler can put the
+   *  ACTUAL failure (e.g. "Cannot find module …" or Playwright's "Executable
+   *  doesn't exist, run npx playwright install") into the error instead of a
+   *  bare `code=1` the caller can't act on. */
+  private readonly recentStderr: string[] = [];
 
   constructor(
     private readonly sidecarPath: string,
@@ -141,13 +146,22 @@ class Sidecar {
       while ((nl = stderrBuf.indexOf('\n')) !== -1) {
         const line = stderrBuf.slice(0, nl);
         stderrBuf = stderrBuf.slice(nl + 1);
-        if (line.trim()) for (const fn of this.stderrListeners) fn(line);
+        if (line.trim()) {
+          this.recentStderr.push(line);
+          if (this.recentStderr.length > 24) this.recentStderr.shift();
+          for (const fn of this.stderrListeners) fn(line);
+        }
       }
     });
     this.child.once('exit', (code) => {
+      // Surface whatever the sidecar printed before dying — that's where the
+      // real reason lives (missing module, Playwright not installed, etc.).
+      const tail = this.recentStderr.slice(-8).join('\n').trim();
       const err = new MoxxyError({
         code: 'INTERNAL',
-        message: `browser sidecar exited unexpectedly (code=${code ?? 'null'})`,
+        message:
+          `browser sidecar exited unexpectedly (code=${code ?? 'null'})` +
+          (tail ? `:\n${tail}` : ' (no stderr captured)'),
       });
       for (const [, p] of this.pending) p.reject(err);
       this.pending.clear();

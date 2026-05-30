@@ -1,0 +1,413 @@
+/*
+ * Design tokens — mixed-mode workspace UI: dark left rail + light main
+ * surface. Modeled after the agent-workspace reference design (see
+ * the redesign brief). Keep this file the single source of truth so
+ * every component reads from CSS variables, not hard-coded values.
+ */
+
+:root {
+  /* App canvas — cool lavender to match the landing site's hero. */
+  --color-app-bg:        #f1f2f9;
+  --color-card-bg:       #ffffff;
+  --color-card-border:   #e3e5f0;
+  --color-card-border-strong: #cdd1e3;
+  --color-card-shadow:   0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 24px -18px rgba(15, 23, 42, 0.10);
+
+  /* Text — same high-contrast navy as the landing headlines. */
+  --color-text:          #0f172a;
+  --color-text-muted:    #475569;
+  --color-text-dim:      #94a3b8;
+
+  /* Sidebar — pure white. The chat column sits a hair off-white
+   * (rgb(252,252,255)) so the columns still register as separate
+   * against each other and against the lavender canvas. */
+  --color-sidebar-bg:        #ffffff;
+  --color-sidebar-bg-hover:  #f4f5fb;
+  --color-sidebar-bg-active: #fdf2f8;   /* brand-pink wash for the active row */
+  --color-sidebar-text:      #0f172a;
+  --color-sidebar-text-dim:  #6b7194;
+  --color-sidebar-border:    #e3e5f0;
+
+  /* Accents — pink primary (CTA), cyan secondary, emerald success. */
+  --color-primary:        #ec4899;   /* hot pink — CTAs, send button, focus glow */
+  --color-primary-strong: #db2777;
+  --color-primary-soft:   #fdf2f8;
+  --color-send:           #ec4899;   /* CTA / send share the brand pink */
+  --color-accent:         #22d3ee;   /* cyan — the "your AI" gradient stop */
+  --color-accent-strong:  #06b6d4;
+  --color-purple:         #8b5cf6;
+  --color-green:          #10b981;
+  --color-amber:          #f59e0b;
+  --color-pink:           #ec4899;
+  --color-red:            #ef4444;
+
+  /* Brand gradients */
+  --grad-user:    linear-gradient(135deg, #ec4899 0%, #f472b6 100%);
+  --grad-cta:     linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+  --grad-accent:  linear-gradient(135deg, #38bdf8 0%, #22d3ee 100%);
+
+  /* Typography */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --radius-block: 8px;
+  --radius-card:  14px;
+  --radius-pill:  9999px;
+
+  color-scheme: light;
+}
+
+/* Legacy aliases — older components still read these names. Map them
+ * to the new tokens so we don't have to touch every file in one go.
+ */
+:root {
+  --color-bg:              var(--color-app-bg);
+  --color-bg-card:         var(--color-card-bg);
+  --color-bg-card-hover:   #f4f5fa;
+  --color-border:          var(--color-card-border);
+  --color-border-light:    #d8dbeb;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  font-family: var(--font-sans);
+  background: var(--color-app-bg);
+  color: var(--color-text);
+  letter-spacing: -0.005em;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  /* Everything that animates on hover/active feels consistent if
+   * the transitions match. 120ms is just under perception threshold. */
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 160ms ease,
+    transform 90ms ease,
+    filter 140ms ease,
+    opacity 140ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+button:hover:not(:disabled) {
+  /* Universal hover: brightness drop reads as feedback on every
+   * coloured button (CTAs, chips, tinted rows) and is invisible on
+   * pure-transparent ones — those get a background tint from the
+   * utility classes (.btn-icon, .row-button, etc.) layered on top. */
+  filter: brightness(0.96);
+}
+button:active:not(:disabled) {
+  /* Subtle press — gives every interactive thing a tactile feel
+   * without making the layout shift. */
+  transform: scale(0.97);
+  filter: brightness(0.92);
+}
+button:disabled {
+  cursor: not-allowed;
+}
+button:disabled:hover {
+  filter: none;
+}
+button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: inherit;
+}
+
+code, kbd, pre, .mono { font-family: var(--font-mono); }
+
+/* --- Layout primitives ----------------------------------------- */
+
+.app-shell {
+  display: flex;
+  flex-direction: row;
+  height: 100vh;
+  background: var(--color-app-bg);
+  overflow: hidden;
+}
+
+.col-sidebar {
+  width: 232px;
+  flex-shrink: 0;
+  background: var(--color-sidebar-bg);
+  color: var(--color-sidebar-text);
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--color-sidebar-border);
+}
+
+.col-rail {
+  width: 296px;
+  flex-shrink: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow-y: auto;
+  background: var(--color-card-bg);
+}
+
+/* Right-hand context rail variant: border lives on the left edge so
+ * the column reads as separate from the chat instead of bleeding into
+ * the workspace sidebar. The width + opacity transition turns the
+ * open/close into a smooth slide rather than a jarring mount.  */
+.col-rail--right {
+  border-left: 1px solid var(--color-card-border);
+  width: 296px;
+  transition:
+    width 260ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 200ms ease,
+    border-color 200ms ease;
+  will-change: width;
+}
+.col-rail--right[data-open='false'] {
+  width: 0;
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
+  border-left-color: transparent;
+}
+
+/* Left-hand rails keep the right border. (Kept around in case any
+ * future view re-introduces a left-side rail without `--right`.) */
+.col-rail:not(.col-rail--right) {
+  border-right: 1px solid var(--color-card-border);
+}
+
+.col-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 18px 16px 4px;
+  min-width: 0;
+  /* Near-white with a faint cool tint — sits a hair off pure white
+   * so the column reads as separate from any adjacent white surface
+   * without being grey. */
+  background: rgb(252, 252, 255);
+}
+
+/* `col-main--flat` removes the inset gutters so the chat content
+ * fills the available space and reads as one continuous surface
+ * (no inner card). Use for chat; keep `col-main` proper for views
+ * that intentionally float a card. */
+.col-main--flat {
+  padding: 0;
+}
+
+.card {
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--color-card-shadow);
+}
+
+/* --- Scrollbars: thin + on-hover only -------------------------- */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-card-border-strong) transparent;
+}
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: var(--color-card-border-strong); border-radius: 4px; }
+
+/* --- Misc animations ------------------------------------------- */
+
+@keyframes moxxy-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes moxxy-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes moxxy-pulse {
+  0%, 100% { opacity: 0.45; }
+  50%      { opacity: 1; }
+}
+
+@keyframes moxxy-cursor {
+  0%, 49%   { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+@keyframes moxxy-thinking {
+  0%, 60%, 100% { transform: scale(0.6); opacity: 0.35; }
+  30%           { transform: scale(1);   opacity: 1; }
+}
+
+@keyframes moxxy-fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes moxxy-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes moxxy-pop-in {
+  0%   { opacity: 0; transform: scale(0.92); }
+  60%  { opacity: 1; transform: scale(1.02); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* Reach for these from inline styles when you want a one-shot
+ * animation without writing a fresh @keyframes. */
+.anim-fade-up   { animation: moxxy-fade-up   220ms ease-out both; }
+.anim-fade-in   { animation: moxxy-fade-in   200ms ease-out both; }
+.anim-pop-in    { animation: moxxy-pop-in    220ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+.thinking-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-primary-strong);
+  animation: moxxy-thinking 1.1s ease-in-out infinite;
+}
+
+/* --- Interactive utility classes ------------------------------------------
+ * Inline styles set the resting look. These classes attach the
+ * hover/active transforms via :hover pseudo so we don't have to wire
+ * onMouseEnter/Leave on every button. The hover backgrounds use an
+ * `inset box-shadow` overlay rather than `background-color` so they
+ * still register even when the button has an inline background.
+ */
+
+.btn-icon:hover:not(:disabled) {
+  box-shadow: inset 0 0 0 999px rgba(15, 23, 42, 0.07);
+  color: var(--color-text);
+}
+
+.btn-chip:hover:not(:disabled) {
+  box-shadow: inset 0 0 0 999px rgba(15, 23, 42, 0.05);
+  border-color: var(--color-card-border-strong);
+  color: var(--color-text);
+}
+
+.btn-cta:hover:not(:disabled) {
+  filter: brightness(1.06);
+  box-shadow: 0 12px 24px -12px rgba(236, 72, 153, 0.6);
+}
+.btn-cta:active:not(:disabled) {
+  filter: brightness(0.97);
+}
+
+.btn-outline:hover:not(:disabled) {
+  box-shadow: inset 0 0 0 999px rgba(15, 23, 42, 0.05);
+  border-color: var(--color-card-border-strong);
+  color: var(--color-text);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  box-shadow: inset 0 0 0 999px rgba(15, 23, 42, 0.05);
+  color: var(--color-text);
+}
+
+.row-button {
+  transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+.row-button:hover:not(:disabled) {
+  box-shadow: inset 0 0 0 999px rgba(15, 23, 42, 0.05);
+}
+
+/* Skill gallery card — barely-there hover (border firms up, faint tint),
+ * not the heavy inset fill of .row-button. */
+.skill-card {
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+.skill-card:hover:not(:disabled) {
+  filter: none;
+  border-color: var(--color-card-border-strong);
+  background: #fcfcff;
+}
+
+.btn-suggestion {
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+.btn-suggestion:hover:not(:disabled) {
+  /* Very subtle brand tint on hover — `filter: none` overrides the global
+   * button brightness() so the white pill doesn't read as a gray fill. */
+  filter: none;
+  background: rgba(236, 72, 153, 0.06);
+  border-color: var(--color-primary);
+}
+
+@keyframes moxxy-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-8px); }
+}
+
+@keyframes moxxy-mini-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-2px); }
+}
+
+/* Branded avatar loader. Gentle bob so it reads as "she's working"
+ * instead of "your app is frozen."  Used in Splash, ReconnectBanner,
+ * and inline "Loading…" heroes. */
+.moxxy-avatar-loader {
+  display: inline-block;
+  animation: moxxy-bob 2.2s ease-in-out infinite;
+}
+
+.moxxy-avatar-loader--sm {
+  animation: moxxy-mini-bob 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; }
+}
+
+/* --- Streaming cursor (assistant tail) ------------------------- */
+
+/* Streaming cursor: attached as ::after to the LAST child of the
+ * markdown body so it sits inline with the tail of the text rather
+ * than wrapping to a new line. The :last-child target picks whatever
+ * block element ended the stream (paragraph, list item, heading…). */
+.markdown-body.streaming > *:last-child::after {
+  content: '';
+  display: inline-block;
+  vertical-align: -2px;
+  width: 7px;
+  height: 14px;
+  margin-left: 3px;
+  background: var(--color-primary);
+  border-radius: 2px;
+  animation: moxxy-cursor 1s steps(2, end) infinite;
+}
+/* Lists end with <li>; the cursor should still trail the LAST li's
+ * text rather than appearing under it. */
+.markdown-body.streaming > ul:last-child > li:last-child::after,
+.markdown-body.streaming > ol:last-child > li:last-child::after {
+  content: '';
+  display: inline-block;
+  vertical-align: -2px;
+  width: 7px;
+  height: 14px;
+  margin-left: 3px;
+  background: var(--color-primary);
+  border-radius: 2px;
+  animation: moxxy-cursor 1s steps(2, end) infinite;
+}
+/* Hide the outer cursor on the parent <ul>/<ol> so it doesn't
+ * double up with the <li> one. */
+.markdown-body.streaming > ul:last-child::after,
+.markdown-body.streaming > ol:last-child::after {
+  content: none;
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Block } from './types.js';
+import type { Block } from '@moxxy/chat-model';
 import { advanceStaticScrollback } from './static-window.js';
 
 function eventBlock(id: string): Block {

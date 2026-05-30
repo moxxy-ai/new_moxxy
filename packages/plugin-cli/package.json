@@ -29,6 +29,7 @@
     }
   },
   "dependencies": {
+    "@moxxy/chat-model": "workspace:*",
     "@moxxy/core": "workspace:*",
     "@moxxy/plugin-mcp": "workspace:*",
     "@moxxy/sdk": "workspace:*",

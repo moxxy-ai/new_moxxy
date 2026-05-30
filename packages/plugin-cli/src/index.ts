@@ -17,7 +17,18 @@ export {
 export { TuiChannel, type TuiStartOpts } from './TuiChannel.js';
 export { PermissionEditor, type PermissionEditorProps } from './components/PermissionEditor.js';
 export { Logo } from './components/Logo.js';
-export { LOGO_LINES, SLOGANS, pickSlogan } from './logo-data.js';
+export {
+  LOGO_LINES,
+  LOGO_WIDTH,
+  LOGO_MIN_WIDTH,
+  WORDMARK_LINES,
+  WORDMARK_WIDTH,
+  WORDMARK_MIN_WIDTH,
+  SLOGANS,
+  pickSlogan,
+  selectLogo,
+  type LogoSelection,
+} from './logo-data.js';
 export {
   renderYaml,
   type ProviderAuthKind,

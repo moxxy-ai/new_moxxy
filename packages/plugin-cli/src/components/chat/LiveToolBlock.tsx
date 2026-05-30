@@ -5,8 +5,8 @@ import { ToolCallBlock } from './ToolCallBlock.js';
 import {
   buildCompactSummary,
   compactPreviewLine,
-} from './format.js';
-import type { LiveToolBlockData } from './types.js';
+  type LiveToolBlockData,
+} from '@moxxy/chat-model';
 
 /**
  * Renders a run of consecutive "compact" tool calls as one live block.

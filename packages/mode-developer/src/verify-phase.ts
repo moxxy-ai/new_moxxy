@@ -133,8 +133,9 @@ export async function* runVerifyPhase(
       // the recent window, bail rather than burn the cap on identical
       // calls. We still return finalText (possibly empty) so the
       // developer-loop can decide whether to proceed to the commit gate.
-      const repeats = detector.record(t.name, t.input);
-      if (repeats >= VERIFY_STUCK_THRESHOLD) {
+      const sig = detector.record(t.name, t.input);
+      if (sig.stuck) {
+        const how = sig.kind === 'near' ? 'against the same target' : 'with identical input';
         yield await ctx.emit({
           type: 'error',
           sessionId: ctx.sessionId,
@@ -143,7 +144,7 @@ export async function* runVerifyPhase(
           kind: 'fatal',
           message:
             `developer.verify: detected stuck pattern — tool "${t.name}" called ` +
-            `${repeats} times with identical input. Stopping verify phase; ` +
+            `${sig.count} times ${how}. Stopping verify phase; ` +
             `proceeding to commit gate with whatever summary the model has produced.`,
         });
         return finalText;

@@ -177,7 +177,7 @@ function renderHelp(): string {
 // set that can drift out of sync.
 const COMMANDS: Record<string, CommandHandler> = {
   help: async () => {
-    process.stdout.write(renderLogo(undefined, { center: true, twoTone: true }) + renderHelp());
+    process.stdout.write(renderLogo(undefined, { center: true }) + renderHelp());
     return 0;
   },
   version: async () => {
@@ -186,7 +186,7 @@ const COMMANDS: Record<string, CommandHandler> = {
     const line = `moxxy ${v}`;
     const pad = ' '.repeat(Math.max(0, Math.floor((width - line.length) / 2)));
     process.stdout.write(
-      renderLogo(undefined, { center: true, twoTone: true }) + pad + line + '\n',
+      renderLogo(undefined, { center: true }) + pad + line + '\n',
     );
     return 0;
   },

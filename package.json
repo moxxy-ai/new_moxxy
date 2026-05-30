@@ -14,7 +14,7 @@
     "lint": "eslint .",
     "test": "turbo run test",
     "test:watch": "turbo run test:watch --concurrency=1",
-    "check:deps": "depcruise --config .dependency-cruiser.cjs packages",
+    "check:deps": "depcruise --config .dependency-cruiser.cjs packages apps/desktop/electron",
     "clean": "turbo run clean && rm -rf node_modules .turbo"
   },
   "devDependencies": {
@@ -22,6 +22,7 @@
     "@types/node": "catalog:",
     "dependency-cruiser": "^16.0.0",
     "eslint": "^9.18.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "tsx": "catalog:",
     "turbo": "^2.5.0",
     "typescript": "catalog:",
@@ -29,7 +30,9 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "esbuild"
+      "esbuild",
+      "electron",
+      "electron-winstaller"
     ]
   }
 }

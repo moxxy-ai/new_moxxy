@@ -3,6 +3,15 @@ import type { ModeDef } from '@moxxy/sdk';
 export class ModeRegistry {
   private readonly strategies = new Map<string, ModeDef>();
   private active: string | null = null;
+  private readonly changeListeners = new Set<() => void>();
+
+  /** Observe active-mode changes — used by the runner to broadcast
+   *  InfoChanged so remote clients track a mode switch (whether it came from
+   *  a `setMode` RPC or a mode handing off to another mode mid-session). */
+  onActiveChange(fn: () => void): () => void {
+    this.changeListeners.add(fn);
+    return () => this.changeListeners.delete(fn);
+  }
 
   /**
    * Register a strategy. Throws on duplicate — use `replace()` for
@@ -50,6 +59,8 @@ export class ModeRegistry {
   }
 
   private activate(strategy: ModeDef): void {
+    if (this.active === strategy.name) return;
     this.active = strategy.name;
+    for (const fn of this.changeListeners) fn();
   }
 }

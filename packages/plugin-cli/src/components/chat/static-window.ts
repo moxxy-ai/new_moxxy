@@ -1,5 +1,4 @@
-import type { Block } from './types.js';
-import { isSettled } from './pair-events.js';
+import { isSettled, type Block } from '@moxxy/chat-model';
 
 export const DEFAULT_STATIC_SETTLED_TAIL = 8;
 

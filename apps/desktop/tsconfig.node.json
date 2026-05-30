@@ -1,0 +1,14 @@
+{
+  "extends": "@moxxy/tsconfig/base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "types": ["node"],
+    "noEmit": true,
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true
+  },
+  "include": ["electron/**/*", "electron.vite.config.ts"],
+  "exclude": ["dist", "dist-electron", "node_modules", "release"]
+}

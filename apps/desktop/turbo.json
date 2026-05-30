@@ -1,0 +1,35 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", "dist-electron/**"],
+      "inputs": [
+        "src/**",
+        "electron/**",
+        "public/**",
+        "index.html",
+        "focus.html",
+        "electron.vite.config.ts",
+        "tsconfig*.json",
+        "package.json"
+      ]
+    },
+    "typecheck": {
+      "dependsOn": ["^build"],
+      "inputs": ["src/**", "electron/**", "tsconfig*.json", "package.json"]
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "src/**",
+        "electron/**",
+        "vitest.config.*",
+        "tsconfig*.json",
+        "package.json"
+      ],
+      "env": ["MOXXY_FIXTURES", "ANTHROPIC_API_KEY"]
+    }
+  }
+}

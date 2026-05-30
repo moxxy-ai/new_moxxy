@@ -1,0 +1,43 @@
+{
+  "name": "@moxxy/desktop-host",
+  "private": true,
+  "version": "0.0.1",
+  "description": "The moxxy desktop main-process host: runner supervision + pool, the per-workspace session driver, IPC handlers, desk/prefs/skills/onboarding stores, the focus-window manager, the append-only chat log, and the security gates. Bundled into the Electron main bundle by the @moxxy/desktop app.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf dist .turbo"
+  },
+  "dependencies": {
+    "@moxxy/desktop-ipc-contract": "workspace:*",
+    "@moxxy/plugin-stt-whisper-codex": "workspace:*",
+    "@moxxy/plugin-vault": "workspace:*",
+    "@moxxy/runner": "workspace:*",
+    "@moxxy/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@moxxy/core": "workspace:*",
+    "@moxxy/mode-plan-execute": "workspace:*",
+    "@moxxy/testing": "workspace:*",
+    "@moxxy/tsconfig": "workspace:*",
+    "@moxxy/vitest-preset": "workspace:*",
+    "@types/node": "catalog:",
+    "electron": "^33.2.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
