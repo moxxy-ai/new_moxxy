@@ -326,6 +326,17 @@ code, kbd, pre, .mono { font-family: var(--font-mono); }
   box-shadow: inset 0 0 0 999px rgba(15, 23, 42, 0.05);
 }
 
+.btn-suggestion {
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+.btn-suggestion:hover:not(:disabled) {
+  /* Very subtle brand tint on hover — `filter: none` overrides the global
+   * button brightness() so the white pill doesn't read as a gray fill. */
+  filter: none;
+  background: rgba(236, 72, 153, 0.06);
+  border-color: var(--color-primary);
+}
+
 @keyframes moxxy-bob {
   0%, 100% { transform: translateY(0); }
   50%      { transform: translateY(-8px); }

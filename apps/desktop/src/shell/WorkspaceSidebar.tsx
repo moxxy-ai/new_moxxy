@@ -504,137 +504,79 @@ function ProfilePill(): JSX.Element {
       claims['account_type'] ??
       (user?.unsafeMetadata as Record<string, unknown> | undefined)?.accountType,
   );
-  // Not signed in: the pill becomes a clear sign-in prompt instead of
-  // the Guest/Free pair, which read as a permanent state rather than
-  // an invitation.
-  if (isLoaded && !signedIn) {
-    return (
+  // Single-line profile row, no background — a top border separates it
+  // from the workspace list above. Signed-out reads as a sign-in prompt.
+  const row =
+    isLoaded && !signedIn ? (
       <button
         type="button"
         className="row-button"
         onClick={() => void clerk.openSignIn()}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          margin: 12,
-          padding: '11px 14px',
-          background: 'var(--color-primary-soft)',
-          border: '1px solid var(--color-primary)',
-          borderRadius: 12,
-          color: 'var(--color-primary-strong)',
-          textAlign: 'left',
-          width: 'auto',
-        }}
+        style={profileRowStyle('var(--color-primary-strong)')}
       >
-        <span
-          aria-hidden
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: 8,
-            background: 'var(--grad-cta)',
-            color: '#fff',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0,
-          }}
-        >
-          <Icon name="agent" size={14} />
-        </span>
-        <span style={{ flex: 1, minWidth: 0, lineHeight: 1.25 }}>
-          <span
-            style={{
-              display: 'block',
-              fontSize: 13,
-              fontWeight: 700,
-              color: 'var(--color-primary-strong)',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
-            Sign in
-          </span>
-          <span
-            style={{
-              display: 'block',
-              fontSize: 10.5,
-              color: 'var(--color-text-muted)',
-              marginTop: 1,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
-            for full potential
-          </span>
-        </span>
-        <Icon name="chevron-right" size={14} />
+        <Icon name="agent" size={14} style={{ flexShrink: 0 }} />
+        <span style={profileLabelStyle('var(--color-primary-strong)')}>Sign in</span>
+        <Icon name="chevron-right" size={14} style={{ flexShrink: 0 }} />
       </button>
-    );
-  }
-
-  return (
-    <>
+    ) : (
       <button
         type="button"
         className="row-button"
         onClick={() => setProfileOpen(true)}
         title={`${displayName} · click for account`}
-        style={{
-          margin: 12,
-          padding: '10px 12px',
-          background: 'var(--color-sidebar-bg-hover)',
-          border: '1px solid var(--color-sidebar-border)',
-          borderRadius: 12,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          width: 'auto',
-          textAlign: 'left',
-        }}
+        style={profileRowStyle('var(--color-sidebar-text)')}
       >
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: 13,
-              fontWeight: 600,
-              color: 'var(--color-sidebar-text)',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
-            {displayName}
-          </div>
-          <div
-            style={{
-              fontSize: 10.5,
-              color: 'var(--color-sidebar-text-dim)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              marginTop: 3,
-            }}
-          >
-            {!isLoaded ? (
-              <span>…</span>
-            ) : (
-              <span style={tierBadgeStyle(tier)}>{tier}</span>
-            )}
-          </div>
-        </div>
+        <span style={profileLabelStyle('var(--color-sidebar-text)')}>{displayName}</span>
+        {!isLoaded ? (
+          <span style={{ fontSize: 10.5, color: 'var(--color-sidebar-text-dim)', flexShrink: 0 }}>…</span>
+        ) : (
+          <span style={tierBadgeStyle(tier)}>{tier}</span>
+        )}
         <Icon
           name="chevron-right"
           size={13}
-          style={{ color: 'var(--color-sidebar-text-dim)' }}
+          style={{ color: 'var(--color-sidebar-text-dim)', flexShrink: 0 }}
         />
       </button>
-      {profileOpen && <ProfileView tier={tier} onClose={() => setProfileOpen(false)} />}
-    </>
+    );
+
+  return (
+    <div style={{ borderTop: '1px solid var(--color-sidebar-border)', padding: '6px 6px 8px' }}>
+      {row}
+      {profileOpen && signedIn && (
+        <ProfileView tier={tier} onClose={() => setProfileOpen(false)} />
+      )}
+    </div>
   );
+}
+
+function profileRowStyle(color: string): React.CSSProperties {
+  return {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    width: '100%',
+    margin: 0,
+    padding: '8px 10px',
+    background: 'transparent',
+    border: 'none',
+    borderRadius: 10,
+    color,
+    textAlign: 'left',
+  };
+}
+
+function profileLabelStyle(color: string): React.CSSProperties {
+  return {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 13,
+    fontWeight: 600,
+    color,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  };
 }
 
 const listReset: React.CSSProperties = {

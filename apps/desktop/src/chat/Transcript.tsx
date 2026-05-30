@@ -30,8 +30,11 @@ const MemoBlock = memo(
 );
 
 /** Row gutter — Virtuoso measures each item, so spacing rides on the row
- *  rather than a flex `gap`. */
-const ROW: React.CSSProperties = { padding: '8px 24px' };
+ *  rather than a flex `gap`. Flex column so each block's `alignSelf`
+ *  (user → right, tool → left, assistant → stretch) is honoured; in the
+ *  old flat flex container it worked for free, but each virtualised row is
+ *  its own element now. */
+const ROW: React.CSSProperties = { padding: '8px 24px', display: 'flex', flexDirection: 'column' };
 
 function keyOf(node: RenderNode): string {
   return node.kind === 'ext' ? node.ext.id : node.block.id;
