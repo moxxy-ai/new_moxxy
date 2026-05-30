@@ -1,4 +1,4 @@
-import type { MoxxyEvent, ToolCompactPresentation } from '@moxxy/sdk';
+import type { MoxxyEvent, PluginEvent, ToolCompactPresentation } from '@moxxy/sdk';
 import type {
   Block,
   LiveToolBlockData,
@@ -10,6 +10,67 @@ import type {
 import { oneLine } from './format.js';
 
 const SUBAGENT_PLUGIN_ID = '@moxxy/subagents';
+
+/**
+ * Fold a subagent `plugin_event` into the `subagents` map / `root` array.
+ * Subagent events render as one-line scope blocks so a fleet of children
+ * doesn't drown the main chat. Subagents always live at the top level — a
+ * spawned agent is a first-class actor, not a child of whatever skill
+ * spawned it — so this only ever pushes to `root` (never the open scope).
+ */
+function handleSubagentEvent(
+  e: PluginEvent,
+  subagents: Map<string, SubagentBlock>,
+  root: Block[],
+): void {
+  const payload = (e.payload ?? {}) as Record<string, unknown>;
+  const childSessionId = String(payload.childSessionId ?? '');
+  if (!childSessionId) return;
+  if (e.subtype === 'subagent_started') {
+    const block: SubagentBlock = {
+      kind: 'subagent',
+      id: e.id,
+      childSessionId,
+      label: String(payload.label ?? 'agent'),
+      startedAtMs: new Date(e.ts).getTime(),
+      completedAtMs: null,
+      toolCallCount: 0,
+      toolCalls: [],
+      stopReason: null,
+      finalPreview: null,
+      error: null,
+    };
+    subagents.set(childSessionId, block);
+    root.push(block);
+    return;
+  }
+  const block = subagents.get(childSessionId);
+  if (!block) return;
+  if (e.subtype === 'subagent_tool_call') {
+    block.toolCallCount += 1;
+    block.toolCalls.push({ name: String(payload.name ?? 'tool'), input: payload.input });
+    return;
+  }
+  if (e.subtype === 'subagent_completed') {
+    block.completedAtMs = new Date(e.ts).getTime();
+    block.stopReason = String(payload.stopReason ?? '');
+    const text = typeof payload.text === 'string' ? payload.text : '';
+    if (text) block.finalPreview = oneLine(text);
+    if (typeof payload.error === 'string') block.error = payload.error;
+    return;
+  }
+  if (e.subtype === 'subagent_error' || e.subtype === 'subagent_abort') {
+    block.completedAtMs = new Date(e.ts).getTime();
+    const reason =
+      (typeof payload.message === 'string' && payload.message) ||
+      (typeof payload.reason === 'string' && payload.reason) ||
+      'aborted';
+    block.error = reason;
+    return;
+  }
+  // chunk / tool_result / nested-grand-child: ignore at top level;
+  // the /agents modal exposes the raw stream when needed.
+}
 
 /**
  * Map of tool name → compact presentation metadata. Tool registries
@@ -229,56 +290,7 @@ export function pairToolEvents(
     // children doesn't drown the main chat. The SubagentSpawner emits
     // them as plugin_event with pluginId='@moxxy/subagents'.
     if (e.type === 'plugin_event' && e.pluginId === SUBAGENT_PLUGIN_ID) {
-      const payload = (e.payload ?? {}) as Record<string, unknown>;
-      const childSessionId = String(payload.childSessionId ?? '');
-      if (!childSessionId) continue;
-      if (e.subtype === 'subagent_started') {
-        const block: SubagentBlock = {
-          kind: 'subagent',
-          id: e.id,
-          childSessionId,
-          label: String(payload.label ?? 'agent'),
-          startedAtMs: new Date(e.ts).getTime(),
-          completedAtMs: null,
-          toolCallCount: 0,
-          toolCalls: [],
-          stopReason: null,
-          finalPreview: null,
-          error: null,
-        };
-        subagents.set(childSessionId, block);
-        // Subagents always render at the top level — a spawned agent is a
-        // first-class actor, not a child of whatever skill spawned it.
-        // Pushing to root (not pushBlock) keeps it out of the skill scope.
-        root.push(block);
-        continue;
-      }
-      const block = subagents.get(childSessionId);
-      if (!block) continue;
-      if (e.subtype === 'subagent_tool_call') {
-        block.toolCallCount += 1;
-        block.toolCalls.push({ name: String(payload.name ?? 'tool'), input: payload.input });
-        continue;
-      }
-      if (e.subtype === 'subagent_completed') {
-        block.completedAtMs = new Date(e.ts).getTime();
-        block.stopReason = String(payload.stopReason ?? '');
-        const text = typeof payload.text === 'string' ? payload.text : '';
-        if (text) block.finalPreview = oneLine(text);
-        if (typeof payload.error === 'string') block.error = payload.error;
-        continue;
-      }
-      if (e.subtype === 'subagent_error' || e.subtype === 'subagent_abort') {
-        block.completedAtMs = new Date(e.ts).getTime();
-        const reason =
-          (typeof payload.message === 'string' && payload.message) ||
-          (typeof payload.reason === 'string' && payload.reason) ||
-          'aborted';
-        block.error = reason;
-        continue;
-      }
-      // chunk / tool_result / nested-grand-child: ignore at top level;
-      // the /agents modal exposes the raw stream when needed.
+      handleSubagentEvent(e, subagents, root);
       continue;
     }
     pushBlock({ kind: 'event', id: e.id, event: e });

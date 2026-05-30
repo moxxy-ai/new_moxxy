@@ -37,10 +37,14 @@ export function formatElapsed(ms: number): string {
 // event log if anyone wants the gory detail.
 const ARG_SUMMARY_MAX = 90;
 const VALUE_MAX = 28;
+// Cap for a top-level string argument (the whole input is one string).
+const STRING_ARG_MAX = 60;
+// Cap for the one-line preview of the latest call in a live-tools block.
+const PREVIEW_LINE_MAX = 100;
 
 export function summarizeArgs(input: unknown): string {
   if (input == null) return '';
-  if (typeof input === 'string') return truncate(oneLine(input), 60);
+  if (typeof input === 'string') return truncate(oneLine(input), STRING_ARG_MAX);
   if (typeof input !== 'object') return String(input);
   const entries = Object.entries(input as Record<string, unknown>);
   if (entries.length === 0) return '';
@@ -131,7 +135,7 @@ export function compactPreviewLine(call: LiveToolCall): string {
   if (key) {
     const input = call.request.input as Record<string, unknown> | null;
     const v = input?.[key];
-    if (typeof v === 'string') return truncate(oneLine(v), 100);
+    if (typeof v === 'string') return truncate(oneLine(v), PREVIEW_LINE_MAX);
   }
   return summarizeArgs(call.request.input);
 }

@@ -140,13 +140,18 @@ function isTableSeparator(line: string): boolean {
   return /^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?$/.test(trimmed);
 }
 
+function stripOuterPipes(s: string): string {
+  return s.trim().replace(/^\|/, '').replace(/\|$/, '');
+}
+
 function parseTableCells(line: string): string[] {
-  const trimmed = line.trim().replace(/^\|/, '').replace(/\|$/, '');
-  return trimmed.split('|').map((s) => s.trim());
+  return stripOuterPipes(line)
+    .split('|')
+    .map((s) => s.trim());
 }
 
 function parseTableAligns(sep: string): Align[] {
-  const cells = sep.trim().replace(/^\|/, '').replace(/\|$/, '').split('|');
+  const cells = stripOuterPipes(sep).split('|');
   return cells.map((c) => {
     const t = c.trim();
     const left = t.startsWith(':');
