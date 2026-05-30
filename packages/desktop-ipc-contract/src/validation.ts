@@ -36,6 +36,16 @@ const skillName = z
   .regex(/^[A-Za-z0-9][A-Za-z0-9 ._/-]*$/, 'invalid skill name')
   .refine((s) => !s.includes('..'), 'skill name may not contain ".."');
 
+/** Vault key — letters/digits then letters/digits/dot/underscore/slash/hyphen
+ *  (slashes allow namespaced keys like `oauth/openai-codex/refresh_token`),
+ *  no `..` traversal. */
+const vaultKeyName = z
+  .string()
+  .min(1)
+  .max(200)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._/-]*$/, 'invalid vault key name')
+  .refine((s) => !s.includes('..'), 'vault key name may not contain ".."');
+
 const optionalWorkspace = z.string().min(1).max(256).optional();
 /** ~30 MB of base64 — generous for a voice clip, bounded so a renderer
  *  can't OOM the main process with one transcribe call. */
@@ -84,6 +94,13 @@ export const ipcInputSchemas: Partial<Record<IpcCommandName, z.ZodTypeAny>> = {
     limit: z.number().int().positive().max(1000),
   }),
   'chat.clearLog': z.object({ workspaceId: z.string().min(1).max(256) }),
+  // Vault writes are security-sensitive: lock the key name to a safe slug
+  // (letters/digits + . _ / - , no traversal) and bound the secret size.
+  'settings.vaultSet': z.object({
+    name: vaultKeyName,
+    value: z.string().min(1).max(32_768),
+  }),
+  'settings.vaultDelete': z.object({ name: vaultKeyName }),
   // Permission/approval reply — security-sensitive (it decides a tool call),
   // so the shape is locked down: a known requestId + a strict response.
   'ask.respond': z

@@ -427,6 +427,10 @@ export interface IpcCommands {
   }) => Promise<void>;
   /** Vault entries are global per-user — no workspaceId. */
   'settings.vaultEntries': () => Promise<ReadonlyArray<VaultEntryName>>;
+  /** Store (or overwrite) a vault secret. Value is encrypted at rest. */
+  'settings.vaultSet': (args: { name: string; value: string }) => Promise<void>;
+  /** Delete a vault secret by name. */
+  'settings.vaultDelete': (args: { name: string }) => Promise<void>;
   /** Skills under ~/.moxxy/skills are global per-user — no workspaceId. */
   'settings.skills': () => Promise<ReadonlyArray<SkillFile>>;
   'settings.readSkill': (args: { name: string }) => Promise<string>;

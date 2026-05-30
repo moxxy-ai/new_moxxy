@@ -370,6 +370,15 @@ export function registerIpcHandlers(pool: RunnerPool, desks: DeskStore): void {
     const names = await readVaultKeys(home);
     return names.map((name) => ({ name }));
   });
+  handle('settings.vaultSet', async ({ name, value }) => {
+    // Writes to the same on-disk vault the runner reads (shared file +
+    // key source via the in-process vault plugin), so a key added here is
+    // immediately resolvable as ${vault:NAME}.
+    await getInProcessPlugins().vault.set(name, value);
+  });
+  handle('settings.vaultDelete', async ({ name }) => {
+    await getInProcessPlugins().vault.delete(name);
+  });
   handle('settings.skills', async () => {
     const { listSkills } = await import('./skills');
     return listSkills();

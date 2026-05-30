@@ -20,6 +20,8 @@ export interface UseSettings {
   readonly readSkill: (name: string) => Promise<string>;
   readonly writeSkill: (name: string, body: string) => Promise<void>;
   readonly deleteSkill: (name: string) => Promise<void>;
+  readonly setVaultKey: (name: string, value: string) => Promise<void>;
+  readonly removeVaultKey: (name: string) => Promise<void>;
 }
 
 export function useSettings(): UseSettings {
@@ -96,6 +98,28 @@ export function useSettings(): UseSettings {
     [refresh],
   );
 
+  const setVaultKey = useCallback(
+    async (name: string, value: string): Promise<void> => {
+      // Let the caller surface the error (the add form shows it inline),
+      // but still refresh + re-throw so the list updates on success.
+      await api().invoke('settings.vaultSet', { name, value });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const removeVaultKey = useCallback(
+    async (name: string): Promise<void> => {
+      try {
+        await api().invoke('settings.vaultDelete', { name });
+        await refresh();
+      } catch (e) {
+        setError(toErrorMessage(e));
+      }
+    },
+    [refresh],
+  );
+
   return {
     providers,
     mcp,
@@ -108,5 +132,7 @@ export function useSettings(): UseSettings {
     readSkill,
     writeSkill,
     deleteSkill,
+    setVaultKey,
+    removeVaultKey,
   };
 }
