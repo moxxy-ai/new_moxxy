@@ -80,116 +80,39 @@ export function SkillsView({
   };
 
   return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: '300px 1fr',
-        gap: 18,
-        alignItems: 'start',
-      }}
-    >
-      <aside style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <button
-          type="button"
-          className="btn-cta"
-          onClick={() => setCreateOpen({})}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '8px 12px',
-            background: 'var(--grad-cta)',
-            color: '#fff',
-            borderRadius: 10,
-            fontWeight: 600,
-            fontSize: 13,
-          }}
-        >
-          <Icon name="plus" size={14} />
-          New skill
-        </button>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {!active && (
+        <SkillGallery
+          skills={s.skills}
+          onPick={setActive}
+          onCreate={() => setCreateOpen({})}
+          onGenerate={() => setGenerateOpen(true)}
+        />
+      )}
+      {active && (
         <button
           type="button"
           className="btn-chip"
-          onClick={() => setGenerateOpen(true)}
+          onClick={() => setActive(null)}
           style={{
-            display: 'flex',
+            alignSelf: 'flex-start',
+            display: 'inline-flex',
             alignItems: 'center',
-            gap: 8,
-            padding: '8px 12px',
-            background: '#fff',
-            border: '1px solid var(--color-card-border)',
-            borderRadius: 10,
-            color: 'var(--color-text-muted)',
+            gap: 6,
+            padding: '6px 12px',
+            fontSize: 12.5,
             fontWeight: 600,
-            fontSize: 13,
+            color: 'var(--color-text-muted)',
+            border: '1px solid var(--color-card-border)',
+            borderRadius: 9,
+            background: '#fff',
           }}
         >
-          <Icon name="spark" size={14} />
-          Generate with AI
+          <Icon name="chevron-right" size={14} style={{ transform: 'rotate(180deg)' }} />
+          All skills
         </button>
-        <hr style={{ border: 'none', borderTop: '1px solid var(--color-card-border)', margin: '6px 0' }} />
-        <ul role="list" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {s.skills.length === 0 ? (
-            <li style={{ padding: '8px 10px', fontSize: 12, color: 'var(--color-text-dim)' }}>
-              No skills yet — create one or generate with AI.
-            </li>
-          ) : (
-            s.skills.map((skill) => {
-              const on = active === skill.name;
-              return (
-                <li key={skill.name}>
-                  <button
-                    type="button"
-                    data-active={on}
-                    onClick={() => setActive(skill.name)}
-                    style={{
-                      width: '100%',
-                      textAlign: 'left',
-                      padding: '10px 12px',
-                      borderRadius: 11,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 4,
-                      border: on ? '1px solid var(--color-primary)' : '1px solid var(--color-card-border)',
-                      background: on ? 'var(--color-primary-soft)' : '#fff',
-                    }}
-                  >
-                    <span
-                      className="mono"
-                      style={{
-                        fontSize: 12.5,
-                        fontWeight: 600,
-                        color: 'var(--color-text)',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                      }}
-                    >
-                      {skill.name.replace(/\.md$/, '')}
-                    </span>
-                    {skill.description && (
-                      <span
-                        style={{
-                          fontSize: 11,
-                          lineHeight: 1.45,
-                          color: 'var(--color-text-dim)',
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical',
-                          overflow: 'hidden',
-                        }}
-                      >
-                        {skill.description}
-                      </span>
-                    )}
-                  </button>
-                </li>
-              );
-            })
-          )}
-        </ul>
-      </aside>
+      )}
+      {active && (
 
       <article
         style={{
@@ -314,9 +237,9 @@ export function SkillsView({
               }}
             />
           )}
-          {!active && <EmptyHero onCreate={() => setCreateOpen({})} onGenerate={() => setGenerateOpen(true)} />}
         </div>
       </article>
+      )}
 
       {createOpen !== null && (
         <CreateSkillModal
@@ -352,6 +275,166 @@ export function SkillsView({
             setDeletePending(null);
           }}
         />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Browse view — a readable, full-width gallery of skill cards (icon + name +
+ * description) with the create / generate actions in the header. Picking a
+ * card opens the editor; the gallery is hidden while editing.
+ */
+function SkillGallery({
+  skills,
+  onPick,
+  onCreate,
+  onGenerate,
+}: {
+  readonly skills: ReturnType<typeof useSettings>['skills'];
+  readonly onPick: (name: string) => void;
+  readonly onCreate: () => void;
+  readonly onGenerate: () => void;
+}): JSX.Element {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Skills</h2>
+        <span
+          style={{
+            minWidth: 22,
+            textAlign: 'center',
+            padding: '1px 7px',
+            borderRadius: 999,
+            fontSize: 11,
+            fontWeight: 700,
+            color: 'var(--color-text-muted)',
+            background: 'rgba(148, 163, 184, 0.16)',
+          }}
+        >
+          {skills.length}
+        </span>
+        <span style={{ flex: 1 }} />
+        <button
+          type="button"
+          className="btn-chip"
+          onClick={onGenerate}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 7,
+            padding: '8px 13px',
+            fontSize: 13,
+            fontWeight: 600,
+            color: 'var(--color-text-muted)',
+            border: '1px solid var(--color-card-border)',
+            borderRadius: 10,
+            background: '#fff',
+          }}
+        >
+          <Icon name="spark" size={14} />
+          Generate with AI
+        </button>
+        <button
+          type="button"
+          className="btn-cta"
+          onClick={onCreate}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 7,
+            padding: '8px 14px',
+            fontSize: 13,
+            fontWeight: 600,
+            color: '#fff',
+            background: 'var(--grad-cta)',
+            borderRadius: 10,
+          }}
+        >
+          <Icon name="plus" size={14} />
+          New skill
+        </button>
+      </div>
+
+      {skills.length === 0 ? (
+        <EmptyHero onCreate={onCreate} onGenerate={onGenerate} />
+      ) : (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+            gap: 12,
+          }}
+        >
+          {skills.map((skill) => (
+            <button
+              key={skill.name}
+              type="button"
+              className="row-button"
+              onClick={() => onPick(skill.name)}
+              style={{
+                textAlign: 'left',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 10,
+                padding: 16,
+                minHeight: 104,
+                background: 'var(--color-card-bg)',
+                border: '1px solid var(--color-card-border)',
+                borderRadius: 14,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span
+                  aria-hidden
+                  style={{
+                    width: 32,
+                    height: 32,
+                    flexShrink: 0,
+                    borderRadius: 9,
+                    background: 'var(--color-primary-soft)',
+                    color: 'var(--color-primary-strong)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Icon name="spark" size={16} />
+                </span>
+                <span
+                  className="mono"
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    fontSize: 13.5,
+                    fontWeight: 600,
+                    color: 'var(--color-text)',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {skill.name.replace(/\.md$/, '')}
+                </span>
+                <Icon name="chevron-right" size={15} style={{ color: 'var(--color-text-dim)' }} />
+              </div>
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 12.5,
+                  lineHeight: 1.5,
+                  color: skill.description ? 'var(--color-text-muted)' : 'var(--color-text-dim)',
+                  display: '-webkit-box',
+                  WebkitLineClamp: 3,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                }}
+              >
+                {skill.description ?? 'No description.'}
+              </p>
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );
