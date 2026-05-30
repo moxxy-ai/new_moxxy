@@ -61,6 +61,7 @@
     "appId": "ai.moxxy.desktop",
     "productName": "MoxxyAI Workspaces",
     "executableName": "moxxy-desktop",
+    "afterPack": "build/after-pack.cjs",
     "directories": {
       "output": "release"
     },
