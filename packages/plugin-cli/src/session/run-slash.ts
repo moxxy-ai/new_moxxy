@@ -17,7 +17,7 @@ export interface SlashDeps {
   setPicker: React.Dispatch<React.SetStateAction<Picker>>;
   queueRef: React.MutableRefObject<Array<{ text: string; attachments: UserPromptAttachment[] }>>;
   setQueueCount: React.Dispatch<React.SetStateAction<number>>;
-  performSessionAction: (action: 'new' | 'clear' | 'exit', notice?: string) => void;
+  performSessionAction: (action: 'new' | 'clear' | 'exit', notice?: string, command?: string) => void;
 }
 
 export function runSlash(cmd: string, deps: SlashDeps): void {
@@ -51,7 +51,7 @@ export function runSlash(cmd: string, deps: SlashDeps): void {
         if (result.kind === 'text') {
           deps.setSystemNotice(result.text);
         } else if (result.kind === 'session-action') {
-          deps.performSessionAction(result.action, result.notice);
+          deps.performSessionAction(result.action, result.notice, `/${name}`);
         } else if (result.kind === 'error') {
           deps.setSystemNotice(`error: ${result.message}`);
         }

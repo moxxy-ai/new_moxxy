@@ -13,6 +13,8 @@ import type {
   ModeDef,
   ModelDescriptor,
   ModesClientView,
+  McpAdminView,
+  McpServerStatusView,
   MoxxyEvent,
   PermissionContext,
   PermissionDecision,
@@ -24,6 +26,10 @@ import type {
   ProvidersClientView,
   RequirementsClientView,
   RunTurnOptions,
+  ScheduleCreateInput,
+  ScheduleListOptions,
+  SchedulerView,
+  ScheduleUpdateInput,
   SessionId,
   SessionInfo,
   SessionLogReader,
@@ -37,6 +43,9 @@ import type {
   TranscribersClientView,
   TranscriptionResult,
   TurnId,
+  WorkflowRunView,
+  WorkflowSummaryView,
+  WorkflowsView,
 } from '@moxxy/sdk';
 import { JsonRpcPeer } from './jsonrpc.js';
 import type { Transport } from './transport.js';
@@ -52,6 +61,12 @@ import {
   type InfoChangedNotification,
   type PermissionCheckParams,
   type RunTurnResult,
+  type SchedulerCreateResult,
+  type SchedulerDeleteResult,
+  type SchedulerListResult,
+  type SchedulerRunNowResult,
+  type SchedulerSetEnabledResult,
+  type SchedulerUpdateResult,
   type TurnCompleteNotification,
 } from './protocol.js';
 
@@ -151,8 +166,9 @@ export class RemoteSession implements ClientSession {
   readonly transcribers: TranscribersClientView;
   readonly requirements: RequirementsClientView;
   readonly permissions: PermissionsClientView;
-  readonly mcpAdmin: McpAdminClientView;
-  readonly workflows: WorkflowsClientView;
+  readonly scheduler: SchedulerView;
+  readonly mcpAdmin: McpAdminView;
+  readonly workflows: WorkflowsView;
   /**
    * Turns that completed before their `runTurn` stream was registered. A fast
    * turn can finish on the runner before the client processes the `runTurn`
@@ -215,6 +231,7 @@ export class RemoteSession implements ClientSession {
     this.transcribers = this.makeTranscribersView();
     this.requirements = { check: () => ({ ready: false, issues: [] }) };
     this.permissions = this.makePermissionsView();
+    this.scheduler = this.makeSchedulerView();
     this.mcpAdmin = this.makeMcpAdminView();
     this.workflows = this.makeWorkflowsView();
   }
@@ -452,10 +469,30 @@ export class RemoteSession implements ClientSession {
     };
   }
 
-  private makeMcpAdminView(): McpAdminClientView {
+  private makeSchedulerView(): SchedulerView {
+    return {
+      list: (options: ScheduleListOptions = {}) =>
+        this.peer.request<SchedulerListResult>(RunnerMethod.SchedulerList, options),
+      create: (input: ScheduleCreateInput) =>
+        this.peer.request<SchedulerCreateResult>(RunnerMethod.SchedulerCreate, input),
+      update: (id: string, input: ScheduleUpdateInput) =>
+        this.peer.request<SchedulerUpdateResult>(RunnerMethod.SchedulerUpdate, { id, input }),
+      setEnabled: (id: string, enabled: boolean) =>
+        this.peer.request<SchedulerSetEnabledResult>(RunnerMethod.SchedulerSetEnabled, {
+          id,
+          enabled,
+        }),
+      delete: (id: string) =>
+        this.peer.request<SchedulerDeleteResult>(RunnerMethod.SchedulerDelete, { id }),
+      runNow: (id: string) =>
+        this.peer.request<SchedulerRunNowResult>(RunnerMethod.SchedulerRunNow, { id }),
+    };
+  }
+
+  private makeMcpAdminView(): McpAdminView {
     return {
       listServers: () =>
-        this.peer.request<ReadonlyArray<McpServerStatus>>(
+        this.peer.request<ReadonlyArray<McpServerStatusView>>(
           RunnerMethod.McpListServers,
         ),
       enableAndAttach: (name) =>
@@ -468,12 +505,22 @@ export class RemoteSession implements ClientSession {
     };
   }
 
-  private makeWorkflowsView(): WorkflowsClientView {
+  private makeWorkflowsView(): WorkflowsView {
+    const unsupported = (method: string): never => {
+      throw new Error(`workflow.${method} is not available over the runner protocol`);
+    };
     return {
       list: () =>
-        this.peer.request<ReadonlyArray<WorkflowSummary>>(
+        this.peer.request<ReadonlyArray<WorkflowSummaryView>>(
           RunnerMethod.WorkflowList,
         ),
+      get: async () => unsupported('get'),
+      create: async () => unsupported('create'),
+      update: async () => unsupported('update'),
+      delete: async () => unsupported('delete'),
+      validate: async () => unsupported('validate'),
+      draft: async () => unsupported('draft'),
+      capabilities: async () => unsupported('capabilities'),
       setEnabled: async (name, enabled) => {
         await this.peer.request(RunnerMethod.WorkflowSetEnabled, {
           name,
@@ -481,40 +528,9 @@ export class RemoteSession implements ClientSession {
         });
       },
       run: (name) =>
-        this.peer.request<WorkflowRunResult>(RunnerMethod.WorkflowRun, { name }),
+        this.peer.request<WorkflowRunView>(RunnerMethod.WorkflowRun, { name }),
     };
   }
-}
-
-interface McpServerStatus {
-  readonly name: string;
-  readonly enabled: boolean;
-  readonly connected: boolean;
-}
-interface McpAdminClientView {
-  listServers(): Promise<ReadonlyArray<McpServerStatus>>;
-  enableAndAttach(name: string): Promise<{ toolNames: ReadonlyArray<string> } | null>;
-  detach(name: string): Promise<boolean>;
-}
-
-interface WorkflowSummary {
-  readonly name: string;
-  readonly description: string;
-  readonly enabled: boolean;
-  readonly scope: string;
-  readonly steps: number;
-  readonly triggers: string;
-}
-interface WorkflowRunResult {
-  readonly ok: boolean;
-  readonly output: string;
-  readonly error?: string;
-  readonly steps: ReadonlyArray<{ readonly id: string; readonly status: string; readonly error?: string }>;
-}
-interface WorkflowsClientView {
-  list(): Promise<ReadonlyArray<WorkflowSummary>>;
-  setEnabled(name: string, enabled: boolean): Promise<void>;
-  run(name: string): Promise<WorkflowRunResult>;
 }
 
 // --- snapshot -> display-object reconstruction --------------------------------

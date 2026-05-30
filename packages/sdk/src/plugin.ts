@@ -14,8 +14,8 @@ import type { TranscriberDef } from './transcriber.js';
 import type { ViewRendererDef } from './view-renderer.js';
 import type { TunnelProviderDef } from './tunnel.js';
 import type { WorkflowExecutorDef } from './workflow.js';
-
-export type PluginKind = 'tools' | 'provider' | 'mode' | 'compactor' | 'cache-strategy' | 'view-renderer' | 'tunnel-provider' | 'mcp' | 'cli' | 'channel' | 'hooks' | 'agent' | 'command' | 'transcriber' | 'embedder' | 'isolator' | 'workflow-executor';
+import type { PluginKind } from './plugin-kind.js';
+export type { PluginKind } from './plugin-kind.js';
 
 export interface PluginSpec {
   readonly name: string;
@@ -102,7 +102,28 @@ export interface Plugin extends PluginSpec {
 export interface PluginManifest {
   readonly entry: string;
   readonly kind?: PluginKind | ReadonlyArray<PluginKind>;
+  /**
+   * Bind port for UI plugins. REQUIRED when `kind` includes `'ui'` — the
+   * runtime sets `PORT` / `MOXXY_PLUGIN_PORT` in the child process env so
+   * the UI server binds where the launcher expects.
+   */
+  readonly port?: number;
+  /** Bind host for UI plugins. Defaults to 127.0.0.1 at launch. */
+  readonly host?: string;
+  /** Suggested bridge (HTTP channel) port; falls back to 3737. */
+  readonly apiPort?: number;
+  /** Auto-open the UI in a browser on launch. Defaults to true. */
+  readonly openInBrowser?: boolean;
+  /** Human-readable display name for picker UIs. */
+  readonly title?: string;
   readonly skills?: string;
+}
+
+/**
+ * UI manifest narrowed by `isUiPluginManifest` — `port` is guaranteed.
+ */
+export interface UiPluginManifest extends PluginManifest {
+  readonly port: number;
 }
 
 export interface ResolvedPluginManifest extends PluginManifest {
@@ -115,4 +136,8 @@ export interface ResolvedPluginManifest extends PluginManifest {
    * pre-load readiness gate.
    */
   readonly requirements?: ReadonlyArray<MoxxyRequirement>;
+}
+
+export interface ResolvedUiPluginManifest extends ResolvedPluginManifest {
+  readonly port: number;
 }

@@ -32,8 +32,8 @@ export interface BuildWorkflowsPluginOptions {
   readonly runRecordDir?: string | null;
   readonly provider?: () => LLMProvider | null;
   readonly draftModel?: string;
-  readonly listSkills?: () => ReadonlyArray<string>;
-  readonly listTools?: () => ReadonlyArray<string>;
+  readonly listSkills?: WorkflowToolDeps['listSkills'];
+  readonly listTools?: WorkflowToolDeps['listTools'];
   /** Re-sync triggers after a create/update/delete/toggle. */
   readonly onChanged?: () => void | Promise<void>;
   /** Runs a workflow now (autonomous runner) — backs `/workflows run`. */

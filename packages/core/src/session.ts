@@ -39,6 +39,7 @@ import type {
   CredentialResolver,
   ElisionSettings,
   McpAdminView,
+  SchedulerView,
   WorkflowsView,
   PendingToolCall,
   PermissionContext,
@@ -129,6 +130,7 @@ export class Session implements ClientSession, SessionRuntime {
   credentialResolver?: CredentialResolver;
   mcpAdmin?: McpAdminView;
   workflows?: WorkflowsView;
+  scheduler?: SchedulerView;
   readonly dispatcher: HookDispatcherImpl;
   readonly pluginHost: PluginHost;
   private readonly controller = new AbortController();

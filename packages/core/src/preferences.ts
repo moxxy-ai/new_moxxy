@@ -4,7 +4,8 @@ import * as path from 'node:path';
 import { writeFileAtomic } from '@moxxy/sdk';
 
 /**
- * User-level runtime preferences persisted at ~/.moxxy/preferences.json.
+ * User-level runtime preferences persisted at $MOXXY_HOME/preferences.json
+ * or ~/.moxxy/preferences.json.
  * Distinct from `~/.moxxy/config.yaml` (user-edited, source of truth for
  * provider/plugin wiring) — this file is mutated by the TUI as the user
  * picks a model / loop strategy via slash commands, so it survives across
@@ -21,7 +22,7 @@ export interface MoxxyPreferences {
 }
 
 export function preferencesPath(): string {
-  return path.join(os.homedir(), '.moxxy', 'preferences.json');
+  return path.join(process.env.MOXXY_HOME ?? path.join(os.homedir(), '.moxxy'), 'preferences.json');
 }
 
 /**

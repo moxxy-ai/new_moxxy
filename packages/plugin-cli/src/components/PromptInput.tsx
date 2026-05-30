@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useReducer, useRef } from 'react';
-import { Box, useStdin } from 'ink';
+import { Box, useApp, useStdin } from 'ink';
 import {
   BUILTIN_SLASH_COMMANDS,
   matchSlash,
@@ -73,7 +73,7 @@ export interface PromptInputProps {
  *   Tab                  accept current slash suggestion
  *   Up / Down            navigate slash suggestions (when dropdown is open)
  *   Esc                  clear input
- *   Ctrl+C               exit process
+ *   Ctrl+C               exit TUI
  *   Paste                bracketed paste inserts the payload verbatim
  */
 export const PromptInput: React.FC<PromptInputProps> = ({
@@ -162,6 +162,7 @@ export const PromptInput: React.FC<PromptInputProps> = ({
   }, [externalInsert]);
 
   const { stdin, setRawMode, isRawModeSupported } = useStdin();
+  const { exit } = useApp();
 
   useEffect(() => {
     if (!isRawModeSupported) return;
@@ -188,6 +189,7 @@ export const PromptInput: React.FC<PromptInputProps> = ({
       onSlashUp: () => setSlashCursor((c) => Math.max(0, c - 1)),
       onSlashDown: () => setSlashCursor((c) => Math.min(slashMatchesRef.current.length - 1, c + 1)),
       onSlashAccept: handleSlashAccept,
+      onExit: exit,
       onShiftTab: () => onShiftTabRef.current?.(),
       onPasteText: (text: string) => onPasteTextRef.current?.(text) ?? text,
       slashOpen: false,
@@ -233,7 +235,7 @@ export const PromptInput: React.FC<PromptInputProps> = ({
       // Leave rawMode toggled — Ink owns the lifecycle; other
       // components might still need raw input.
     };
-  }, [stdin, isRawModeSupported, setRawMode, handleSubmit, handleCancel, handleSlashAccept]);
+  }, [stdin, isRawModeSupported, setRawMode, handleSubmit, handleCancel, handleSlashAccept, exit]);
 
   // Render: place an inverse-styled "cursor cell" at state.cursor.
   // Split buffer into before / atCursor / after segments, then walk

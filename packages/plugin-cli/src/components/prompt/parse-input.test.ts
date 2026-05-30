@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Action } from './reducer.js';
 import { parseInputChunk, type ParseCtx } from './parse-input.js';
 
@@ -13,6 +13,7 @@ function makeCtx(overrides: Partial<ParseCtx> = {}): { ctx: ParseCtx; actions: A
     onSlashUp: () => undefined,
     onSlashDown: () => undefined,
     onSlashAccept: () => undefined,
+    onExit: () => undefined,
     slashOpen: false,
     bufferRef: { current: { buffer: '', cursor: 0 } },
     ...overrides,
@@ -58,5 +59,30 @@ describe('parseInputChunk command hotkeys', () => {
     expect(called).toBe(1);
     expect(cancelled).toBe(false);
     expect(actions).toEqual([]);
+  });
+});
+
+describe('parseInputChunk exit handling', () => {
+  it('routes Ctrl+C to onExit without terminating the process', () => {
+    let exited = false;
+    const processExit = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('process.exit should not be called');
+    });
+    const { ctx, actions } = makeCtx({
+      onExit: () => {
+        exited = true;
+      },
+    });
+
+    try {
+      const remainder = parseInputChunk('\x03', ctx);
+
+      expect(remainder).toBe('');
+      expect(exited).toBe(true);
+      expect(actions).toEqual([]);
+      expect(processExit).not.toHaveBeenCalled();
+    } finally {
+      processExit.mockRestore();
+    }
   });
 });

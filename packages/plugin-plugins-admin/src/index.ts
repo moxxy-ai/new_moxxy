@@ -1,7 +1,14 @@
 import { definePlugin, type Plugin } from '@moxxy/sdk';
 import {
   buildInstallPluginTool,
+  installPluginPackage,
+  removePluginPackage,
+  userPluginsDir,
   type InstallPluginDeps,
+  type InstallPluginPackageOptions,
+  type InstallPluginPackageResult,
+  type RemovePluginPackageOptions,
+  type RemovePluginPackageResult,
   type PluginSnapshot,
 } from './install.js';
 
@@ -13,9 +20,9 @@ export {
   type InstallPluginDeps,
   type InstallPluginPackageOptions,
   type InstallPluginPackageResult,
-  type PluginSnapshot,
   type RemovePluginPackageOptions,
   type RemovePluginPackageResult,
+  type PluginSnapshot,
 } from './install.js';
 
 export interface BuildPluginsAdminOpts {

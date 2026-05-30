@@ -353,6 +353,9 @@ importers:
       '@moxxy/plugin-embeddings-transformers':
         specifier: workspace:*
         version: link:../plugin-embeddings-transformers
+      '@moxxy/plugin-marketplace':
+        specifier: workspace:*
+        version: link:../plugin-marketplace
       '@moxxy/plugin-mcp':
         specifier: workspace:*
         version: link:../plugin-mcp
@@ -1699,6 +1702,9 @@ importers:
         specifier: 'catalog:'
         version: 3.25.76
     devDependencies:
+      '@moxxy/testing':
+        specifier: workspace:*
+        version: link:../testing
       '@moxxy/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig

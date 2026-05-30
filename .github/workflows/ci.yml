@@ -75,8 +75,8 @@ jobs:
       - name: Smoke — CLI help loads
         run: node packages/cli/dist/bin.js --help
 
-      - name: Smoke — plugins list (no API calls)
-        run: node packages/cli/dist/bin.js plugins list
+      - name: Smoke — marketplace list (no API calls)
+        run: node packages/cli/dist/bin.js marketplace list
 
   dep-cruise-graph:
     name: Generate dependency graph

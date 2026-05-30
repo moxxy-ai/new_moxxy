@@ -53,6 +53,19 @@ export type {
   WorkflowsView,
   WorkflowSummaryView,
   WorkflowRunView,
+  WorkflowDetailView,
+  WorkflowValidationView,
+  WorkflowDraftView,
+  WorkflowCapabilityItemView,
+  WorkflowCapabilitiesView,
+  ScheduleSourceView,
+  ScheduleSourceFilterView,
+  ScheduleEntryView,
+  ScheduleListOptions,
+  ScheduleCreateInput,
+  ScheduleUpdateInput,
+  ScheduleRunNowView,
+  SchedulerView,
 } from './session-like.js';
 
 export type {
@@ -106,6 +119,7 @@ export { ISOLATION_RANK } from './isolation.js';
 export type {
   SubagentSpec,
   SubagentResult,
+  SubagentContinueArgs,
   SubagentSpawner,
 } from './subagent.js';
 
@@ -225,14 +239,20 @@ export type { Skill, SkillDef, SkillFrontmatter, SkillScope, SkillSchedule } fro
 export type {
   Workflow,
   WorkflowStep,
+  WorkflowLogicStepFormat,
   WorkflowTrigger,
   WorkflowStepErrorMode,
   WorkflowInputSpec,
   WorkflowDelivery,
+  WorkflowUiLayoutNode,
+  WorkflowUiViewport,
+  WorkflowUiLayout,
+  WorkflowUi,
   WorkflowToolRunner,
   WorkflowLookup,
   WorkflowEventSubtype,
   WorkflowRunDeps,
+  WorkflowRunStatus,
   WorkflowStepStatus,
   WorkflowStepResult,
   WorkflowRunResult,
@@ -247,6 +267,16 @@ export type {
   CommandOutput,
   CommandHandlerResult,
 } from './command.js';
+export {
+  COMMAND_SESSION_ACTION_SUBTYPE,
+  COMMAND_STATE_CHANGED_SUBTYPE,
+  isCommandSessionActionPayload,
+  isCommandStateChangedPayload,
+  type CommandOriginChannel,
+  type CommandSessionActionPayload,
+  type CommandStateChangedPayload,
+  type CommandTarget,
+} from './command-sync.js';
 
 export type {
   ToolRegistry,
@@ -273,12 +303,20 @@ export type {
 } from './hooks.js';
 
 export type {
-  PluginKind,
   PluginSpec,
   Plugin,
   PluginManifest,
   ResolvedPluginManifest,
+  UiPluginManifest,
+  ResolvedUiPluginManifest,
 } from './plugin.js';
+export type { PluginKind, PluginKindCarrier } from './plugin-kind.js';
+export {
+  PLUGIN_KINDS,
+  pluginKindList,
+  isPureUiPluginManifest,
+  isUiPluginManifest,
+} from './plugin-kind.js';
 
 export type {
   Channel,

@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ClientSession as Session } from '@moxxy/sdk';
-import { getInstallHint, type RequirementCheck, type RequirementIssue, type Transcriber } from '@moxxy/sdk';
+import { getInstallHint, type RequirementCheck } from '@moxxy/sdk';
+import {
+  CODEX_TRANSCRIBER_NAME,
+  checkCodexTranscriptionReady,
+  resolveCodexTranscriber,
+} from '@moxxy/core';
 import type { ExternalInsert } from '../components/prompt/external-insert.js';
 import {
   startVoiceRecording,
@@ -11,8 +16,10 @@ import {
   type StartVoiceRecordingOptions,
 } from '../voice-input.js';
 
-const CODEX_TRANSCRIBER_NAME = 'openai-codex-transcribe';
 const MOXXY_PCM16_24KHZ_MIME = 'audio/x-moxxy-pcm16-24khz';
+
+export const checkCodexVoiceInputReady = checkCodexTranscriptionReady;
+export { resolveCodexTranscriber };
 
 export interface UseVoiceInputOptions {
   readonly session: Session;
@@ -128,32 +135,6 @@ export function useVoiceInput(opts: UseVoiceInputOptions): VoiceInputState {
   return { externalInsert, ready, phase, toggleVoiceInput };
 }
 
-export function checkCodexVoiceInputReady(session: Session): RequirementCheck {
-  const check = session.requirements.check([
-    { kind: 'transcriber', name: CODEX_TRANSCRIBER_NAME },
-    { kind: 'provider', name: 'openai-codex', state: 'active' },
-    { kind: 'runtime', name: 'auth:provider:openai-codex', state: 'ready' },
-  ]);
-  const activeName = session.transcribers.getActiveName();
-  if (!activeName || activeName === CODEX_TRANSCRIBER_NAME) return check;
-
-  const conflict: RequirementIssue = {
-    requirement: {
-      kind: 'transcriber',
-      name: CODEX_TRANSCRIBER_NAME,
-      state: 'active',
-      hint: `Switch active transcriber to ${CODEX_TRANSCRIBER_NAME}.`,
-    },
-    code: 'inactive',
-    message: `Required active transcriber ${CODEX_TRANSCRIBER_NAME}; active is ${activeName}`,
-    hint: `Switch active transcriber to ${CODEX_TRANSCRIBER_NAME}.`,
-  };
-  return {
-    ready: false,
-    issues: [conflict, ...check.issues],
-  };
-}
-
 export function combineVoiceInputReadiness(
   codexCheck: RequirementCheck,
   captureCheck: RequirementCheck,
@@ -162,20 +143,6 @@ export function combineVoiceInputReadiness(
     ready: codexCheck.ready && captureCheck.ready,
     issues: [...codexCheck.issues, ...captureCheck.issues],
   };
-}
-
-export function resolveCodexTranscriber(session: Session): Transcriber {
-  const activeName = session.transcribers.getActiveName();
-  if (activeName && activeName !== CODEX_TRANSCRIBER_NAME) {
-    throw new Error(`Codex voice requires active transcriber ${CODEX_TRANSCRIBER_NAME}.`);
-  }
-  if (activeName === CODEX_TRANSCRIBER_NAME) return session.transcribers.getActive();
-  if (session.transcribers.has(CODEX_TRANSCRIBER_NAME)) {
-    return session.transcribers.setActive(CODEX_TRANSCRIBER_NAME);
-  }
-  throw new Error(
-    `No speech-to-text backend is registered. Run \`moxxy login openai-codex\` and restart with the Codex STT plugin enabled.`,
-  );
 }
 
 export function formatVoiceReadinessNotice(check: RequirementCheck): string {

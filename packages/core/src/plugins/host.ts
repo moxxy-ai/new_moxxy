@@ -20,6 +20,7 @@ import type {
   TunnelProviderDef,
   WorkflowExecutorDef,
 } from '@moxxy/sdk';
+import { isPureUiPluginManifest } from '@moxxy/sdk';
 import type { Logger } from '../logger.js';
 import type { AgentRegistry } from '../registries/agents.js';
 import type { CommandRegistry } from '../registries/commands.js';
@@ -207,6 +208,13 @@ export class PluginHost implements PluginHostHandle {
       }
     }
     for (const manifest of ordered) {
+      if (isPureUiPluginManifest(manifest)) {
+        this.opts.logger.info('PluginHost: discovered UI plugin metadata', {
+          package: manifest.packageName,
+          port: manifest.port,
+        });
+        continue;
+      }
       if (this.loaded.has(manifest.packageName)) continue;
       try {
         const plugin = await loader.load(manifest);

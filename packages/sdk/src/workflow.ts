@@ -33,11 +33,16 @@ export interface WorkflowTrigger {
 /** How a failed step is handled: abort the workflow, skip past it, or retry. */
 export type WorkflowStepErrorMode = 'fail' | 'continue' | 'retry';
 
+/** Response format for logic steps (`bridge` only may use `plain`). */
+export type WorkflowLogicStepFormat = 'json' | 'plain';
+
 /**
  * One node in the DAG. Exactly one *action* key is set
- * (`skill` | `prompt` | `tool` | `workflow`). `input` is the templated prompt
- * for skill/prompt actions; `args` are the templated arguments for
- * tool/workflow actions. `needs` are the upstream step ids this step depends on.
+ * (`skill` | `prompt` | `tool` | `workflow` | `bridge` | `condition` | `switch`).
+ * Logic steps run a single no-tools subagent turn; default response is JSON
+ * (`vars`, `branch`, optional `text`). `input` is the templated prompt for
+ * skill/prompt; `args` for tool/workflow; `bridge` / `condition` / `switch` hold
+ * the logic instruction text.
  */
 export interface WorkflowStep {
   readonly id: string;
@@ -45,14 +50,32 @@ export interface WorkflowStep {
   readonly prompt?: string;
   readonly tool?: string;
   readonly workflow?: string;
+  /** Extract/transform upstream data into `vars` (and optional `text`). */
+  readonly bridge?: string;
+  /** If/else gate: agent returns `{"branch":"then"|"else"}`. */
+  readonly condition?: string;
+  readonly then?: ReadonlyArray<string>;
+  readonly else?: ReadonlyArray<string>;
+  /** Multi-way gate: agent returns `{"branch":"<caseId>"}`. */
+  readonly switch?: string;
+  readonly cases?: Readonly<Record<string, ReadonlyArray<string>>>;
+  readonly default?: ReadonlyArray<string>;
   readonly input?: string;
   readonly args?: Record<string, unknown>;
   readonly needs: ReadonlyArray<string>;
-  /** Condition DSL; when it evaluates false the step is skipped. */
+  /** Legacy deterministic guard DSL; prefer `condition`/`switch` for semantics. */
   readonly when?: string;
   readonly onError: WorkflowStepErrorMode;
   readonly retries: number;
   readonly label?: string;
+  /** `plain` only on `bridge`; `condition`/`switch` always require JSON. */
+  readonly format?: WorkflowLogicStepFormat;
+  /**
+   * When true on a `prompt` or `skill` step, the DAG pauses after the
+   * subagent's first turn so the operator can reply once; the step completes
+   * after a follow-up turn. Ignored on logic / `tool` / `workflow` steps.
+   */
+  readonly awaitInput?: boolean;
 }
 
 export interface WorkflowInputSpec {
@@ -65,6 +88,27 @@ export interface WorkflowDelivery {
   readonly channel?: string;
   /** Also drop the final output into `~/.moxxy/inbox/`. Default true. */
   readonly inbox: boolean;
+}
+
+/** Visual editor metadata. Runtime executors must ignore this field. */
+export interface WorkflowUiLayoutNode {
+  readonly x: number;
+  readonly y: number;
+}
+
+export interface WorkflowUiViewport {
+  readonly x: number;
+  readonly y: number;
+  readonly zoom: number;
+}
+
+export interface WorkflowUiLayout {
+  readonly nodes: Record<string, WorkflowUiLayoutNode>;
+  readonly viewport?: WorkflowUiViewport;
+}
+
+export interface WorkflowUi {
+  readonly layout?: WorkflowUiLayout;
 }
 
 export interface Workflow {
@@ -80,6 +124,8 @@ export interface Workflow {
   readonly inputs: Record<string, WorkflowInputSpec>;
   readonly on?: WorkflowTrigger;
   readonly delivery?: WorkflowDelivery;
+  /** GUI-only metadata persisted with the YAML artifact. */
+  readonly ui?: WorkflowUi;
   /** Max steps to run concurrently in one ready-set round. */
   readonly concurrency: number;
   readonly steps: ReadonlyArray<WorkflowStep>;
@@ -104,6 +150,9 @@ export type WorkflowEventSubtype =
   | 'workflow_step_completed'
   | 'workflow_step_skipped'
   | 'workflow_step_failed'
+  | 'workflow_step_awaiting_input'
+  | 'workflow_paused'
+  | 'workflow_resumed'
   | 'workflow_completed'
   | 'workflow_failed';
 
@@ -134,7 +183,9 @@ export interface WorkflowRunDeps {
   readonly depth?: number;
 }
 
-export type WorkflowStepStatus = 'completed' | 'skipped' | 'failed';
+export type WorkflowStepStatus = 'completed' | 'skipped' | 'failed' | 'awaiting_input';
+
+export type WorkflowRunStatus = 'completed' | 'paused' | 'failed';
 
 export interface WorkflowStepResult {
   readonly id: string;
@@ -147,10 +198,16 @@ export interface WorkflowStepResult {
 
 export interface WorkflowRunResult {
   readonly ok: boolean;
+  readonly status: WorkflowRunStatus;
   readonly steps: ReadonlyArray<WorkflowStepResult>;
   /** Output of the terminal (sink) step(s) — what delivery sends. */
   readonly output: string;
   readonly error?: string;
+  /** Set when `status` is `paused` — use with workflow reply API. */
+  readonly runId?: string;
+  readonly pendingStepId?: string;
+  /** Child subagent session id for chat / permissions while paused. */
+  readonly interactionAgentId?: string;
 }
 
 /**

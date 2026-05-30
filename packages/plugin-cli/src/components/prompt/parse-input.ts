@@ -13,6 +13,8 @@ export interface ParseCtx {
   onSlashUp: () => void;
   onSlashDown: () => void;
   onSlashAccept: () => void;
+  /** Request TUI shutdown without terminating the hosting process. */
+  onExit: () => void;
   /** Shift+Tab — cycles the active mode. No-op when unset. */
   onShiftTab?: () => void;
   onPasteText?: (text: string) => string;
@@ -107,8 +109,9 @@ export function parseInputChunk(chunk: string, ctx: ParseCtx): string {
       continue;
     }
     if (c === '\x03') {
-      // Ctrl+C → process exit.
-      process.exit(0);
+      ctx.onExit();
+      i += 1;
+      continue;
     }
     if (c === '\x7f' || c === '\x08') {
       ctx.dispatch({ type: 'delete-back' });

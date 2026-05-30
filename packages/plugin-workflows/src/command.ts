@@ -243,7 +243,8 @@ function slugify(name: string): string {
 
 function starterTemplate(slug: string): string {
   return `# Workflow: ${slug}
-# A DAG of steps. Each step has exactly one action: skill | prompt | tool | workflow.
+# A DAG of steps. Each step has exactly one action: skill | prompt | tool | workflow | bridge | condition | switch.
+# Logic steps (bridge/condition/switch) use a prompt + default JSON (vars, branch). Legacy when: is for simple guards only.
 # Steps run once all their \`needs\` are satisfied — independent steps run in parallel.
 name: ${slug}
 description: Describe what this workflow does.

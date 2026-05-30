@@ -2,6 +2,7 @@ import type { ClientSession as Session } from '@moxxy/sdk';
 import { savePreferences } from '@moxxy/core';
 import type { Picker } from './types.js';
 import { openMcpPicker } from './run-slash.js';
+import { appendCommandStateChanged } from './command-sync.js';
 
 export interface PickerHandlerDeps {
   session: Session;
@@ -10,6 +11,7 @@ export interface PickerHandlerDeps {
   setSystemNotice: (msg: string | null) => void;
   setActiveModelOverride: (id: string) => void;
   refreshMcpStatus: () => Promise<void>;
+  commandOriginId: string;
 }
 
 export function makePickerHandler(deps: PickerHandlerDeps): (picker: Picker, id: string) => void {
@@ -160,8 +162,19 @@ function handleModelSelected(id: string, deps: PickerHandlerDeps): void {
         deps.session.providers.setActive(providerId, cfg);
       }
       deps.setActiveModelOverride(modelId);
-      deps.setSystemNotice(`switched to ${providerId}:${modelId}`);
+      const notice = `switched to ${providerId}:${modelId}`;
+      deps.setSystemNotice(notice);
       void savePreferences({ providerName: providerId, model: modelId });
+      void appendCommandStateChanged(deps.session, {
+        command: `/model ${providerId}::${modelId}`,
+        action: 'model_changed',
+        target: 'session',
+        origin_channel: 'tui',
+        origin_id: deps.commandOriginId,
+        notice,
+        provider: providerId,
+        model: modelId,
+      });
     } catch (err) {
       deps.setSystemNotice(
         `failed to switch: ${err instanceof Error ? err.message : String(err)}`,
@@ -173,8 +186,18 @@ function handleModelSelected(id: string, deps: PickerHandlerDeps): void {
 function handleModeSelected(id: string, deps: PickerHandlerDeps): void {
   try {
     deps.session.modes.setActive(id);
-    deps.setSystemNotice(`mode → ${id}`);
+    const notice = `mode -> ${id}`;
+    deps.setSystemNotice(notice);
     void savePreferences({ mode: id });
+    void appendCommandStateChanged(deps.session, {
+      command: `/loop ${id}`,
+      action: 'loop_changed',
+      target: 'session',
+      origin_channel: 'tui',
+      origin_id: deps.commandOriginId,
+      notice,
+      loop: id,
+    });
   } catch (err) {
     deps.setSystemNotice(
       `failed to switch mode: ${err instanceof Error ? err.message : String(err)}`,

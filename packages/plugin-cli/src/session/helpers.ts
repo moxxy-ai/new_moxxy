@@ -10,11 +10,14 @@ export function resolveActiveModel(
   override: string | null,
   prop: string | undefined,
 ): string {
-  if (override) return override;
-  if (prop) return prop;
   try {
-    return session.providers.getActive().models[0]?.id ?? 'default';
+    const models = session.providers.getActive().models;
+    if (override && models.some((model) => model.id === override)) return override;
+    if (prop && models.some((model) => model.id === prop)) return prop;
+    return models[0]?.id ?? 'default';
   } catch {
+    if (override) return override;
+    if (prop) return prop;
     return 'default';
   }
 }

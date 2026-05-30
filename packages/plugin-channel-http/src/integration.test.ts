@@ -3,13 +3,16 @@
  * against a Session wired with FakeProvider + tool-use loop, then drives
  * actual HTTP requests via fetch.
  */
+import { promises as fs } from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   Session,
   autoAllowResolver,
   silentLogger,
 } from '@moxxy/core';
-import { defineProvider, definePlugin, defineTranscriber } from '@moxxy/sdk';
+import { defineProvider, definePlugin, defineTranscriber, type CommandDef } from '@moxxy/sdk';
 import { FakeProvider, textReply } from '@moxxy/testing';
 import { toolUseModePlugin } from '@moxxy/mode-tool-use';
 import { builtinToolsPlugin } from '@moxxy/tools-builtin';
@@ -27,6 +30,39 @@ function buildSession(opts: { withTranscriber?: string } = {}): Session {
     logger: silentLogger,
     permissionResolver: autoAllowResolver,
   });
+  const commands: CommandDef[] = [
+    {
+      name: 'info',
+      description: 'Show session info',
+      handler: () => ({ kind: 'text', text: 'session info from command registry' }),
+    },
+    {
+      name: 'clear',
+      description: 'Clear scrollback',
+      handler: () => ({ kind: 'session-action', action: 'clear', notice: 'scrollback cleared' }),
+    },
+    {
+      name: 'new',
+      description: 'Start a new chat',
+      handler: () => ({ kind: 'session-action', action: 'new', notice: 'new chat started' }),
+    },
+    {
+      name: 'compact',
+      description: 'Compact context',
+      handler: () => ({ kind: 'text', text: 'compacted test context' }),
+    },
+    {
+      name: 'exit',
+      description: 'Quit the channel',
+      aliases: ['quit', 'q'],
+      handler: () => ({ kind: 'session-action', action: 'exit' }),
+    },
+    {
+      name: 'help',
+      description: 'List commands',
+      handler: () => ({ kind: 'text', text: 'help text' }),
+    },
+  ];
   const plugins = [
     definePlugin({
       name: 'http-integration-shim',
@@ -50,6 +86,7 @@ function buildSession(opts: { withTranscriber?: string } = {}): Session {
             ],
           }
         : {}),
+      commands,
     }),
   ];
   for (const p of plugins) session.pluginHost.registerStatic(p);
@@ -79,8 +116,14 @@ async function pickPort(channel: HttpChannel): Promise<{ baseUrl: string; handle
 let channel: HttpChannel;
 let handle: ChannelHandle;
 let baseUrl: string;
+let previousMoxxyHome: string | undefined;
+const tempDirs: string[] = [];
 
 beforeEach(async () => {
+  previousMoxxyHome = process.env.MOXXY_HOME;
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), 'moxxy-http-integration-'));
+  tempDirs.push(home);
+  process.env.MOXXY_HOME = home;
   channel = new HttpChannel({
     port: 0,
     authToken: TOKEN,
@@ -93,6 +136,13 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await handle.stop();
+  if (previousMoxxyHome === undefined) {
+    delete process.env.MOXXY_HOME;
+  } else {
+    process.env.MOXXY_HOME = previousMoxxyHome;
+  }
+  previousMoxxyHome = undefined;
+  await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
 
 describe('HttpChannel integration', () => {
@@ -178,6 +228,404 @@ describe('HttpChannel integration', () => {
   it('GET on an unknown path returns 404', async () => {
     const res = await fetch(`${baseUrl}/nonsense`);
     expect(res.status).toBe(404);
+  });
+
+  it('GET /v1/providers exposes registered providers for Virtual Office', async () => {
+    const res = await fetch(`${baseUrl}/v1/providers`, {
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Array<{ id: string; display_name: string; enabled: boolean }>;
+    expect(body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'fake', display_name: 'fake', enabled: true }),
+      ]),
+    );
+  });
+
+  it('GET /v1/providers/:id/models exposes provider models for Virtual Office', async () => {
+    const res = await fetch(`${baseUrl}/v1/providers/fake/models`, {
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Array<{ provider_id: string; model_id: string; display_name: string }>;
+    expect(body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          provider_id: 'fake',
+          model_id: 'fake-model',
+          display_name: 'fake-model',
+        }),
+      ]),
+    );
+  });
+
+  it('GET /v1/agents exposes the active moxxy session as a Virtual Office agent', async () => {
+    const res = await fetch(`${baseUrl}/v1/agents`, {
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Array<{
+      id: string;
+      status: string;
+      provider_id: string;
+      model_id: string;
+      kind: string;
+      origin: string;
+      parent_id: string | null;
+      capabilities: Record<string, boolean>;
+    }>;
+    expect(body).toEqual([
+      expect.objectContaining({
+        id: 'session',
+        name: 'session',
+        kind: 'session',
+        origin: 'moxxy_session',
+        parent_id: null,
+        status: 'idle',
+        provider_id: 'fake',
+        model_id: 'fake-model',
+        capabilities: {
+          run: true,
+          stop: false,
+          dismiss: false,
+          reset: true,
+        },
+      }),
+    ]);
+  });
+
+  it('GET /v1/session-selection reports ready after the real bridge is booted', async () => {
+    const res = await fetch(`${baseUrl}/v1/session-selection`, {
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      status: 'ready',
+      sessions: [],
+    });
+  });
+
+  it('POST /v1/agents creates a controllable office agent and GET /v1/agents includes it', async () => {
+    const created = await fetch(`${baseUrl}/v1/agents`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${TOKEN}`,
+      },
+      body: JSON.stringify({
+        name: 'researcher',
+        instructions: 'Focus on repo-level research.',
+      }),
+    });
+    expect(created.status).toBe(200);
+    const agent = (await created.json()) as {
+      id: string;
+      name: string;
+      kind: string;
+      origin: string;
+      parent_id: string | null;
+      capabilities: Record<string, boolean>;
+    };
+    expect(agent).toEqual(
+      expect.objectContaining({
+        id: expect.stringMatching(/^office-agent-/),
+        name: 'researcher',
+        kind: 'office_agent',
+        origin: 'virtual_office',
+        parent_id: 'session',
+        capabilities: {
+          run: true,
+          stop: true,
+          dismiss: true,
+          reset: true,
+        },
+      }),
+    );
+
+    const listed = await fetch(`${baseUrl}/v1/agents`, {
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
+    expect(listed.status).toBe(200);
+    const agents = (await listed.json()) as Array<{ id: string; kind: string }>;
+    expect(agents).toEqual([
+      expect.objectContaining({ id: 'session', kind: 'session' }),
+      expect.objectContaining({ id: agent.id, kind: 'office_agent' }),
+    ]);
+  });
+
+  it('DELETE /v1/agents refuses the session but dismisses office agents', async () => {
+    const sessionDelete = await fetch(`${baseUrl}/v1/agents/session`, {
+      method: 'DELETE',
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
+    expect(sessionDelete.status).toBe(409);
+
+    const created = await fetch(`${baseUrl}/v1/agents`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${TOKEN}`,
+      },
+      body: JSON.stringify({ name: 'qa' }),
+    });
+    const agent = (await created.json()) as { id: string };
+
+    const dismissed = await fetch(`${baseUrl}/v1/agents/${agent.id}`, {
+      method: 'DELETE',
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
+    expect(dismissed.status).toBe(200);
+    expect(await dismissed.json()).toEqual({ ok: true });
+
+    const listed = await fetch(`${baseUrl}/v1/agents`, {
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
+    const agents = (await listed.json()) as Array<{ id: string }>;
+    expect(agents.map((entry) => entry.id)).toEqual(['session']);
+
+    const graveyard = await fetch(`${baseUrl}/v1/graveyard`, {
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
+    expect(graveyard.status).toBe(200);
+    const archived = (await graveyard.json()) as Array<{ agentId: string; outcome: string }>;
+    expect(archived).toEqual([
+      expect.objectContaining({ agentId: agent.id, outcome: 'stopped' }),
+    ]);
+  });
+
+  it('GET /v1/commands exposes registry and Office-supported slash commands', async () => {
+    const res = await fetch(`${baseUrl}/v1/commands`, {
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Array<{
+      name: string;
+      command: string;
+      supported: boolean;
+      reason?: string;
+    }>;
+    expect(body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'info', command: '/info', supported: true }),
+        expect.objectContaining({ name: 'new', command: '/new', supported: true }),
+        expect.objectContaining({ name: 'clear', command: '/clear', supported: true }),
+        expect.objectContaining({ name: 'model', command: '/model', supported: true }),
+        expect.objectContaining({ name: 'loop', command: '/loop', supported: true }),
+      ]),
+    );
+    expect(body.map((command) => command.name)).not.toEqual(
+      expect.arrayContaining(['clear-queue', 'collapse', 'exit', 'expand', 'queue', 'quit', 'q', 'yolo']),
+    );
+  });
+
+  it('POST /v1/commands executes parameterized Office slash commands', async () => {
+    const info = await fetch(`${baseUrl}/v1/commands`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${TOKEN}`,
+      },
+      body: JSON.stringify({ agent_id: 'session', command: '/info' }),
+    });
+    expect(info.status).toBe(200);
+    expect(await info.json()).toEqual({
+      kind: 'text',
+      text: 'session info from command registry',
+    });
+
+    const model = await fetch(`${baseUrl}/v1/commands`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${TOKEN}`,
+      },
+      body: JSON.stringify({ agent_id: 'session', command: '/model fake::fake-model' }),
+    });
+    expect(model.status).toBe(200);
+    expect(await model.json()).toEqual({
+      kind: 'notice',
+      message: 'switched to fake::fake-model',
+    });
+
+    const unsupported = await fetch(`${baseUrl}/v1/commands`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${TOKEN}`,
+      },
+      body: JSON.stringify({ agent_id: 'session', command: '/exit' }),
+    });
+    expect(unsupported.status).toBe(409);
+    expect(await unsupported.json()).toMatchObject({
+      error: 'unsupported',
+      message: expect.stringContaining('/exit'),
+    });
+  });
+
+  it('Virtual Office office-agent runs stream with the office agent id and keep separate history', async () => {
+    const created = await fetch(`${baseUrl}/v1/agents`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${TOKEN}`,
+      },
+      body: JSON.stringify({ name: 'writer' }),
+    });
+    const agent = (await created.json()) as { id: string };
+
+    const stream = await fetch(`${baseUrl}/v1/events/stream`, {
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
+    expect(stream.status).toBe(200);
+    const reader = stream.body!.getReader();
+    const decoder = new TextDecoder();
+    const seen: Array<{ event_type: string; agent_id: string; payload: Record<string, unknown> }> = [];
+    let buffer = '';
+    const readUntilFinal = async (): Promise<void> => {
+      while (!seen.some((event) => event.event_type === 'message.final' && event.agent_id === agent.id)) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const chunks = buffer.split('\n\n');
+        buffer = chunks.pop() ?? '';
+        for (const chunk of chunks) {
+          const data = chunk
+            .split('\n')
+            .find((line) => line.startsWith('data: '))
+            ?.slice(6);
+          if (!data) continue;
+          seen.push(JSON.parse(data));
+        }
+      }
+    };
+
+    const runPromise = fetch(`${baseUrl}/v1/agents/${agent.id}/runs`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${TOKEN}`,
+      },
+      body: JSON.stringify({ task: 'write from the office agent' }),
+    });
+    await readUntilFinal();
+    await reader.cancel();
+    const run = await runPromise;
+
+    expect(run.status).toBe(200);
+    expect(await run.json()).toMatchObject({
+      agent_id: agent.id,
+      task: 'write from the office agent',
+      status: 'running',
+    });
+    expect(seen).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          event_type: 'run.started',
+          agent_id: agent.id,
+          payload: expect.objectContaining({ task: 'write from the office agent' }),
+        }),
+        expect.objectContaining({
+          event_type: 'message.final',
+          agent_id: agent.id,
+          payload: expect.objectContaining({ content: expect.stringContaining('hello') }),
+        }),
+      ]),
+    );
+
+    const history = await fetch(`${baseUrl}/v1/agents/${agent.id}/history`, {
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
+    expect(history.status).toBe(200);
+    const body = (await history.json()) as { messages: Array<{ role: string; text: string }> };
+    expect(body.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ role: 'user', text: 'write from the office agent' }),
+        expect.objectContaining({ role: 'assistant', text: expect.stringContaining('hello') }),
+      ]),
+    );
+  });
+
+  it('Virtual Office run endpoint executes a turn and SSE maps moxxy events to gateway envelopes', async () => {
+    const stream = await fetch(`${baseUrl}/v1/events/stream`, {
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
+    expect(stream.status).toBe(200);
+    expect(stream.headers.get('content-type')).toContain('text/event-stream');
+
+    const reader = stream.body!.getReader();
+    const decoder = new TextDecoder();
+    const seen: Array<{ event_type: string; agent_id: string; payload: Record<string, unknown> }> = [];
+    let buffer = '';
+    const readUntilFinal = async (): Promise<void> => {
+      while (!seen.some((event) => event.event_type === 'message.final')) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const chunks = buffer.split('\n\n');
+        buffer = chunks.pop() ?? '';
+        for (const chunk of chunks) {
+          const data = chunk
+            .split('\n')
+            .find((line) => line.startsWith('data: '))
+            ?.slice(6);
+          if (!data) continue;
+          seen.push(JSON.parse(data));
+        }
+      }
+    };
+
+    const runPromise = fetch(`${baseUrl}/v1/agents/session/runs`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${TOKEN}`,
+      },
+      body: JSON.stringify({ task: 'say hi from virtual office' }),
+    });
+    await readUntilFinal();
+    await reader.cancel();
+    const run = await runPromise;
+
+    expect(run.status).toBe(200);
+    expect(await run.json()).toMatchObject({
+      agent_id: 'session',
+      task: 'say hi from virtual office',
+      status: 'running',
+    });
+    expect(seen).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          event_type: 'run.started',
+          agent_id: 'session',
+          payload: expect.objectContaining({ task: 'say hi from virtual office' }),
+        }),
+        expect.objectContaining({
+          event_type: 'message.delta',
+          agent_id: 'session',
+          payload: expect.objectContaining({ content: expect.stringContaining('hello') }),
+        }),
+        expect.objectContaining({
+          event_type: 'message.final',
+          agent_id: 'session',
+          payload: expect.objectContaining({ content: expect.stringContaining('hello') }),
+        }),
+      ]),
+    );
+
+    const history = await fetch(`${baseUrl}/v1/agents/session/history`, {
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
+    expect(history.status).toBe(200);
+    const historyBody = (await history.json()) as { messages: Array<{ role: string; text: string }> };
+    expect(historyBody.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ role: 'user', text: 'say hi from virtual office' }),
+        expect.objectContaining({ role: 'assistant', text: expect.stringContaining('hello') }),
+      ]),
+    );
   });
 });
 

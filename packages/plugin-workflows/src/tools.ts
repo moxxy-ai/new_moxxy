@@ -14,7 +14,7 @@ import {
   type WorkflowRunDeps,
   type WorkflowToolRunner,
 } from '@moxxy/sdk';
-import { draftWorkflow } from './draft.js';
+import { draftWorkflow, type DraftCatalogEntry } from './draft.js';
 import { runWorkflow } from './engine.js';
 import { parseWorkflowYaml, serializeWorkflow } from './schema.js';
 import type { EditableScope, WorkflowStore } from './store.js';
@@ -41,9 +41,9 @@ export interface WorkflowToolDeps {
   /** Active provider for `workflow_create` drafting. */
   readonly provider?: () => LLMProvider | null;
   readonly draftModel?: string;
-  /** Skill/tool names surfaced to the drafter so it references real ones. */
-  readonly listSkills?: () => ReadonlyArray<string>;
-  readonly listTools?: () => ReadonlyArray<string>;
+  /** Skills/tools surfaced to the drafter so it references real catalog entries. */
+  readonly listSkills?: () => ReadonlyArray<DraftCatalogEntry>;
+  readonly listTools?: () => ReadonlyArray<DraftCatalogEntry>;
   /** Called after a create/update/delete/toggle so triggers can re-sync. */
   readonly onChanged?: () => void | Promise<void>;
 }
@@ -142,6 +142,7 @@ function createTool(deps: WorkflowToolDeps): ToolDef {
       const drafted = await draftWorkflow(provider, model, intent, ctx.signal, {
         ...(deps.listSkills ? { availableSkills: deps.listSkills() } : {}),
         ...(deps.listTools ? { availableTools: deps.listTools() } : {}),
+        maxTokens: 4096,
       });
       if (!drafted.parse.ok || !drafted.parse.workflow) {
         throw new MoxxyError({

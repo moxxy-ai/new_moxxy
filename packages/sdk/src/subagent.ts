@@ -26,6 +26,18 @@ export interface SubagentSpec {
   readonly allowedTools?: ReadonlyArray<string>;
   /** Human-readable label surfaced in `subagent_*` event payloads. */
   readonly label?: string;
+  /**
+   * When true, the child session stays alive after the first turn for
+   * {@link SubagentSpawner.continue}. `subagent_completed` is deferred until
+   * continue or release.
+   */
+  readonly retainSession?: boolean;
+}
+
+export interface SubagentContinueArgs {
+  readonly childSessionId: SessionId;
+  readonly prompt: string;
+  readonly label?: string;
 }
 
 export interface SubagentResult {
@@ -43,4 +55,8 @@ export interface SubagentSpawner {
   spawn(spec: SubagentSpec): Promise<SubagentResult>;
   /** Run N children in parallel; resolves with results in input order. */
   spawnAll(specs: ReadonlyArray<SubagentSpec>): Promise<ReadonlyArray<SubagentResult>>;
+  /** Append a user turn and run the child again (requires `retainSession` spawn). */
+  continue(args: SubagentContinueArgs): Promise<SubagentResult>;
+  /** Drop a retained session without completing it. */
+  release?(childSessionId: SessionId): void;
 }

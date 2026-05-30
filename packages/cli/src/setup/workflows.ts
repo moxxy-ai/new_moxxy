@@ -8,6 +8,7 @@ import {
   type EmittedEvent,
   type MoxxyEvent,
   type Plugin,
+  type Workflow,
   type WorkflowRunResult,
   type WorkflowsView,
 } from '@moxxy/sdk';
@@ -18,7 +19,10 @@ import {
   WorkflowStore,
   buildWorkflowsPlugin,
   defaultUserWorkflowsDir,
+  draftWorkflow,
+  resumeWorkflowRun,
   runWorkflow,
+  validateWorkflow,
 } from '@moxxy/plugin-workflows';
 
 /**
@@ -47,16 +51,21 @@ const PLUGIN_ID = asPluginId(WORKFLOWS_PLUGIN_NAME);
 export function buildWorkflowsIntegration(args: {
   session: Session;
   scheduleStore: ScheduleStore;
+  userWorkflowsDir?: string;
+  projectWorkflowsDir?: string;
   logger?: MiniLogger;
 }): WorkflowsIntegration {
   const { session, scheduleStore, logger } = args;
   const store = new WorkflowStore({
     cwd: session.cwd,
+    ...(args.userWorkflowsDir ? { userDir: args.userWorkflowsDir } : {}),
+    ...(args.projectWorkflowsDir ? { projectDir: args.projectWorkflowsDir } : {}),
     builtinDir: BUILTIN_WORKFLOWS_DIR,
     ...(logger ? { logger } : {}),
   });
 
   const watchers: FSWatcher[] = [];
+  const fileDebounceTimers = new Map<string, NodeJS.Timeout>();
   const inFlight = new Set<string>();
 
   // --- the autonomous runner: spawner + engine + inbox delivery ---
@@ -66,9 +75,17 @@ export function buildWorkflowsIntegration(args: {
     trigger?: string;
   }): Promise<WorkflowRunResult> {
     const entry = await store.get(input.name);
-    if (!entry) return { ok: false, steps: [], output: '', error: `no workflow named "${input.name}"` };
+    if (!entry) {
+      return { ok: false, status: 'failed', steps: [], output: '', error: `no workflow named "${input.name}"` };
+    }
     if (inFlight.has(input.name)) {
-      return { ok: false, steps: [], output: '', error: `workflow "${input.name}" is already running` };
+      return {
+        ok: false,
+        status: 'failed',
+        steps: [],
+        output: '',
+        error: `workflow "${input.name}" is already running`,
+      };
     }
     inFlight.add(input.name);
     try {
@@ -114,6 +131,31 @@ export function buildWorkflowsIntegration(args: {
   }
 
   // --- the /workflows modal view ---
+  async function workflowDetail(
+    entry: { workflow: Workflow; scope: string; path: string },
+    includeYaml = false,
+  ): Promise<NonNullable<Awaited<ReturnType<WorkflowsView['get']>>>> {
+    let yaml: string | undefined;
+    if (includeYaml) {
+      try {
+        yaml = await fsp.readFile(entry.path, 'utf8');
+      } catch {
+        yaml = undefined;
+      }
+    }
+    return {
+      workflow: entry.workflow,
+      scope: entry.scope,
+      path: entry.path,
+      ...(yaml !== undefined ? { yaml } : {}),
+    };
+  }
+
+  async function resyncTriggers(): Promise<void> {
+    await syncSchedules();
+    await startFileWatchers();
+  }
+
   const view: WorkflowsView = {
     list: async () =>
       (await store.list()).map((w) => ({
@@ -124,20 +166,201 @@ export function buildWorkflowsIntegration(args: {
         steps: w.workflow.steps.length,
         triggers: triggerSummary(w.workflow.on),
       })),
-    setEnabled: async (name, enabled) => {
-      await store.setEnabled(name, enabled);
-      await syncSchedules();
+    get: async (name) => {
+      const entry = await store.get(name);
+      return entry ? workflowDetail(entry, true) : null;
     },
-    run: async (name) => {
-      const r = await runNow({ name, trigger: 'manual' });
+    create: async (workflow, scope = 'user') => {
+      const parsed = validateWorkflow(workflow);
+      if (!parsed.ok || !parsed.workflow) throw new Error(parsed.errors.join('\n') || 'invalid workflow');
+      const entry = await store.create(parsed.workflow, scope);
+      await resyncTriggers();
+      return workflowDetail(entry, true);
+    },
+    update: async (name, workflow) => {
+      if (workflow.name !== name) {
+        throw new Error(`workflow name mismatch: URL targets "${name}" but body contains "${workflow.name}"`);
+      }
+      const parsed = validateWorkflow(workflow);
+      if (!parsed.ok || !parsed.workflow) throw new Error(parsed.errors.join('\n') || 'invalid workflow');
+      const existing = await store.get(name);
+      if (!existing) throw new Error(`no workflow named "${name}"`);
+      const entry = await store.save(parsed.workflow);
+      await resyncTriggers();
+      return workflowDetail(entry, true);
+    },
+    delete: async (name) => {
+      const result = await store.delete(name);
+      if (result.ok) await resyncTriggers();
+      return result;
+    },
+    validate: async (workflow) => {
+      const result = validateWorkflow(workflow);
+      return { ok: result.ok, errors: result.errors };
+    },
+    draft: async (intent) => {
+      const provider = safeActiveProvider(session);
+      if (!provider) {
+        return { workflow: null, raw: '', errors: ['no active provider is available to draft workflows'] };
+      }
+      const drafted = await draftWorkflow(provider, activeModel(session), intent, session.signal, {
+        availableSkills: session.skills.list().map((s) => ({
+          name: s.frontmatter.name,
+          description: s.frontmatter.description ?? '',
+        })),
+        availableTools: session.tools.list().map((t) => ({
+          name: t.name,
+          description: t.description ?? '',
+        })),
+        maxTokens: 4096,
+      });
       return {
-        ok: r.ok,
-        output: r.output,
-        ...(r.error ? { error: r.error } : {}),
-        steps: r.steps.map((s) => ({ id: s.id, status: s.status, ...(s.error ? { error: s.error } : {}) })),
+        workflow: drafted.parse.workflow ?? null,
+        raw: drafted.raw,
+        errors: drafted.parse.errors,
       };
     },
+    capabilities: async () => {
+      const toolEntries = session.tools.list().map((tool) => ({
+        name: tool.name,
+        description: tool.description ?? '',
+      }));
+      const mcp = toolEntries.filter((tool) => tool.name.startsWith('mcp__'));
+      const tools = toolEntries.filter((tool) => !tool.name.startsWith('mcp__'));
+      return {
+        skills: session.skills.list().map((skill) => ({
+          name: skill.frontmatter.name,
+          description: skill.frontmatter.description,
+        })),
+        tools,
+        mcp,
+        workflows: (await store.list()).map(({ workflow }) => ({
+          name: workflow.name,
+          description: workflow.description,
+        })),
+      };
+    },
+    setEnabled: async (name, enabled) => {
+      const updated = await store.setEnabled(name, enabled);
+      if (!updated) throw new Error(`no workflow named "${name}"`);
+      await resyncTriggers();
+    },
+    run: async (name, inputs) => {
+      const r = await runNow({ name, trigger: 'manual', ...(inputs ? { inputs } : {}) });
+      return formatWorkflowRunView(r);
+    },
+    runInline: async (workflow, inputs) => {
+      const r = await runInlineWorkflow(workflow, 'manual', inputs);
+      return formatWorkflowRunView(r);
+    },
+    reply,
   };
+
+  async function runInlineWorkflow(
+    workflow: Workflow,
+    trigger: string,
+    inputs?: Record<string, unknown>,
+  ): Promise<WorkflowRunResult> {
+    const runKey = `inline:${workflow.name}`;
+    if (inFlight.has(runKey)) {
+      return {
+        ok: false,
+        status: 'failed',
+        steps: [],
+        output: '',
+        error: `workflow "${workflow.name}" is already running`,
+      };
+    }
+    inFlight.add(runKey);
+    try {
+      const turnId = session.startTurn().turnId;
+      const spawner = createSubagentSpawner({
+        parentSession: session,
+        parentTurnId: turnId,
+        parentSignal: session.signal,
+        parentModel: activeModel(session),
+      });
+      return await runWorkflow(
+        workflow,
+        {
+          spawner,
+          tools: session.tools,
+          lookup: {
+            skill: (n) => session.skills.byName(n),
+            workflow: (n) => store.lookup(n),
+          },
+          signal: session.signal,
+          ...(inputs ? { inputs } : {}),
+          trigger,
+          now: () => Date.now(),
+          emit: (subtype, payload) =>
+            void session.log.append({
+              type: 'plugin_event',
+              sessionId: session.id,
+              turnId,
+              source: 'plugin',
+              pluginId: PLUGIN_ID,
+              subtype,
+              payload,
+            } as EmittedEvent),
+          ...(logger ? { logger } : {}),
+        },
+        { executor: session.workflowExecutors.getActive() },
+      );
+    } finally {
+      inFlight.delete(runKey);
+    }
+  }
+
+  async function reply(runId: string, message: string) {
+    const turnId = session.startTurn().turnId;
+    const spawner = createSubagentSpawner({
+      parentSession: session,
+      parentTurnId: turnId,
+      parentSignal: session.signal,
+      parentModel: activeModel(session),
+    });
+    const r = await resumeWorkflowRun(
+      runId,
+      message,
+      {
+        spawner,
+        tools: session.tools,
+        lookup: {
+          skill: (n) => session.skills.byName(n),
+          workflow: (n) => store.lookup(n),
+        },
+        signal: session.signal,
+        trigger: 'manual',
+        now: () => Date.now(),
+        emit: (subtype, payload) =>
+          void session.log.append({
+            type: 'plugin_event',
+            sessionId: session.id,
+            turnId,
+            source: 'plugin',
+            pluginId: PLUGIN_ID,
+            subtype,
+            payload,
+          } as EmittedEvent),
+        ...(logger ? { logger } : {}),
+      },
+    );
+    return formatWorkflowRunView(r);
+  }
+
+  function formatWorkflowRunView(r: WorkflowRunResult) {
+    return {
+      ok: r.ok,
+      status: r.status,
+      output: r.output,
+      ...(r.error ? { error: r.error } : {}),
+      ...(r.runId ? { runId: r.runId } : {}),
+      ...(r.pendingStepId ? { pendingStepId: r.pendingStepId } : {}),
+      ...(r.interactionAgentId ? { interactionAgentId: r.interactionAgentId } : {}),
+      steps: r.steps.map((s) => ({ id: s.id, status: s.status, ...(s.error ? { error: s.error } : {}) })),
+    };
+  }
 
   // --- triggers ---
   async function syncSchedules(): Promise<void> {
@@ -147,7 +370,7 @@ export function buildWorkflowsIntegration(args: {
       if (sched && (sched.cron || sched.runAt)) {
         const runAt = typeof sched.runAt === 'string' ? Date.parse(sched.runAt) : sched.runAt;
         await scheduleStore.syncWorkflowSchedule(workflow.name, {
-          id: '',
+          id: `workflow:${workflow.name}`,
           name: `wf-${workflow.name}`.slice(0, 120),
           // The scheduled turn runs this prompt; the model calls workflow_run,
           // whose engine drives the DAG. Scheduler writes the result to inbox.
@@ -156,7 +379,7 @@ export function buildWorkflowsIntegration(args: {
           ...(runAt ? { runAt } : {}),
           ...(sched.timeZone ? { timeZone: sched.timeZone } : {}),
           enabled: true,
-          createdAt: 0,
+          createdAt: Date.now(),
           source: 'workflow',
           workflowName: workflow.name,
         });
@@ -198,20 +421,21 @@ export function buildWorkflowsIntegration(args: {
 
   async function startFileWatchers(): Promise<void> {
     for (const w of watchers.splice(0)) w.close();
-    const debounced = new Map<string, NodeJS.Timeout>();
+    for (const timer of fileDebounceTimers.values()) clearTimeout(timer);
+    fileDebounceTimers.clear();
     for (const { workflow } of await store.list()) {
       if (!workflow.enabled || !workflow.on?.fileChanged) continue;
       for (const glob of [workflow.on.fileChanged].flat()) {
         const base = globBaseDir(glob, session.cwd);
         try {
           const watcher = fsWatch(base, { recursive: true }, () => {
-            const prev = debounced.get(workflow.name);
+            const prev = fileDebounceTimers.get(workflow.name);
             if (prev) clearTimeout(prev);
             const t = setTimeout(() => {
               void runNow({ name: workflow.name, trigger: `fileChanged:${glob}` }).catch(() => {});
             }, 600);
             t.unref?.();
-            debounced.set(workflow.name, t);
+            fileDebounceTimers.set(workflow.name, t);
           });
           watchers.push(watcher);
         } catch (err) {
@@ -233,15 +457,20 @@ export function buildWorkflowsIntegration(args: {
     appendEvent: (e) => session.log.append(e),
     ...(logger ? { logger } : {}),
     provider: () => safeActiveProvider(session),
-    listSkills: () => session.skills.list().map((s) => s.frontmatter.name),
-    listTools: () => session.tools.list().map((t) => t.name),
-    onChanged: syncSchedules,
+    listSkills: () => session.skills.list().map((s) => ({
+      name: s.frontmatter.name,
+      description: s.frontmatter.description ?? '',
+    })),
+    listTools: () => session.tools.list().map((t) => ({
+      name: t.name,
+      description: t.description ?? '',
+    })),
+    onChanged: resyncTriggers,
     runNow,
     userDir: defaultUserWorkflowsDir(),
     onReady: async () => {
       session.workflows = view;
-      await syncSchedules();
-      await startFileWatchers();
+      await resyncTriggers();
     },
   });
 
@@ -251,6 +480,8 @@ export function buildWorkflowsIntegration(args: {
     stop: () => {
       unsubscribe();
       for (const w of watchers.splice(0)) w.close();
+      for (const timer of fileDebounceTimers.values()) clearTimeout(timer);
+      fileDebounceTimers.clear();
     },
   };
 }

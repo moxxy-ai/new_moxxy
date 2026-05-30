@@ -42,6 +42,10 @@ export interface PluginSnapshot {
 export interface InstallPluginPackageOptions {
   /** Full npm install spec: a package name, `name@version`, git, or path. */
   readonly packageName: string;
+  /** Optional version/dist-tag used by CLI helpers that split name and version. */
+  readonly version?: string;
+  /** Override install directory, mostly for tests. */
+  readonly dir?: string;
   /** Optional abort signal; aborting kills the npm child process. */
   readonly signal?: AbortSignal;
 }
@@ -51,11 +55,15 @@ export interface InstallPluginPackageResult {
   readonly installed: string;
   /** The plugins directory the package was installed into. */
   readonly dir: string;
+  readonly stdout: string;
+  readonly stderr: string;
 }
 
 export interface RemovePluginPackageOptions {
   /** npm package name to uninstall from the plugins directory. */
   readonly packageName: string;
+  /** Override install directory, mostly for tests. */
+  readonly dir?: string;
   /** Optional abort signal; aborting kills the npm child process. */
   readonly signal?: AbortSignal;
 }
@@ -65,6 +73,8 @@ export interface RemovePluginPackageResult {
   readonly removed: string;
   /** The plugins directory the package was removed from. */
   readonly dir: string;
+  readonly stdout: string;
+  readonly stderr: string;
 }
 
 /**
@@ -76,16 +86,17 @@ export interface RemovePluginPackageResult {
 export async function installPluginPackage(
   opts: InstallPluginPackageOptions,
 ): Promise<InstallPluginPackageResult> {
-  const dir = userPluginsDir();
+  const dir = opts.dir ?? userPluginsDir();
   await ensurePackageJson(dir);
-  const { exitCode, stderr } = await runNpm(
-    ['install', '--prefix', dir, '--no-fund', '--no-audit', '--save', opts.packageName],
+  const spec = opts.version ? `${opts.packageName}@${opts.version}` : opts.packageName;
+  const { exitCode, stdout, stderr } = await runNpm(
+    ['install', '--prefix', dir, '--no-fund', '--no-audit', '--save', spec],
     opts.signal,
   );
   if (exitCode !== 0) {
     throw new Error(`npm install failed (exit ${exitCode}): ${truncate(stderr, 400)}`);
   }
-  return { installed: opts.packageName, dir };
+  return { installed: spec, dir, stdout, stderr };
 }
 
 /**
@@ -94,16 +105,16 @@ export async function installPluginPackage(
 export async function removePluginPackage(
   opts: RemovePluginPackageOptions,
 ): Promise<RemovePluginPackageResult> {
-  const dir = userPluginsDir();
+  const dir = opts.dir ?? userPluginsDir();
   await ensurePackageJson(dir);
-  const { exitCode, stderr } = await runNpm(
+  const { exitCode, stdout, stderr } = await runNpm(
     ['uninstall', '--prefix', dir, '--no-fund', '--no-audit', '--save', opts.packageName],
     opts.signal,
   );
   if (exitCode !== 0) {
     throw new Error(`npm uninstall failed (exit ${exitCode}): ${truncate(stderr, 400)}`);
   }
-  return { removed: opts.packageName, dir };
+  return { removed: opts.packageName, dir, stdout, stderr };
 }
 
 export function buildInstallPluginTool(deps: InstallPluginDeps) {
@@ -147,9 +158,8 @@ export function buildInstallPluginTool(deps: InstallPluginDeps) {
       },
     },
     handler: async ({ packageName, version }, ctx) => {
-      const spec = version ? `${packageName}@${version}` : packageName;
       const before = deps.snapshot();
-      const { installed } = await installPluginPackage({ packageName: spec, signal: ctx.signal });
+      const { installed } = await installPluginPackage({ packageName, version, signal: ctx.signal });
       await deps.reload();
       const after = deps.snapshot();
       return {
@@ -167,6 +177,7 @@ export function buildInstallPluginTool(deps: InstallPluginDeps) {
  * Node's loader without surprises.
  */
 async function ensurePackageJson(dir: string): Promise<void> {
+  await fs.mkdir(dir, { recursive: true });
   const pkgPath = path.join(dir, 'package.json');
   try {
     await fs.access(pkgPath);

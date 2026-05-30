@@ -5,6 +5,7 @@ import type { ApprovalResolver } from './mode.js';
 import type { PermissionResolver } from './permission.js';
 import type { ModelDescriptor } from './provider.js';
 import type { ToolCompactPresentation } from './tool.js';
+import type { Workflow } from './workflow.js';
 
 /**
  * Options accepted by `SessionLike.runTurn`. Defined here (rather than in
@@ -148,9 +149,113 @@ export interface WorkflowSummaryView {
 /** Result of running a workflow from the modal. */
 export interface WorkflowRunView {
   readonly ok: boolean;
+  readonly status: 'completed' | 'paused' | 'failed';
   readonly output: string;
   readonly error?: string;
+  readonly runId?: string;
+  readonly pendingStepId?: string;
+  readonly interactionAgentId?: string;
   readonly steps: ReadonlyArray<{ readonly id: string; readonly status: string; readonly error?: string }>;
+}
+
+export interface WorkflowDetailView {
+  readonly workflow: Workflow;
+  readonly scope: string;
+  readonly path?: string;
+  readonly yaml?: string;
+}
+
+export interface WorkflowValidationView {
+  readonly ok: boolean;
+  readonly errors: ReadonlyArray<string>;
+}
+
+export interface WorkflowDraftView {
+  readonly workflow: Workflow | null;
+  readonly raw: string;
+  readonly errors: ReadonlyArray<string>;
+}
+
+export interface WorkflowCapabilityItemView {
+  readonly name: string;
+  readonly description: string;
+}
+
+export interface WorkflowCapabilitiesView {
+  readonly skills: ReadonlyArray<WorkflowCapabilityItemView>;
+  readonly tools: ReadonlyArray<WorkflowCapabilityItemView>;
+  /** MCP tools namespaced as `mcp__<server>__<tool>`. */
+  readonly mcp: ReadonlyArray<WorkflowCapabilityItemView>;
+  readonly workflows: ReadonlyArray<WorkflowCapabilityItemView>;
+}
+
+export type ScheduleSourceView = 'manual' | 'skill' | 'workflow';
+export type ScheduleSourceFilterView = ScheduleSourceView | 'all';
+
+export interface ScheduleEntryView {
+  readonly id: string;
+  readonly name: string;
+  readonly prompt: string;
+  readonly enabled: boolean;
+  readonly source: ScheduleSourceView;
+  readonly skillName: string | null;
+  readonly workflowName: string | null;
+  readonly cron: string | null;
+  readonly runAt: number | null;
+  readonly timeZone: string | null;
+  readonly channel: string | null;
+  readonly model: string | null;
+  readonly createdAt: string;
+  readonly lastRunAt: string | null;
+  readonly lastResult: 'ok' | 'error' | null;
+  readonly lastError: string | null;
+  readonly nextFireAt: number | null;
+  readonly nextFireIso: string | null;
+  readonly editable: boolean;
+  readonly runnable: boolean;
+}
+
+export interface ScheduleListOptions {
+  readonly source?: ScheduleSourceFilterView;
+  readonly includeDisabled?: boolean;
+}
+
+export interface ScheduleCreateInput {
+  readonly name: string;
+  readonly prompt: string;
+  readonly cron?: string;
+  readonly runAt?: number | string;
+  readonly timeZone?: string;
+  readonly channel?: string;
+  readonly model?: string;
+  readonly enabled?: boolean;
+}
+
+export interface ScheduleUpdateInput {
+  readonly name?: string;
+  readonly prompt?: string;
+  readonly cron?: string | null;
+  readonly runAt?: number | string | null;
+  readonly timeZone?: string | null;
+  readonly channel?: string | null;
+  readonly model?: string | null;
+  readonly enabled?: boolean;
+}
+
+export interface ScheduleRunNowView {
+  readonly ok: boolean;
+  readonly text: string;
+  readonly inboxPath?: string;
+  readonly error?: string;
+}
+
+export interface SchedulerView {
+  list(options?: ScheduleListOptions): Promise<ReadonlyArray<ScheduleEntryView>>;
+  create(input: ScheduleCreateInput): Promise<ScheduleEntryView>;
+  update(id: string, input: ScheduleUpdateInput): Promise<ScheduleEntryView | null>;
+  setEnabled(id: string, enabled: boolean): Promise<ScheduleEntryView | null>;
+  delete(id: string): Promise<{ readonly ok: boolean }>;
+  runNow(id: string): Promise<ScheduleRunNowView>;
 }
 
 /**
@@ -161,8 +266,22 @@ export interface WorkflowRunView {
  */
 export interface WorkflowsView {
   list(): Promise<ReadonlyArray<WorkflowSummaryView>>;
+  get(name: string): Promise<WorkflowDetailView | null>;
+  create(workflow: Workflow, scope?: 'user' | 'project'): Promise<WorkflowDetailView>;
+  update(name: string, workflow: Workflow): Promise<WorkflowDetailView>;
+  delete(name: string): Promise<{ readonly ok: boolean; readonly reason?: string }>;
+  validate(workflow: unknown): Promise<WorkflowValidationView>;
+  draft(intent: string): Promise<WorkflowDraftView>;
+  capabilities(): Promise<WorkflowCapabilitiesView>;
   setEnabled(name: string, enabled: boolean): Promise<void>;
-  run(name: string): Promise<WorkflowRunView>;
+  run(name: string, inputs?: Record<string, unknown>): Promise<WorkflowRunView>;
+  /** Run a workflow definition without persisting it (desk-local office-flow). */
+  runInline?(
+    workflow: import('./workflow.js').Workflow,
+    inputs?: Record<string, unknown>,
+  ): Promise<WorkflowRunView>;
+  /** Resume a paused workflow after operator replies to an awaitInput step. */
+  reply?(runId: string, message: string): Promise<WorkflowRunView>;
 }
 
 /**
@@ -201,4 +320,6 @@ export interface SessionLike {
   mcpAdmin?: McpAdminView;
   /** Workflows slice backing the `/workflows` modal. */
   workflows?: WorkflowsView;
+  /** Scheduler slice backing the Virtual Office Schedules screen. */
+  scheduler?: SchedulerView;
 }

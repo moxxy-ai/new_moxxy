@@ -2,10 +2,17 @@ export interface ParsedArgv {
   command: string;
   flags: Record<string, string | boolean>;
   positional: string[];
+  /**
+   * Raw argv after the first `--` separator (Unix convention for
+   * "everything past here is for the inner program"). Subcommands that
+   * spawn a child process (e.g. `moxxy ui open …`) forward this to the
+   * child as its own argv.
+   */
+  passthrough: string[];
 }
 
 export function parseArgv(argv: ReadonlyArray<string>): ParsedArgv {
-  const result: ParsedArgv = { command: '', flags: {}, positional: [] };
+  const result: ParsedArgv = { command: '', flags: {}, positional: [], passthrough: [] };
   if (argv.length === 0) {
     result.command = 'tui';
     return result;
@@ -20,6 +27,12 @@ export function parseArgv(argv: ReadonlyArray<string>): ParsedArgv {
 
   for (; i < argv.length; i++) {
     const a = argv[i]!;
+    if (a === '--') {
+      // End of moxxy args. Everything that follows belongs to whatever the
+      // subcommand spawns (e.g. a UI plugin's child process).
+      result.passthrough = argv.slice(i + 1).map((value) => String(value));
+      break;
+    }
     if (a.startsWith('--')) {
       const eq = a.indexOf('=');
       if (eq !== -1) {

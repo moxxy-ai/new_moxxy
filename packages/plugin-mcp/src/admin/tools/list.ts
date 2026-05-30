@@ -9,11 +9,28 @@ export function buildListServersTool(): ToolDef {
     inputSchema: z.object({}),
     handler: async () => {
       const cfg = await readMcpConfig();
-      return cfg.servers.map((s) =>
-        s.kind === undefined || s.kind === 'stdio'
-          ? { name: s.name, kind: 'stdio' as const, command: (s as { command: string }).command }
-          : { name: s.name, kind: s.kind, url: (s as { url: string }).url },
-      );
+      return cfg.servers.map((s) => {
+        const base = {
+          name: s.name,
+          disabled: s.disabled === true,
+        };
+        if (s.kind === 'http' || s.kind === 'sse') {
+          return {
+            ...base,
+            kind: s.kind,
+            url: s.url,
+            ...(s.headers ? { headers: s.headers } : {}),
+          };
+        }
+        return {
+          ...base,
+          kind: 'stdio' as const,
+          command: s.command,
+          ...(s.args ? { args: s.args } : {}),
+          ...(s.env ? { env: s.env } : {}),
+          ...(s.cwd ? { cwd: s.cwd } : {}),
+        };
+      });
     },
   });
 }

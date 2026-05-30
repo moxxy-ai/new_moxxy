@@ -39,9 +39,16 @@ export {
   type RenderOptions,
 } from './template.js';
 
-export { dagExecutor, DAG_EXECUTOR_NAME } from './executor/dag.js';
+export { dagExecutor, DAG_EXECUTOR_NAME, resumeWorkflowRun } from './executor/dag.js';
 export { runWorkflow, defaultRunRecordDir, type RunWorkflowOptions } from './engine.js';
-export { draftWorkflow, type DraftWorkflowOptions, type DraftedWorkflow } from './draft.js';
+export { WorkflowRunStore, defaultWorkflowRunStore, type WorkflowRunCheckpoint } from './run-store.js';
+export {
+  buildSystemPrompt,
+  draftWorkflow,
+  type DraftCatalogEntry,
+  type DraftWorkflowOptions,
+  type DraftedWorkflow,
+} from './draft.js';
 export {
   buildWorkflowTools,
   buildRunDeps,

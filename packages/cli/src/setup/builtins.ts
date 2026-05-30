@@ -57,6 +57,7 @@ import { subprocessIsolator } from '@moxxy/isolator-subprocess';
 import { wasmIsolator } from '@moxxy/isolator-wasm';
 import type { WorkflowStore } from '@moxxy/plugin-workflows';
 import { BUILTIN_SKILLS_DIR_RESOLVED } from './builtin-skills-dir.js';
+import { buildSchedulerView } from './scheduler-view.js';
 import { buildWorkflowsIntegration } from './workflows.js';
 
 export interface BuiltinEntry {
@@ -367,6 +368,7 @@ export function buildBuiltinsCore(args: BuildBuiltinsArgs): BuiltBuiltinsCore {
       skills: session.skills,
       logger,
     });
+  session.scheduler = buildSchedulerView({ store: scheduleStore, runner: schedulerRunner });
   entries.push({ name: '@moxxy/plugin-scheduler', plugin: schedulerPlugin });
 
   // Workflows — saved DAGs of skills/prompts/tools. Reuses the scheduler store

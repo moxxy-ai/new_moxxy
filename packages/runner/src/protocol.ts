@@ -7,6 +7,11 @@ import type {
   PendingToolCall,
   PermissionContext,
   PermissionDecision,
+  ScheduleCreateInput,
+  ScheduleEntryView,
+  ScheduleListOptions,
+  ScheduleRunNowView,
+  ScheduleUpdateInput,
   SessionInfo,
   TranscriptionResult,
   UserPromptAttachment,
@@ -17,10 +22,9 @@ import type {
  * incompatible change lands; `attach` exchanges versions so a stale client
  * fails loudly instead of misbehaving.
  *
- * v2: adds mcp.* and workflow.* method families so a thin client can drive
- * the MCP-server admin + workflows panels remotely. Both families degrade
- * cleanly when the corresponding plugin isn't loaded on the runner — the
- * server returns an empty list / `null` rather than throwing.
+ * v2: adds scheduler.*, mcp.* and workflow.* method families so a thin client
+ * can drive runner-backed management panels remotely. These families degrade
+ * cleanly when the corresponding plugin isn't loaded on the runner.
  */
 export const RUNNER_PROTOCOL_VERSION = 2;
 
@@ -46,6 +50,18 @@ export const RunnerMethod = {
   CommandRun: 'command.run',
   /** client->server: transcribe audio using the runner's active transcriber. */
   Transcribe: 'transcribe',
+  /** client->server: list schedules from the runner's scheduler store. */
+  SchedulerList: 'scheduler.list',
+  /** client->server: create a manual schedule. */
+  SchedulerCreate: 'scheduler.create',
+  /** client->server: update a manual schedule. */
+  SchedulerUpdate: 'scheduler.update',
+  /** client->server: enable or pause a manual schedule. */
+  SchedulerSetEnabled: 'scheduler.setEnabled',
+  /** client->server: delete a manual schedule. */
+  SchedulerDelete: 'scheduler.delete',
+  /** client->server: run any schedule immediately. */
+  SchedulerRunNow: 'scheduler.runNow',
   /** client->server: list every MCP server the runner knows about. */
   McpListServers: 'mcp.listServers',
   /** client->server: enable an MCP server + attach its tools. */
@@ -144,6 +160,36 @@ export interface TranscribeParams {
   readonly prompt?: string;
 }
 export type TranscribeResult = TranscriptionResult;
+
+export type SchedulerListParams = ScheduleListOptions;
+export type SchedulerListResult = ReadonlyArray<ScheduleEntryView>;
+
+export type SchedulerCreateParams = ScheduleCreateInput;
+export type SchedulerCreateResult = ScheduleEntryView;
+
+export interface SchedulerUpdateParams {
+  readonly id: string;
+  readonly input: ScheduleUpdateInput;
+}
+export type SchedulerUpdateResult = ScheduleEntryView | null;
+
+export interface SchedulerSetEnabledParams {
+  readonly id: string;
+  readonly enabled: boolean;
+}
+export type SchedulerSetEnabledResult = ScheduleEntryView | null;
+
+export interface SchedulerDeleteParams {
+  readonly id: string;
+}
+export interface SchedulerDeleteResult {
+  readonly ok: boolean;
+}
+
+export interface SchedulerRunNowParams {
+  readonly id: string;
+}
+export type SchedulerRunNowResult = ScheduleRunNowView;
 
 export interface McpEnableAndAttachParams {
   readonly name: string;
@@ -249,6 +295,46 @@ export const transcribeParamsSchema = z.object({
   language: z.string().optional(),
   prompt: z.string().optional(),
 });
+
+const scheduleSourceSchema = z.enum(['all', 'manual', 'skill', 'workflow']);
+
+export const schedulerListParamsSchema = z.object({
+  source: scheduleSourceSchema.optional(),
+  includeDisabled: z.boolean().optional(),
+});
+
+export const schedulerCreateParamsSchema = z.object({
+  name: z.string().min(1),
+  prompt: z.string().min(1),
+  cron: z.string().optional(),
+  runAt: z.union([z.number(), z.string()]).optional(),
+  timeZone: z.string().optional(),
+  channel: z.string().optional(),
+  model: z.string().optional(),
+  enabled: z.boolean().optional(),
+});
+
+export const schedulerUpdateParamsSchema = z.object({
+  id: z.string().min(1),
+  input: z.object({
+    name: z.string().min(1).optional(),
+    prompt: z.string().min(1).optional(),
+    cron: z.string().nullable().optional(),
+    runAt: z.union([z.number(), z.string()]).nullable().optional(),
+    timeZone: z.string().nullable().optional(),
+    channel: z.string().nullable().optional(),
+    model: z.string().nullable().optional(),
+    enabled: z.boolean().optional(),
+  }),
+});
+
+export const schedulerSetEnabledParamsSchema = z.object({
+  id: z.string().min(1),
+  enabled: z.boolean(),
+});
+
+export const schedulerDeleteParamsSchema = z.object({ id: z.string().min(1) });
+export const schedulerRunNowParamsSchema = z.object({ id: z.string().min(1) });
 
 export const mcpEnableAndAttachParamsSchema = z.object({ name: z.string() });
 export const mcpDetachParamsSchema = z.object({ name: z.string() });

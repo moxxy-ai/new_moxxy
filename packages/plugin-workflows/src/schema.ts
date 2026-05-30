@@ -10,7 +10,8 @@ import { validateCondition } from './template.js';
  * reference real steps, no cycles, exactly one action per step).
  */
 
-const ACTION_KEYS = ['skill', 'prompt', 'tool', 'workflow'] as const;
+const ACTION_KEYS = ['skill', 'prompt', 'tool', 'workflow', 'bridge', 'condition', 'switch'] as const;
+const LOGIC_ACTION_KEYS = ['bridge', 'condition', 'switch'] as const;
 
 export const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/i;
 const STEP_ID_RE = /^[a-z0-9][a-z0-9_-]*$/i;
@@ -22,6 +23,13 @@ const stepSchema = z
     prompt: z.string().min(1).optional(),
     tool: z.string().min(1).optional(),
     workflow: z.string().min(1).optional(),
+    bridge: z.string().min(1).optional(),
+    condition: z.string().min(1).optional(),
+    then: z.array(z.string().min(1)).optional(),
+    else: z.array(z.string().min(1)).optional(),
+    switch: z.string().min(1).optional(),
+    cases: z.record(z.array(z.string().min(1))).optional(),
+    default: z.array(z.string().min(1)).optional(),
     input: z.string().optional(),
     args: z.record(z.unknown()).optional(),
     needs: z.array(z.string().min(1)).default([]),
@@ -29,8 +37,79 @@ const stepSchema = z
     onError: z.enum(['fail', 'continue', 'retry']).default('fail'),
     retries: z.number().int().min(0).max(3).default(0),
     label: z.string().max(60).optional(),
+    format: z.enum(['json', 'plain']).optional(),
+    awaitInput: z.boolean().optional(),
   })
   .superRefine((step, ctx) => {
+    const isLogic = LOGIC_ACTION_KEYS.some((k) => step[k] != null);
+    if (step.awaitInput && (step.tool != null || step.workflow != null || isLogic)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `step "${step.id}": awaitInput is only allowed on prompt or skill steps`,
+        path: ['awaitInput'],
+      });
+    }
+    if (step.format === 'plain' && step.bridge == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `step "${step.id}": format plain is only allowed on bridge steps`,
+        path: ['format'],
+      });
+    }
+    if (step.condition != null) {
+      if (step.then == null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `step "${step.id}": condition requires then`,
+          path: ['then'],
+        });
+      }
+      if (step.else == null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `step "${step.id}": condition requires else`,
+          path: ['else'],
+        });
+      }
+    }
+    if (step.switch != null) {
+      const caseKeys = Object.keys(step.cases ?? {});
+      if (caseKeys.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `step "${step.id}": switch requires at least one case`,
+          path: ['cases'],
+        });
+      }
+    }
+    if (step.then != null && step.condition == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `step "${step.id}": then is only valid with condition`,
+        path: ['then'],
+      });
+    }
+    if (step.else != null && step.condition == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `step "${step.id}": else is only valid with condition`,
+        path: ['else'],
+      });
+    }
+    if (step.cases != null && step.switch == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `step "${step.id}": cases is only valid with switch`,
+        path: ['cases'],
+      });
+    }
+    if (step.default != null && step.switch == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `step "${step.id}": default branch list is only valid with switch`,
+        path: ['default'],
+      });
+    }
     const present = ACTION_KEYS.filter((k) => step[k] != null);
     if (present.length === 0) {
       ctx.addIssue({
@@ -67,6 +146,18 @@ const inputSpecSchema = z.object({
   description: z.string().optional(),
 });
 
+const uiLayoutSchema = z.object({
+  nodes: z.record(z.object({
+    x: z.number(),
+    y: z.number(),
+  })).default({}),
+  viewport: z.object({
+    x: z.number(),
+    y: z.number(),
+    zoom: z.number().positive(),
+  }).optional(),
+});
+
 export const workflowSchema = z
   .object({
     name: z.string().min(1).max(120).regex(SLUG_RE, 'name must be slug-like'),
@@ -81,6 +172,9 @@ export const workflowSchema = z
         inbox: z.boolean().default(true),
       })
       .optional(),
+    ui: z.object({
+      layout: uiLayoutSchema.optional(),
+    }).optional(),
     concurrency: z.number().int().min(1).max(8).default(4),
     steps: z.array(stepSchema).min(1).max(40),
   })
@@ -124,6 +218,29 @@ export const workflowSchema = z
           message: `step "${step.id}" has an invalid \`when\` condition: ${err}`,
           path: ['steps'],
         });
+      }
+    }
+    for (const step of wf.steps) {
+      const branchIds: string[] = [];
+      if (step.then) branchIds.push(...step.then);
+      if (step.else) branchIds.push(...step.else);
+      if (step.cases) for (const list of Object.values(step.cases)) branchIds.push(...list);
+      if (step.default) branchIds.push(...step.default);
+      for (const ref of branchIds) {
+        if (!ids.has(ref)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `step "${step.id}" references unknown branch step "${ref}"`,
+            path: ['steps'],
+          });
+        }
+        if (ref === step.id) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `step "${step.id}" cannot reference itself in then/else/cases/default`,
+            path: ['steps'],
+          });
+        }
       }
     }
   });
