@@ -89,8 +89,10 @@
       "category": "Utility",
       "maintainer": "MoxxyAI <noreply@moxxy.ai>",
       "icon": "public/logo.png",
-      "packageName": "moxxy-desktop",
       "artifactName": "moxxy-desktop-${version}-${arch}.${ext}"
+    },
+    "deb": {
+      "packageName": "moxxy-desktop"
     },
     "win": {
       "target": "nsis",
