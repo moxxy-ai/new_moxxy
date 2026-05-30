@@ -3,6 +3,13 @@ import * as path from 'node:path';
 import { moxxyPackageSchema, type ResolvedPluginManifest } from '@moxxy/sdk';
 import type { Logger } from '../logger.js';
 
+/**
+ * Maximum number of directory levels to climb when collecting `node_modules`
+ * roots from the cwd upward. Bounds the walk so discovery never traverses all
+ * the way to the filesystem root on a deeply-nested cwd.
+ */
+const MAX_NODE_MODULES_WALK_DEPTH = 8;
+
 export interface DiscoveryOptions {
   readonly cwd: string;
   readonly logger: Logger;
@@ -37,7 +44,7 @@ export async function discoverPlugins(opts: DiscoveryOptions): Promise<ReadonlyA
 async function candidateRoots(cwd: string): Promise<string[]> {
   const out: string[] = [];
   let cursor = path.resolve(cwd);
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < MAX_NODE_MODULES_WALK_DEPTH; i++) {
     out.push(path.join(cursor, 'node_modules'));
     const parent = path.dirname(cursor);
     if (parent === cursor) break;

@@ -360,11 +360,10 @@ export class Session implements ClientSession, SessionRuntime {
  * `~/.moxxy/permissions.json`, that decision short-circuits the
  * resolver's prompt path. Otherwise the resolver runs as usual.
  *
- * The wrapper preserves the original resolver's identity for
- * `instanceof`-style checks (e.g. `abortAll` on the deferred resolver)
- * by re-exposing every property via Proxy — wait, simpler: we proxy
- * just `check`. Callers that need the underlying resolver's methods
- * still reach them via the prototype chain we copy in.
+ * The wrapper is a Proxy that intercepts only `check`; every other
+ * property (e.g. `abortAll` and any channel-specific helpers) passes
+ * straight through to the underlying resolver, so callers reach those
+ * methods exactly as before.
  */
 function wrapWithPolicy(
   inner: PermissionResolver,

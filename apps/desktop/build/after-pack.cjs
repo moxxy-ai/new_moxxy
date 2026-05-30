@@ -21,6 +21,14 @@ const path = require('node:path');
 exports.default = async function afterPack(context) {
   if (context.electronPlatformName !== 'darwin') return;
 
+  // When a real Developer ID cert is present (CSC_LINK set), electron-builder
+  // does the proper hardened-runtime signing + notarization — ad-hoc signing
+  // here would clobber it. Only ad-hoc sign the unsigned fallback build.
+  if (process.env.CSC_LINK) {
+    console.log('afterPack: Developer ID signing active (CSC_LINK set) — skipping ad-hoc signing');
+    return;
+  }
+
   const appBundle = fs.readdirSync(context.appOutDir).find((e) => e.endsWith('.app'));
   if (!appBundle) {
     console.warn(`afterPack: no .app found in ${context.appOutDir}; skipping ad-hoc signing`);

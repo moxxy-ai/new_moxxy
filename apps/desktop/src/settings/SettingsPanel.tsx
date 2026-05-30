@@ -6,15 +6,17 @@ import { SkillsView } from './SkillsView';
 import { ProvidersTab } from './ProvidersTab';
 import { McpTab } from './McpTab';
 import { VaultTab } from './VaultTab';
+import { AboutTab } from './AboutTab';
 import { SearchBox } from './settings-primitives';
 
-type Tab = 'providers' | 'mcp' | 'skills' | 'vault';
+type Tab = 'providers' | 'mcp' | 'skills' | 'vault' | 'about';
 
 const TABS: ReadonlyArray<{ id: Tab; label: string }> = [
   { id: 'providers', label: 'Providers' },
   { id: 'mcp', label: 'MCP' },
   { id: 'skills', label: 'Skills' },
   { id: 'vault', label: 'Vault' },
+  { id: 'about', label: 'About' },
 ];
 
 /**
@@ -114,7 +116,11 @@ export function SettingsPanel(): JSX.Element {
         </button>
       </header>
 
-      {s.error && (
+      {/* About is independent of the runner-backed settings slice — render
+          it without the shared loading / error chrome below. */}
+      {tab === 'about' && <AboutTab />}
+
+      {tab !== 'about' && s.error && (
         <div
           role="alert"
           style={{
@@ -135,7 +141,7 @@ export function SettingsPanel(): JSX.Element {
         </div>
       )}
 
-      {s.loading ? (
+      {tab === 'about' ? null : s.loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <Skeleton.Card />
           <Skeleton.Card />

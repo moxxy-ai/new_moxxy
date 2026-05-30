@@ -266,6 +266,16 @@ export interface IpcCommands {
    *  resolution loop. */
   'connection.retry': (args?: { workspaceId?: string }) => Promise<void>;
 
+  /** Version + on-disk path of the moxxy CLI the desktop is currently
+   *  running. Either field may be null if it can't be resolved. */
+  'app.cliInfo': () => Promise<{ version: string | null; path: string | null }>;
+  /** Install the latest published `@moxxy/cli` into the writable
+   *  userData copy, then restart every runner so the new binary is
+   *  used immediately. Streams npm output via
+   *  `onboarding.install.progress`. Returns the exit code (0 = ok) and
+   *  the post-update version. */
+  'app.updateCli': () => Promise<{ code: number; version: string | null }>;
+
   'onboarding.status': () => Promise<OnboardingStatus>;
   /** Probe Node.js — used by the first wizard step before we offer
    *  the install. */
@@ -354,6 +364,18 @@ export interface IpcCommands {
   /** Open a native file picker and return the absolute path the user
    *  chose. Null when cancelled. */
   'session.pickAttachment': () => Promise<string | null>;
+  /** Persist a pasted/dropped image blob (the renderer can't write
+   *  files) to a temp file the agent can read, and return it as a
+   *  {@link PromptAttachment} ready to ship on the next turn. Rejects
+   *  if the image exceeds the attachment size cap. */
+  'session.saveImageAttachment': (args: {
+    /** Base64-encoded image bytes (no `data:` prefix). */
+    dataBase64: string;
+    /** MIME type from the clipboard blob, e.g. `image/png`. */
+    mediaType: string;
+    /** Optional source filename; a friendly default is used otherwise. */
+    name?: string;
+  }) => Promise<PromptAttachment>;
 
   // ---- Workspace filesystem browsing ------------------------------------
   /** List one directory inside the workspace's cwd. Relative paths

@@ -10,7 +10,8 @@
  */
 
 import { spawn } from 'node:child_process';
-import { dirname } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import path, { dirname } from 'node:path';
 import { type BrowserWindow } from 'electron';
 import { augmentedPaths, nodeLauncher, resolveMoxxyCli, spawnPath } from './cli-resolver';
 import { assertSafeProviderName } from './security';
@@ -88,6 +89,96 @@ export async function installMoxxyCli(window: BrowserWindow): Promise<number> {
       stdio: ['ignore', 'pipe', 'pipe'],
       // npm is itself a `#!/usr/bin/env node` shebang; a GUI-launched app
       // lacks the shell PATH, so put node's dir (= npm's dir) on PATH.
+      env: { ...process.env, PATH: spawnPath([dirname(npm)]) },
+    });
+    proc.stdout?.on('data', (b: Buffer) => stream(window, b.toString()));
+    proc.stderr?.on('data', (b: Buffer) => stream(window, b.toString()));
+    proc.on('error', reject);
+    proc.on('exit', (code) => resolve(code ?? -1));
+  });
+}
+
+/**
+ * Best-effort version of the moxxy CLI that the desktop currently runs.
+ *
+ * Resolves the active CLI the same way the supervisor does, then walks
+ * from the resolved entry/bin up to the owning `@moxxy/cli/package.json`
+ * and returns its `version`. Returns null on any failure — the caller
+ * (the About section) just shows "unknown" rather than erroring.
+ *
+ * Covers the two real shapes:
+ *   - `{kind:'node', entry}` — entry is `…/dist/bin.js`; package.json is
+ *     two dirs up (`…/@moxxy/cli/package.json`).
+ *   - `{kind:'direct', bin}` — bin is an npm shim under
+ *     `…/node_modules/.bin/moxxy` or a global; walk up looking for a
+ *     `@moxxy/cli/package.json`.
+ */
+export function getCliVersion(): string | null {
+  const cli = resolveMoxxyCli({ extraPaths: augmentedPaths() });
+  if (!cli) return null;
+  const start = cli.kind === 'direct' ? cli.bin : cli.entry;
+  return readVersionNearby(start);
+}
+
+/** Walk up from a file path looking for the @moxxy/cli package.json's
+ *  version. First tries the canonical "two dirs up from dist/bin.js"
+ *  layout, then scans ancestors for an `@moxxy/cli/package.json`. */
+function readVersionNearby(start: string): string | null {
+  // dist/bin.js → package.json two dirs up (the bundled / updated layout).
+  const direct = path.join(dirname(dirname(start)), 'package.json');
+  const fromDirect = readPackageVersion(direct, '@moxxy/cli');
+  if (fromDirect) return fromDirect;
+
+  // Otherwise walk ancestors for a node_modules/@moxxy/cli/package.json.
+  let cur = dirname(start);
+  for (let i = 0; i < 8; i += 1) {
+    const candidate = path.join(cur, 'node_modules', '@moxxy', 'cli', 'package.json');
+    const v = readPackageVersion(candidate, '@moxxy/cli');
+    if (v) return v;
+    const parent = dirname(cur);
+    if (parent === cur) break;
+    cur = parent;
+  }
+  return null;
+}
+
+function readPackageVersion(pkgPath: string, expectName: string): string | null {
+  try {
+    if (!existsSync(pkgPath)) return null;
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as {
+      name?: unknown;
+      version?: unknown;
+    };
+    if (pkg.name !== expectName) return null;
+    return typeof pkg.version === 'string' ? pkg.version : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Install the latest published `@moxxy/cli` into the desktop's writable
+ * `<userDataDir>/cli` prefix — producing
+ * `<userDataDir>/cli/node_modules/@moxxy/cli/dist/bin.js`, exactly the
+ * path the Electron main prefers over the read-only bundled copy.
+ *
+ * Mirrors {@link installMoxxyCli}: streams every stdout/stderr line to
+ * the renderer as `onboarding.install.progress`, resolves with the exit
+ * code (non-zero install failures resolve normally so the UI can react),
+ * and rejects only if npm isn't on PATH.
+ */
+export async function updateCli(userDataDir: string, window: BrowserWindow): Promise<number> {
+  const target = path.join(userDataDir, 'cli');
+  const npm = findExe('npm');
+  if (!npm) throw new Error('npm not found on PATH — install Node.js to update the CLI');
+
+  emit(window, `$ npm install @moxxy/cli@latest --prefix ${target}`);
+
+  return new Promise<number>((resolve, reject) => {
+    const proc = spawn(npm, ['install', '@moxxy/cli@latest', '--prefix', target], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      // GUI launches lack the shell PATH; npm's `#!/usr/bin/env node`
+      // shebang needs node, which lives in npm's own dir.
       env: { ...process.env, PATH: spawnPath([dirname(npm)]) },
     });
     proc.stdout?.on('data', (b: Buffer) => stream(window, b.toString()));

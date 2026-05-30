@@ -21,9 +21,7 @@ export async function recallVector(
   // TF-IDF special-cases the persistent cache (vocab is corpus-wide).
   if (embedder instanceof TfIdfEmbedder) {
     embedder.fit([...corpus, query]);
-    const vectors = await embedder.embed([...corpus, query]);
-    const queryVec = vectors[vectors.length - 1]!;
-    return rankCosine(all, vectors.slice(0, all.length), queryVec, limit);
+    return rankAllFresh(all, corpus, query, limit, embedder);
   }
 
   // Neural embedders: consult the persistent cache, only embed misses + query.
@@ -46,14 +44,20 @@ export async function recallVector(
       const toEmbed = [...misses.map((m) => m.text), query];
       const fresh = await embedder.embed(toEmbed);
       const qVec = fresh[queryIdx]!;
+      // Map each missed corpus index to its freshly-embedded vector so the
+      // stitch loop below stays O(1) per entry instead of scanning `misses`.
+      const freshByEntryIndex = new Map<number, ReadonlyArray<number>>();
+      for (const [j, m] of misses.entries()) {
+        freshByEntryIndex.set(m.index, fresh[j]!);
+      }
       // Stitch results: cached + freshly-embedded
       const vecs: ReadonlyArray<number>[] = [];
       for (let i = 0; i < all.length; i++) {
-        vecs.push(cached[i] ?? fresh[misses.findIndex((m) => m.index === i)]!);
+        vecs.push(cached[i] ?? freshByEntryIndex.get(i)!);
       }
       // Persist fresh vectors
-      for (const m of misses) {
-        index.set(all[m.index]!.frontmatter.name, m.text, fresh[misses.indexOf(m)]!);
+      for (const [j, m] of misses.entries()) {
+        index.set(all[m.index]!.frontmatter.name, m.text, fresh[j]!);
       }
       index.prune(all.map((e) => e.frontmatter.name));
       await index.flush();
@@ -63,6 +67,18 @@ export async function recallVector(
   }
 
   // No cache configured — embed everything every time.
+  return rankAllFresh(all, corpus, query, limit, embedder);
+}
+
+// Embed `[...corpus, query]` in one batch, then cosine-rank the corpus against
+// the (last) query vector. Shared by the TF-IDF and no-cache branches.
+async function rankAllFresh(
+  all: ReadonlyArray<MemoryEntry>,
+  corpus: ReadonlyArray<string>,
+  query: string,
+  limit: number,
+  embedder: EmbeddingProvider,
+): Promise<ReadonlyArray<RankedMemory>> {
   const vectors = await embedder.embed([...corpus, query]);
   const queryVec = vectors[vectors.length - 1]!;
   return rankCosine(all, vectors.slice(0, all.length), queryVec, limit);

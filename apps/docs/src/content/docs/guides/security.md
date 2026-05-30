@@ -22,7 +22,7 @@ prompts, embedded host environments, or just stricter hygiene.
 
 ### During `moxxy init`
 
-Step 7 of the wizard asks whether to enable plugin-security. Accept and
+Step 6 of the wizard asks whether to enable plugin-security. Accept and
 the generated `moxxy.config.yaml` gains:
 
 ```yaml

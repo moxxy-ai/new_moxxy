@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { defineTool, z } from '@moxxy/sdk';
-import { clampString, globToRegExp, resolveSafe } from './util.js';
+import { clampString, globToRegExp, IGNORED_DIR_NAMES, resolvePath } from './util.js';
 
 export const globTool = defineTool({
   name: 'Glob',
@@ -25,7 +25,7 @@ export const globTool = defineTool({
     },
   },
   async handler({ pattern, cwd, max }, ctx) {
-    const baseDir = resolveSafe(ctx.cwd, cwd ?? '.');
+    const baseDir = resolvePath(ctx.cwd, cwd ?? '.');
     const matches: string[] = [];
     for await (const entry of fsGlob(baseDir, pattern, ctx.signal)) {
       matches.push(entry);
@@ -79,7 +79,7 @@ async function* walk(
   }
   for (const entry of entries) {
     if (signal.aborted) return;
-    if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'dist' || entry.name === '.turbo') continue;
+    if (IGNORED_DIR_NAMES.has(entry.name)) continue;
     const full = path.join(cursor, entry.name);
     let isDir = entry.isDirectory();
     let isFile = entry.isFile();

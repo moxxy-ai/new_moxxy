@@ -218,7 +218,8 @@ export async function consolidateMemory(
 }
 
 function extractJson(text: string): unknown {
-  // Find the first {...} block in the response. Some providers wrap in ```json ... ```.
+  // Take the span from the first `{` to the last `}` in the response. Some
+  // providers wrap the object in ```json ... ```, which we strip first.
   const fenced = /```(?:json)?\n?([\s\S]*?)```/.exec(text);
   const candidate = fenced ? fenced[1]! : text;
   const start = candidate.indexOf('{');

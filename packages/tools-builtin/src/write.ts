@@ -1,5 +1,5 @@
 import { MoxxyError, defineTool, writeFileAtomic, z } from '@moxxy/sdk';
-import { resolveSafe } from './util.js';
+import { resolvePath } from './util.js';
 
 export const writeTool = defineTool({
   name: 'Write',
@@ -22,7 +22,7 @@ export const writeTool = defineTool({
     },
   },
   async handler({ file_path, content }, ctx) {
-    const resolved = resolveSafe(ctx.cwd, file_path);
+    const resolved = resolvePath(ctx.cwd, file_path);
     // Bail before touching disk if the turn was already aborted: a partial
     // write here would corrupt the user's file for no benefit.
     if (ctx.signal.aborted) {

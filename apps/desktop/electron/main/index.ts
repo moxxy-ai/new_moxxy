@@ -14,32 +14,8 @@ import { app, BrowserWindow } from 'electron';
 // menu bar / Dock and Windows taskbar pick it up. Falls through to
 // the packaged productName for the bundled .app/.exe.
 app.setName('MoxxyAI Workspaces');
-import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-
-// In a packaged build there is no global `moxxy` (and a GUI launch has no
-// shell PATH / system `node`). Point the CLI resolver at a self-contained,
-// pinned CLI run via Electron's own Node (ELECTRON_RUN_AS_NODE), preferring a
-// version the user updated from within the app over the one bundled with this
-// release. Respects an explicit MOXXY_CLI_ENTRY override (dev / power users).
-if (app.isPackaged && !process.env.MOXXY_CLI_ENTRY) {
-  // Updatable copy (installed by the in-app "update CLI" action into writable
-  // userData) wins over the read-only copy bundled in resources, so users can
-  // move to a newer CLI without waiting for a full app update.
-  const updatedCli = path.join(
-    app.getPath('userData'),
-    'cli',
-    'node_modules',
-    '@moxxy',
-    'cli',
-    'dist',
-    'bin.js',
-  );
-  const bundledCli = path.join(process.resourcesPath, 'moxxy-cli', 'dist', 'bin.js');
-  const entry = [updatedCli, bundledCli].find((p) => existsSync(p));
-  if (entry) process.env.MOXXY_CLI_ENTRY = entry;
-}
 
 import {
   RunnerPool,
@@ -56,7 +32,20 @@ import {
   installContentSecurityPolicy,
   lockDownNavigation,
   isSafeExternalUrl,
+  preferredCliEntry,
 } from '@moxxy/desktop-host';
+
+// In a packaged build there is no global `moxxy` (and a GUI launch has no
+// shell PATH / system `node`). Point the CLI resolver at a self-contained,
+// pinned CLI run via Electron's own Node (ELECTRON_RUN_AS_NODE), preferring a
+// version the user updated from within the app over the one bundled with this
+// release. Respects an explicit MOXXY_CLI_ENTRY override (dev / power users).
+// The in-app "Update CLI" action re-points the same env var via the shared
+// preferredCliEntry() helper after installing into writable userData.
+if (app.isPackaged && !process.env.MOXXY_CLI_ENTRY) {
+  const entry = preferredCliEntry(app.getPath('userData'), process.resourcesPath);
+  if (entry) process.env.MOXXY_CLI_ENTRY = entry;
+}
 import { ipcMain, Tray, Menu, nativeImage, globalShortcut, session, shell } from 'electron';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -183,6 +172,67 @@ async function createWindow(): Promise<void> {
   };
   bindMainWindowMinimize(mainWindow, focusOpts);
 
+  // Focus mode floats a tiny always-on-top widget over your desktop.
+  // On macOS, native fullscreen puts the main window in its own Space;
+  // spawning the floating widget there never surfaces the bar and instead
+  // wedges the app — the main window's controls vanish and it won't close
+  // (needs a force-quit). So focus mode is unavailable while the main
+  // window is fullscreen: the menu items grey out and every handler
+  // (including the global shortcut, which has no disabled state) no-ops.
+  const focusModeAvailable = (): boolean =>
+    !(
+      process.platform === 'darwin' &&
+      !!mainWindow &&
+      !mainWindow.isDestroyed() &&
+      mainWindow.isFullScreen()
+    );
+
+  const openMainAndCloseFocus = (): void => {
+    closeFocusWindow();
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+    // macOS: ensure the app is foregrounded even if the window
+    // was hidden behind another Space.
+    if (process.platform === 'darwin') app.focus({ steal: true });
+  };
+
+  const requestFocusToggle = (): void => {
+    if (!focusModeAvailable()) return;
+    void toggleFocusWindow(focusOpts);
+  };
+
+  // (Re)build the tray context menu + application menu, greying out the
+  // focus-mode entries whenever focus mode isn't currently available.
+  const applyMenus = (): void => {
+    const focusEnabled = focusModeAvailable();
+    if (trayInstance) {
+      trayInstance.setContextMenu(
+        Menu.buildFromTemplate([
+          // Heading row — disabled item that just labels the menu so
+          // the user knows which app this tray belongs to. macOS dims
+          // disabled items so it reads as a header.
+          { label: 'MoxxyAI Workspaces', enabled: false },
+          { type: 'separator' },
+          { label: 'Open main window', click: openMainAndCloseFocus },
+          { label: 'Toggle focus mode', enabled: focusEnabled, click: requestFocusToggle },
+          { type: 'separator' },
+          { role: 'quit' },
+        ]),
+      );
+    }
+    installApplicationMenu(requestFocusToggle, openMainAndCloseFocus, focusEnabled);
+  };
+
+  // Entering fullscreen drops any open widget and disables the toggles;
+  // leaving re-enables them.
+  mainWindow.on('enter-full-screen', () => {
+    closeFocusWindow();
+    applyMenus();
+  });
+  mainWindow.on('leave-full-screen', applyMenus);
+
   // Tray menu — toggle the widget, restore the main window, quit.
   if (!trayInstance) {
     try {
@@ -225,29 +275,10 @@ async function createWindow(): Promise<void> {
       // failures + missing PNGs both hit this path).
       if (raw.isEmpty()) trayInstance.setTitle('moxxy');
       trayInstance.setToolTip('MoxxyAI Workspaces');
-      const openMainAndCloseFocus = (): void => {
-        closeFocusWindow();
-        if (!mainWindow || mainWindow.isDestroyed()) return;
-        if (mainWindow.isMinimized()) mainWindow.restore();
-        mainWindow.show();
-        mainWindow.focus();
-        // macOS: ensure the app is foregrounded even if the window
-        // was hidden behind another Space.
-        if (process.platform === 'darwin') app.focus({ steal: true });
-      };
-      trayInstance.setContextMenu(
-        Menu.buildFromTemplate([
-          // Heading row — disabled item that just labels the menu so
-          // the user knows which app this tray belongs to. macOS dims
-          // disabled items so it reads as a header.
-          { label: 'MoxxyAI Workspaces', enabled: false },
-          { type: 'separator' },
-          { label: 'Open main window', click: openMainAndCloseFocus },
-          { label: 'Toggle focus mode', click: () => void toggleFocusWindow(focusOpts) },
-          { type: 'separator' },
-          { role: 'quit' },
-        ]),
-      );
+      // The context menu is built by applyMenus() below (and rebuilt on
+      // fullscreen changes) so the focus-mode item can grey out when the
+      // main window is fullscreen.
+      //
       // We intentionally do NOT bind a left-click → toggle handler
       // here. A bare tray click should just open the menu (the OS
       // default). Focus mode is summoned explicitly via the menu's
@@ -261,6 +292,10 @@ async function createWindow(): Promise<void> {
       console.error('[moxxy] tray init failed:', err);
     }
   }
+
+  // Install the tray + application menus now. Focus mode is enabled
+  // unless the window already launched into fullscreen.
+  applyMenus();
 
   ipcMain.removeHandler('focus.close');
   ipcMain.handle('focus.close', () => {
@@ -280,25 +315,13 @@ async function createWindow(): Promise<void> {
     resizeFocusWindow(width, height);
   });
 
-  // App menu — "View → Focus Mode" with a keyboard shortcut.
-  installApplicationMenu(
-    () => void toggleFocusWindow(focusOpts),
-    () => {
-      closeFocusWindow();
-      if (!mainWindow || mainWindow.isDestroyed()) return;
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.show();
-      mainWindow.focus();
-      if (process.platform === 'darwin') app.focus({ steal: true });
-    },
-  );
-
   // System-wide shortcut so the user can summon the widget even when
   // moxxy isn't the focused app. Cmd+Shift+M on mac / Ctrl+Shift+M
   // elsewhere — the same chord the menu shows.
   try {
     globalShortcut.unregister('CommandOrControl+Shift+M');
     globalShortcut.register('CommandOrControl+Shift+M', () => {
+      if (!focusModeAvailable()) return;
       void toggleFocusWindow(focusOpts).then(() => {
         if (!mainWindow?.isVisible()) void showFocusWindow(focusOpts);
       });
@@ -311,6 +334,7 @@ async function createWindow(): Promise<void> {
 function installApplicationMenu(
   toggleFocus: () => void,
   openMain: () => void,
+  focusEnabled: boolean,
 ): void {
   const isMac = process.platform === 'darwin';
   const template: Electron.MenuItemConstructorOptions[] = [
@@ -358,6 +382,7 @@ function installApplicationMenu(
         {
           label: 'Toggle Focus Mode',
           accelerator: 'CommandOrControl+Shift+M',
+          enabled: focusEnabled,
           click: toggleFocus,
         },
         { type: 'separator' },

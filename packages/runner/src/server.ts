@@ -135,7 +135,7 @@ export class RunnerServer {
     peer.handle(RunnerMethod.ModeSetActive, (raw) => this.handleModeSetActive(raw));
     peer.handle(RunnerMethod.ProviderSetActive, (raw) => this.handleProviderSetActive(raw));
     peer.handle(RunnerMethod.PermissionAddAllow, (raw) => this.handlePermissionAddAllow(raw));
-    peer.handle(RunnerMethod.CommandRun, (raw) => this.handleCommandRun(client, raw));
+    peer.handle(RunnerMethod.CommandRun, (raw) => this.handleCommandRun(raw));
     peer.handle(RunnerMethod.Transcribe, (raw) => this.handleTranscribe(raw));
     peer.handle(RunnerMethod.McpListServers, () => this.handleMcpListServers());
     peer.handle(RunnerMethod.McpEnableAndAttach, (raw) =>
@@ -255,11 +255,7 @@ export class RunnerServer {
     const { name, config } = providerSetActiveParamsSchema.parse(raw);
     // Mirror the in-process picker: resolve credentials (the CLI stashes a
     // resolver on the session at boot), drop any cached instance, re-activate.
-    const resolver = (
-      this.session as unknown as {
-        credentialResolver?: (n: string) => Promise<Record<string, unknown>>;
-      }
-    ).credentialResolver;
+    const resolver = this.session.credentialResolver;
     const cfg = config ?? (resolver ? await resolver(name) : {});
     const def = this.session.providers.list().find((p) => p.name === name);
     if (def) this.session.providers.replace(def);
@@ -274,14 +270,10 @@ export class RunnerServer {
     return {};
   }
 
-  private async handleCommandRun(
-    client: ConnectedClient,
-    raw: unknown,
-  ): Promise<CommandRunResult> {
+  private async handleCommandRun(raw: unknown): Promise<CommandRunResult> {
     const { name, args, channel } = commandRunParamsSchema.parse(raw);
     const cmd = this.session.commands.get(name);
     if (!cmd) return { kind: 'error', message: `unknown command: /${name}` };
-    void client;
     const result = await cmd.handler({
       channel,
       sessionId: this.session.id,
@@ -310,9 +302,9 @@ export class RunnerServer {
     const candidates = this.transcribeCandidates();
     if (candidates.length === 0) throw new Error('no active transcriber on the runner');
     let lastErr: unknown = new Error('no active transcriber on the runner');
-    for (const def of candidates) {
+    for (const name of candidates) {
       try {
-        const transcriber = this.session.transcribers.setActive(def.name);
+        const transcriber = this.session.transcribers.setActive(name);
         const result = await transcriber.transcribe(audio, opts);
         // Surface the change so remote clients observe activeTranscriber
         // tracking the one that actually worked.
@@ -329,15 +321,11 @@ export class RunnerServer {
    *  - First the active one (if any) — respects an explicit host /
    *    user choice.
    *  - Then every other registered transcriber. */
-  private transcribeCandidates(): ReadonlyArray<{ readonly name: string }> {
+  private transcribeCandidates(): ReadonlyArray<string> {
     const activeName = this.session.transcribers.getActiveName();
-    const all = this.session.transcribers.list();
-    if (!activeName) return all.map((d) => ({ name: d.name }));
-    const head = all.find((d) => d.name === activeName);
-    const tail = all.filter((d) => d.name !== activeName);
-    return head
-      ? [{ name: head.name }, ...tail.map((d) => ({ name: d.name }))]
-      : tail.map((d) => ({ name: d.name }));
+    const names = this.session.transcribers.list().map((d) => d.name);
+    if (!activeName || !names.includes(activeName)) return names;
+    return [activeName, ...names.filter((n) => n !== activeName)];
   }
 
   // --- MCP (delegates to session.mcpAdmin if the plugin is loaded) ----------

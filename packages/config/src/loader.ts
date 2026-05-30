@@ -32,6 +32,8 @@ const USER_CONFIG_NAMES = [
   'config.mjs',
   'config.cjs',
 ];
+// Cap upward filesystem traversal when searching for a project config.
+const MAX_CONFIG_SEARCH_DEPTH = 12;
 
 export async function loadConfig(opts: LoadConfigOptions): Promise<LoadedConfig> {
   const sources: Array<{ scope: 'project' | 'user' | 'explicit'; path: string }> = [];
@@ -98,11 +100,15 @@ async function loadOne(filePath: string): Promise<MoxxyConfig> {
 
 let cachedJiti: ((id: string) => unknown) | null = null;
 
+type JitiFactory = (cwd: string, opts?: unknown) => (id: string) => unknown;
+
 async function getJiti(cwd: string): Promise<((id: string) => unknown) | null> {
   if (cachedJiti) return cachedJiti;
   try {
     const mod = await import('jiti');
-    const factory = (mod as { createJiti?: (cwd: string, opts?: unknown) => (id: string) => unknown; default?: (cwd: string, opts?: unknown) => (id: string) => unknown }).createJiti ?? (mod as { default?: (cwd: string, opts?: unknown) => (id: string) => unknown }).default;
+    const factory =
+      (mod as { createJiti?: JitiFactory; default?: JitiFactory }).createJiti ??
+      (mod as { default?: JitiFactory }).default;
     if (!factory) return null;
     cachedJiti = factory(cwd, { interopDefault: true });
     return cachedJiti;
@@ -121,7 +127,7 @@ function extractDefault(mod: unknown): unknown {
 
 async function findUpward(startDir: string, names: ReadonlyArray<string>): Promise<string | null> {
   let cursor = path.resolve(startDir);
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < MAX_CONFIG_SEARCH_DEPTH; i++) {
     const found = await findFile(cursor, names);
     if (found) return found;
     const parent = path.dirname(cursor);

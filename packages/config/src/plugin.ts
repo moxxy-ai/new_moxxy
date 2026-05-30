@@ -28,6 +28,9 @@ const scopeSchemaOptional = scopeSchema.optional().default('project');
 
 const USER_YAML = (): string => moxxyPath('config.yaml');
 
+// Cap upward filesystem traversal when searching for a project config.
+const MAX_CONFIG_SEARCH_DEPTH = 12;
+
 async function findScopePath(scope: Scope, cwd: string): Promise<string | null> {
   if (scope === 'user') {
     const yaml = USER_YAML();
@@ -40,7 +43,7 @@ async function findScopePath(scope: Scope, cwd: string): Promise<string | null> 
   }
   // Project scope: walk upward looking for moxxy.config.yaml first, .yml second.
   let cursor = path.resolve(cwd);
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < MAX_CONFIG_SEARCH_DEPTH; i++) {
     for (const name of ['moxxy.config.yaml', 'moxxy.config.yml']) {
       const candidate = path.join(cursor, name);
       try {
@@ -70,10 +73,7 @@ async function readDoc(filePath: string): Promise<{ doc: import('yaml').Document
 
 function parseDotPath(p: string): Array<string | number> {
   if (!p) return [];
-  return p.split('.').map((seg) => {
-    const asNum = /^\d+$/.test(seg) ? Number(seg) : seg;
-    return asNum as string | number;
-  });
+  return p.split('.').map((seg) => (/^\d+$/.test(seg) ? Number(seg) : seg));
 }
 
 function parseValue(raw: string): unknown {

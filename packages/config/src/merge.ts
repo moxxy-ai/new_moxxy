@@ -1,7 +1,7 @@
 import type { MoxxyConfig } from './schema.js';
 
 /**
- * Deep-merge two configs. Later wins on scalars; arrays are concatenated;
+ * Deep-merge any number of configs in order. Later wins on scalars; arrays are concatenated;
  * objects are merged key-by-key.
  *
  * Precedence (highest → lowest): CLI flags → project config → user config → defaults.

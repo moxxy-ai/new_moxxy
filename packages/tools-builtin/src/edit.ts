@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import { MoxxyError, defineTool, writeFileAtomic, z } from '@moxxy/sdk';
-import { resolveSafe } from './util.js';
+import { resolvePath } from './util.js';
 
 export const editTool = defineTool({
   name: 'Edit',
@@ -25,7 +25,7 @@ export const editTool = defineTool({
     },
   },
   async handler({ file_path, old_string, new_string, replace_all }, ctx) {
-    const resolved = resolveSafe(ctx.cwd, file_path);
+    const resolved = resolvePath(ctx.cwd, file_path);
     // Bail before reading/writing if the turn was already aborted: a partial
     // write here would corrupt the user's file for no benefit.
     if (ctx.signal.aborted) {
@@ -33,8 +33,14 @@ export const editTool = defineTool({
     }
     const original = await fs.readFile(resolved, 'utf8');
     let updated: string;
+    // Number of replace_all occurrences, derived from the same split that
+    // produces `updated` so large files are only split once. -1 when the
+    // single-replacement branch ran (occurrence count is always 1 there).
+    let replaceAllOccurrences = -1;
     if (replace_all) {
-      updated = original.split(old_string).join(new_string);
+      const parts = original.split(old_string);
+      updated = parts.join(new_string);
+      replaceAllOccurrences = parts.length - 1;
       if (updated === original)
         throw new MoxxyError({ code: 'TOOL_ERROR', message: `old_string not found in ${resolved}` });
     } else {
@@ -53,9 +59,7 @@ export const editTool = defineTool({
     // Atomic whole-file write (tmp + rename) so a crash/abort mid-write can't
     // leave a truncated file.
     await writeFileAtomic(resolved, updated);
-    const occurrences = replace_all
-      ? (original.split(old_string).length - 1)
-      : 1;
+    const occurrences = replace_all ? replaceAllOccurrences : 1;
     return `edited ${resolved}: ${occurrences} replacement${occurrences === 1 ? '' : 's'}`;
   },
 });

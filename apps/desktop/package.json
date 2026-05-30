@@ -86,6 +86,10 @@
       "category": "public.app-category.productivity",
       "target": "dmg",
       "icon": "public/logo.png",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
       "extendInfo": {
         "CFBundleName": "MoxxyAI Workspaces",
         "CFBundleDisplayName": "MoxxyAI Workspaces"

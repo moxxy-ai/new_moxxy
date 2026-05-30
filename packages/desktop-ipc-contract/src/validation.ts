@@ -52,6 +52,10 @@ const optionalWorkspace = z.string().min(1).max(256).optional();
 const MAX_AUDIO_BASE64 = 40_000_000;
 
 export const ipcInputSchemas: Partial<Record<IpcCommandName, z.ZodTypeAny>> = {
+  // No-arg, but spawns a child process (npm install) — pin the payload to
+  // "nothing" so a hostile renderer can't smuggle args across.
+  'app.cliInfo': z.undefined(),
+  'app.updateCli': z.undefined(),
   'onboarding.openExternal': z.object({ url: httpUrl }),
   'onboarding.saveProviderKey': z.object({
     provider: providerName,

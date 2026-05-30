@@ -405,8 +405,7 @@ export class RemoteSession implements ClientSession {
 
   private makeTranscribersView(): TranscribersClientView {
     // Transcription is a server-side capability; a thin client routes audio
-    // through runTurn attachments instead. Report "none" so voice degrades
-    // gracefully rather than pretending to have a local backend.
+    // through runTurn attachments instead.
     // When the runner has an active transcriber, expose a proxy whose
     // transcribe() ships the audio to the runner over the `transcribe` RPC.
     // Channel code (`tryGetActive()?.transcribe(bytes)`) is unchanged - audio
@@ -733,14 +732,14 @@ async function unlinkSocket(socketPath: string): Promise<void> {
 }
 
 /** Connect, retrying with linear backoff to ride over a brief runner hiccup. */
-async function connectWithRetry(socketPath: string, attempts: number): Promise<Transport> {
+async function connectWithRetry(socketPath: string, retries: number): Promise<Transport> {
   let lastErr: unknown;
-  for (let i = 0; i <= attempts; i++) {
+  for (let i = 0; i <= retries; i++) {
     try {
       return await connectUnixSocket(socketPath);
     } catch (err) {
       lastErr = err;
-      if (i < attempts) await new Promise((r) => setTimeout(r, 100 * (i + 1)));
+      if (i < retries) await new Promise((r) => setTimeout(r, 100 * (i + 1)));
     }
   }
   throw lastErr;

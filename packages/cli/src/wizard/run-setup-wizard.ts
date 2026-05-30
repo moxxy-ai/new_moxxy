@@ -4,7 +4,6 @@ import {
   intro,
   isCancel,
   log,
-  multiselect,
   note,
   outro,
   password,
@@ -87,8 +86,8 @@ export async function runSetupWizard(opts: RunSetupWizardOptions): Promise<strin
 
   note(
     [
-      `${colors.bold('1.')} Pick one or more LLM providers`,
-      `${colors.bold('2.')} Paste each API key (stored encrypted in the vault)`,
+      `${colors.bold('1.')} Pick an LLM provider`,
+      `${colors.bold('2.')} Paste your API key (stored encrypted in the vault)`,
       `${colors.bold('3.')} Choose a default model, mode, and memory embedder`,
       `${colors.bold('4.')} Review and write ${colors.bold('moxxy.config.yaml')} into the project`,
     ].join('\n'),
@@ -109,89 +108,74 @@ export async function runSetupWizard(opts: RunSetupWizardOptions): Promise<strin
     process.exit(1);
   }
 
-  const chosenProvidersRaw = await multiselect({
-    message: 'Step 1 — Which provider(s) do you want to use?',
+  const providerRaw = await select({
+    message: 'Step 1 — Which provider do you want to use?',
     options: providerOptions,
-    required: true,
-    initialValues: [providerOptions[0]!.value],
+    initialValue: providerOptions[0]!.value,
   });
-  const chosenProviders = guard(chosenProvidersRaw) as string[];
+  const provider = guard(providerRaw) as string;
 
-  // Step 2 — credentials per provider. API-key providers prompt for a key
-  // (with optional live validation); OAuth providers run their full sign-in
-  // flow inline.
+  // Step 2 — credentials. An API-key provider prompts for a key (with optional
+  // live validation); an OAuth provider runs its full sign-in flow inline.
   const apiKeys: Record<string, string> = {};
   const oauthCompleted: string[] = [];
-  for (const providerId of chosenProviders) {
-    if (authKind(opts.authKinds, providerId) === 'oauth') {
-      if (!opts.controller.loginOAuth) {
-        cancel(
-          `Provider ${providerId} requires OAuth but the wizard has no loginOAuth handler wired up.`,
-        );
-        process.exit(1);
-      }
-      await collectOAuth(providerId, opts.controller.loginOAuth);
-      oauthCompleted.push(providerId);
-    } else {
-      apiKeys[providerId] = await collectKey(providerId, opts.controller);
+  if (authKind(opts.authKinds, provider) === 'oauth') {
+    if (!opts.controller.loginOAuth) {
+      cancel(
+        `Provider ${provider} requires OAuth but the wizard has no loginOAuth handler wired up.`,
+      );
+      process.exit(1);
     }
+    await collectOAuth(provider, opts.controller.loginOAuth);
+    oauthCompleted.push(provider);
+  } else {
+    apiKeys[provider] = await collectKey(provider, opts.controller);
   }
 
-  // Step 3 — primary (only if >1)
-  let primary = chosenProviders[0]!;
-  if (chosenProviders.length > 1) {
-    const primaryRaw = await select({
-      message: 'Step 3 — Which provider should be primary?',
-      options: chosenProviders.map((id) => ({ value: id, label: id })),
-      initialValue: primary,
-    });
-    primary = guard(primaryRaw) as string;
-  }
-
-  // Step 4 — model for primary
-  const modelChoices = opts.models[primary] ?? [];
+  // Step 3 — model
+  const modelChoices = opts.models[provider] ?? [];
   let model: string | null = null;
   if (modelChoices.length > 0) {
     const modelRaw = await select({
-      message: `Step 4 — Default model for ${colors.bold(primary)}`,
+      message: `Step 3 — Default model for ${colors.bold(provider)}`,
       options: toOptions(modelChoices),
       initialValue: modelChoices[0]!.id,
     });
     model = guard(modelRaw) as string;
   }
 
-  // Step 5 — mode
+  // Step 4 — mode
   const modeRaw = await select({
-    message: 'Step 5 — Mode',
+    message: 'Step 4 — Mode',
     options: toOptions(opts.modes),
     initialValue: opts.modes[0]?.id ?? 'tool-use',
   });
   const mode = guard(modeRaw) as string;
 
-  // Step 6 — embedder
+  // Step 5 — embedder
   const embedderRaw = await select({
-    message: 'Step 6 — Memory embedder',
+    message: 'Step 5 — Memory embedder',
     options: toOptions(opts.embedders),
     initialValue: opts.embedders[0]?.id ?? 'tfidf',
   });
   const embedder = guard(embedderRaw) as string;
 
-  // Step 7 — plugin-security opt-in. Default off — declared
+  // Step 6 — plugin-security opt-in. Default off — declared
   // capabilities on individual tools remain advisory unless the user
   // turns this on. See `@moxxy/plugin-security` for what enabling buys.
   const securityRaw = await confirm({
     message:
-      'Step 7 — Enable plugin-security? ' +
+      'Step 6 — Enable plugin-security? ' +
       colors.dim('(per-tool capability isolation; off by default)'),
     initialValue: false,
   });
   const securityEnabled = guard(securityRaw) as boolean;
 
   const selections: Selections = {
-    providers: chosenProviders,
+    providers: [provider],
     apiKeys,
     oauthCompleted,
-    primary,
+    primary: provider,
     model,
     mode,
     embedder,
@@ -199,7 +183,7 @@ export async function runSetupWizard(opts: RunSetupWizardOptions): Promise<strin
     ...(securityEnabled ? { security: { enabled: true, isolator: 'inproc' } } : {}),
   };
 
-  // Step 8 — review
+  // Step 7 — review
   const yaml = renderYaml(selections);
   note(yaml, 'Step 7 — Review (moxxy.config.yaml)');
 
@@ -210,15 +194,14 @@ export async function runSetupWizard(opts: RunSetupWizardOptions): Promise<strin
   const confirmed = guard(confirmedRaw) as boolean;
   if (!confirmed) bail();
 
-  // Step 8 — persist. OAuth tokens were stored inline in step 2 (the OAuth
-  // flow is interactive and can't be reduced to a fire-and-forget write here),
-  // so this stage only needs to persist API keys and the rendered YAML.
+  // Persist. An OAuth provider's tokens were stored inline in step 2 (the
+  // OAuth flow is interactive and can't be reduced to a fire-and-forget write
+  // here), so this stage only needs to persist the API key and rendered YAML.
   const persist = spinner();
   persist.start('Writing config and storing keys');
-  for (const providerId of chosenProviders) {
-    if (authKind(opts.authKinds, providerId) === 'oauth') continue;
-    const key = apiKeys[providerId];
-    if (key) await opts.controller.saveApiKey(providerId, key);
+  if (authKind(opts.authKinds, provider) !== 'oauth') {
+    const key = apiKeys[provider];
+    if (key) await opts.controller.saveApiKey(provider, key);
   }
   const configPath = await opts.controller.writeConfig(yaml);
   persist.stop(`Wrote ${colors.bold(configPath)}`);

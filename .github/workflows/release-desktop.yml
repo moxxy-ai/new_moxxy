@@ -50,10 +50,6 @@ jobs:
             artifact: exe
           - os: ubuntu-latest
             artifact: deb-appimage
-    env:
-      # Unsigned: don't let electron-builder hunt for a signing identity
-      # (which would fail the build with no certs configured).
-      CSC_IDENTITY_AUTO_DISCOVERY: false
     steps:
       - uses: actions/checkout@v4
 
@@ -107,16 +103,73 @@ jobs:
       # run via Electron's Node). electron-builder ships resources/moxxy-cli
       # via extraResources.
       - name: Bundle moxxy CLI
+        # `shell: bash` so `rm -rf` works on the Windows runner too (its
+        # default shell is PowerShell, where `rm -rf` is invalid). Git Bash
+        # ships on GitHub's windows-latest image.
+        shell: bash
         run: |
           rm -rf apps/desktop/resources/moxxy-cli
           pnpm --filter @moxxy/cli --legacy deploy --prod apps/desktop/resources/moxxy-cli
 
+      # Developer ID signing + notarization turn on ONLY when the CSC_LINK
+      # secret exists; otherwise the build stays ad-hoc/unsigned (today's
+      # behaviour). See docs/desktop-code-signing.md. macOS only.
+      #   - no CSC_LINK  → CSC_IDENTITY_AUTO_DISCOVERY=false (electron-builder
+      #                    skips signing; after-pack.cjs ad-hoc signs).
+      #   - CSC_LINK set → discovery on; if notarization creds are present too,
+      #                    decode the API key to a file and enable notarize.
+      - name: Configure macOS signing
+        id: signing
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          APPLE_API_KEY_B64: ${{ secrets.APPLE_API_KEY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+        run: |
+          if [ -z "$CSC_LINK" ]; then
+            echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
+            echo "notarize=false" >> "$GITHUB_OUTPUT"
+            echo "No CSC_LINK secret — building unsigned (ad-hoc)."
+            exit 0
+          fi
+          echo "CSC_IDENTITY_AUTO_DISCOVERY=true" >> "$GITHUB_ENV"
+          if [ -n "$APPLE_API_KEY_B64" ]; then
+            KEY="$RUNNER_TEMP/AuthKey.p8"
+            printf '%s' "$APPLE_API_KEY_B64" | base64 --decode > "$KEY"
+            echo "APPLE_API_KEY=$KEY" >> "$GITHUB_ENV"
+            echo "notarize=true" >> "$GITHUB_OUTPUT"
+            echo "Signing + notarizing (App Store Connect API key)."
+          elif [ -n "$APPLE_ID" ]; then
+            echo "notarize=true" >> "$GITHUB_OUTPUT"
+            echo "Signing + notarizing (Apple ID)."
+          else
+            echo "notarize=false" >> "$GITHUB_OUTPUT"
+            echo "CSC_LINK set but no notarization creds — signing without notarizing."
+          fi
+
       # electron-builder reads the per-OS targets from apps/desktop's
-      # package.json#build and emits to apps/desktop/release/.
+      # package.json#build and emits to apps/desktop/release/. Signing /
+      # notarization env is consumed only when the secrets are present
+      # (empty secrets are harmless no-ops). `-c.mac.notarize=true` is added
+      # only when notarization creds were configured above.
       - name: Package installers
-        run: pnpm --filter @moxxy/desktop exec electron-builder --publish never
+        shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          EXTRA=""
+          if [ "${{ steps.signing.outputs.notarize }}" = "true" ]; then
+            EXTRA="-c.mac.notarize=true"
+          fi
+          pnpm --filter @moxxy/desktop exec electron-builder --publish never $EXTRA
 
       - name: Upload installers
         uses: actions/upload-artifact@v4

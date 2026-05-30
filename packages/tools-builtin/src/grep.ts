@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { MoxxyError, defineTool, z } from '@moxxy/sdk';
-import { clampString, globToRegExp, resolveSafe } from './util.js';
+import { clampString, globToRegExp, IGNORED_DIR_NAMES, resolvePath } from './util.js';
 
 export const grepTool = defineTool({
   name: 'Grep',
@@ -27,7 +27,7 @@ export const grepTool = defineTool({
     },
   },
   async handler({ pattern, cwd, glob, caseInsensitive, maxMatches }, ctx) {
-    const baseDir = resolveSafe(ctx.cwd, cwd ?? '.');
+    const baseDir = resolvePath(ctx.cwd, cwd ?? '.');
     let re: RegExp;
     try {
       re = new RegExp(pattern, caseInsensitive ? 'i' : '');
@@ -64,7 +64,7 @@ async function walk(
   }
   for (const entry of entries) {
     if (signal.aborted || matches.length >= max) return;
-    if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'dist' || entry.name === '.turbo') continue;
+    if (IGNORED_DIR_NAMES.has(entry.name)) continue;
     const full = path.join(cursor, entry.name);
     if (entry.isDirectory()) {
       await walk(root, full, re, fileRe, matches, max, signal);

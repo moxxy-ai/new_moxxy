@@ -63,7 +63,7 @@ export class EmbeddingIndex {
   }
 
   /**
-   * For each `(name, body)` pair, return either the cached vector (if the body
+   * For a `(name, body)` pair, return either the cached vector (if the body
    * hash matches) or `null` (miss). Callers re-embed the misses and call
    * `set()` with the fresh vectors.
    */

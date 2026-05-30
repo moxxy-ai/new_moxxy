@@ -2,6 +2,8 @@
 // @moxxy/core dependency). Mirrors packages/core/src/skills/parse.ts.
 
 const FRONTMATTER_FENCE = '---';
+const OPENING_FENCE_LF = FRONTMATTER_FENCE + '\n';
+const OPENING_FENCE_CRLF = FRONTMATTER_FENCE + '\r\n';
 
 export interface ParsedFile {
   frontmatter: Record<string, unknown>;
@@ -9,10 +11,10 @@ export interface ParsedFile {
 }
 
 export function parseMdFile(content: string): ParsedFile {
-  if (!content.startsWith(FRONTMATTER_FENCE + '\n') && !content.startsWith(FRONTMATTER_FENCE + '\r\n')) {
+  if (!content.startsWith(OPENING_FENCE_LF) && !content.startsWith(OPENING_FENCE_CRLF)) {
     return { frontmatter: {}, body: content };
   }
-  const fenceLen = content.startsWith(FRONTMATTER_FENCE + '\r\n') ? 5 : 4;
+  const fenceLen = content.startsWith(OPENING_FENCE_CRLF) ? OPENING_FENCE_CRLF.length : OPENING_FENCE_LF.length;
   const rest = content.slice(fenceLen);
   const m = /\r?\n---(?:\r?\n|$)/.exec(rest);
   if (!m) return { frontmatter: {}, body: content };
