@@ -177,6 +177,7 @@ export {
   type ProjectMessagesOptions,
   type ProjectedMessages,
   type StuckLoopDetector,
+  type StuckSignal,
 } from './mode-helpers.js';
 export { dispatchToolCall } from './tool-dispatch.js';
 

@@ -180,8 +180,12 @@ async function* emitRequestsAndDetectStuck(
       name: t.name,
       input: t.input,
     });
-    const repeats = detector.record(t.name, t.input);
-    if (repeats >= detector.repeatThreshold) {
+    const sig = detector.record(t.name, t.input);
+    if (sig.stuck) {
+      const how =
+        sig.kind === 'near'
+          ? 'against the same target (only volatile args like maxBytes varied)'
+          : 'with identical input';
       yield await ctx.emit({
         type: 'error',
         sessionId: ctx.sessionId,
@@ -190,8 +194,8 @@ async function* emitRequestsAndDetectStuck(
         kind: 'fatal',
         message:
           `tool-use loop aborted — detected stuck pattern: tool "${t.name}" called ` +
-          `${repeats} times with identical input in the last ${detector.windowSize} ` +
-          `tool calls. The model is likely looping on the same call; reset or rephrase.`,
+          `${sig.count} times ${how}. The model is likely looping on the same call; ` +
+          `reset or rephrase.`,
       });
       return true;
     }
