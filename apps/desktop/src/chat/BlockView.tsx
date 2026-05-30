@@ -498,7 +498,10 @@ function SubagentView({
     : running
       ? 'var(--color-primary)'
       : 'var(--color-green)';
-  const tint = block.error ? '#fee2e2' : running ? 'var(--color-primary-soft)' : '#ecfdf5';
+  // Subagents get a distinct violet tile so they read as a different KIND of
+  // actor than tool calls (which are status-tinted green/pink/red).
+  const tileBg = 'rgba(139, 92, 246, 0.14)';
+  const tileFg = '#7c3aed';
   const statusText = running ? 'running' : block.error ? 'failed' : 'done';
   const elapsed =
     block.completedAtMs !== null ? Math.round((block.completedAtMs - block.startedAtMs) / 100) / 10 : null;
@@ -514,8 +517,8 @@ function SubagentView({
           height: 34,
           flexShrink: 0,
           borderRadius: 10,
-          background: tint,
-          color: accent,
+          background: tileBg,
+          color: tileFg,
           display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -590,6 +593,51 @@ function SubagentView({
               {block.stopReason ? ` · ${block.stopReason}` : ''}
               {elapsed !== null ? ` · ${elapsed}s` : ''}
             </div>
+            {block.toolCalls.length > 0 && (
+              <ul
+                className="mono"
+                style={{
+                  listStyle: 'none',
+                  margin: 0,
+                  padding: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 3,
+                }}
+              >
+                {block.toolCalls.map((tc, i) => {
+                  const sum = oneLine(summarizeArgs(tc.input));
+                  return (
+                    <li
+                      key={i}
+                      style={{
+                        display: 'flex',
+                        gap: 7,
+                        alignItems: 'baseline',
+                        padding: '4px 8px',
+                        background: 'rgba(139, 92, 246, 0.07)',
+                        borderRadius: 7,
+                        fontSize: 11,
+                      }}
+                    >
+                      <span style={{ color: tileFg, fontWeight: 600, flexShrink: 0 }}>{tc.name}</span>
+                      {sum && (
+                        <span
+                          style={{
+                            color: 'var(--color-text-dim)',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                        >
+                          {sum}
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
             {block.error ? (
               <pre style={{ ...preStyle, color: 'var(--color-red)' }}>{block.error}</pre>
             ) : block.finalPreview ? (

@@ -241,6 +241,7 @@ export function pairToolEvents(
           startedAtMs: new Date(e.ts).getTime(),
           completedAtMs: null,
           toolCallCount: 0,
+          toolCalls: [],
           stopReason: null,
           finalPreview: null,
           error: null,
@@ -256,6 +257,7 @@ export function pairToolEvents(
       if (!block) continue;
       if (e.subtype === 'subagent_tool_call') {
         block.toolCallCount += 1;
+        block.toolCalls.push({ name: String(payload.name ?? 'tool'), input: payload.input });
         continue;
       }
       if (e.subtype === 'subagent_completed') {

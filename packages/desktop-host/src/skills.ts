@@ -12,6 +12,21 @@ import path from 'node:path';
 export interface SkillFile {
   name: string;
   editable: boolean;
+  description?: string;
+}
+
+/** Pull the frontmatter `description` (cheap regex — no YAML dep) so the
+ *  Skills gallery can show what each skill is for without opening it. */
+async function readDescription(file: string): Promise<string | undefined> {
+  try {
+    const raw = await readFile(file, 'utf8');
+    const fm = /^---\s*\n([\s\S]*?)\n---/.exec(raw);
+    if (!fm) return undefined;
+    const m = /^description:\s*(.+)$/m.exec(fm[1]!);
+    return m ? m[1]!.trim().replace(/^["']|["']$/g, '') : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Resolved at call time so tests can mock `os.homedir()`. */
@@ -23,10 +38,13 @@ export async function listSkills(): Promise<SkillFile[]> {
   ensureDir();
   try {
     const entries = await readdir(skillsDir());
-    return entries
-      .filter((name) => name.endsWith('.md'))
-      .sort()
-      .map((name) => ({ name, editable: true }));
+    const names = entries.filter((name) => name.endsWith('.md')).sort();
+    return await Promise.all(
+      names.map(async (name) => {
+        const description = await readDescription(path.join(skillsDir(), name));
+        return { name, editable: true, ...(description ? { description } : {}) };
+      }),
+    );
   } catch {
     return [];
   }

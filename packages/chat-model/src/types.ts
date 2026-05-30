@@ -30,6 +30,9 @@ export interface SubagentBlock {
   /** ms timestamp of completion, or null while running. */
   completedAtMs: number | null;
   toolCallCount: number;
+  /** The agent's tool calls in order (name + input), accumulated live from
+   *  `subagent_tool_call` events — lets a surface show what it's doing. */
+  readonly toolCalls: Array<{ readonly name: string; readonly input: unknown }>;
   /** stop reason for completed agents; populated on subagent_completed. */
   stopReason: string | null;
   /** First line of the agent's final assistant message — used as a one-line preview. */

@@ -83,7 +83,7 @@ export function SkillsView({
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: '240px 1fr',
+        gridTemplateColumns: '300px 1fr',
         gap: 18,
         alignItems: 'start',
       }}
@@ -129,47 +129,64 @@ export function SkillsView({
           Generate with AI
         </button>
         <hr style={{ border: 'none', borderTop: '1px solid var(--color-card-border)', margin: '6px 0' }} />
-        <ul role="list" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <ul role="list" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
           {s.skills.length === 0 ? (
-            <li
-              style={{
-                padding: '8px 10px',
-                fontSize: 12,
-                color: 'var(--color-text-dim)',
-              }}
-            >
+            <li style={{ padding: '8px 10px', fontSize: 12, color: 'var(--color-text-dim)' }}>
               No skills yet — create one or generate with AI.
             </li>
           ) : (
-            s.skills.map((skill) => (
-              <li key={skill.name}>
-                <button
-                  type="button"
-                  className="row-button"
-                  data-active={active === skill.name}
-                  onClick={() => setActive(skill.name)}
-                  style={{
-                    width: '100%',
-                    textAlign: 'left',
-                    padding: '8px 10px',
-                    fontSize: 12.5,
-                    borderRadius: 8,
-                    fontFamily: 'var(--font-mono)',
-                    color:
-                      active === skill.name
-                        ? 'var(--color-text)'
-                        : 'var(--color-text-muted)',
-                    background:
-                      active === skill.name
-                        ? 'var(--color-primary-soft)'
-                        : 'transparent',
-                    fontWeight: active === skill.name ? 600 : 500,
-                  }}
-                >
-                  {skill.name}
-                </button>
-              </li>
-            ))
+            s.skills.map((skill) => {
+              const on = active === skill.name;
+              return (
+                <li key={skill.name}>
+                  <button
+                    type="button"
+                    data-active={on}
+                    onClick={() => setActive(skill.name)}
+                    style={{
+                      width: '100%',
+                      textAlign: 'left',
+                      padding: '10px 12px',
+                      borderRadius: 11,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 4,
+                      border: on ? '1px solid var(--color-primary)' : '1px solid var(--color-card-border)',
+                      background: on ? 'var(--color-primary-soft)' : '#fff',
+                    }}
+                  >
+                    <span
+                      className="mono"
+                      style={{
+                        fontSize: 12.5,
+                        fontWeight: 600,
+                        color: 'var(--color-text)',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {skill.name.replace(/\.md$/, '')}
+                    </span>
+                    {skill.description && (
+                      <span
+                        style={{
+                          fontSize: 11,
+                          lineHeight: 1.45,
+                          color: 'var(--color-text-dim)',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        {skill.description}
+                      </span>
+                    )}
+                  </button>
+                </li>
+              );
+            })
           )}
         </ul>
       </aside>
