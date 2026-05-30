@@ -24,11 +24,11 @@
   ],
   "homepage": "https://moxxy.ai",
   "bugs": {
-    "url": "https://github.com/moxxy-ai/new_moxxy/issues"
+    "url": "https://github.com/moxxy-ai/moxxy/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/moxxy-ai/new_moxxy.git",
+    "url": "git+https://github.com/moxxy-ai/moxxy.git",
     "directory": "packages/cli"
   },
   "author": "Michal Makowski <michal.makowski97@gmail.com>",
