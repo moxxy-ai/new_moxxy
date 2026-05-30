@@ -18,11 +18,10 @@ export interface DiscoveredSkill extends Skill {
 }
 
 export async function discoverSkills(opts: SkillLoadOptions = {}): Promise<ReadonlyArray<DiscoveredSkill>> {
-  const home = os.homedir();
   const sources: Array<{ dir: string; scope: SkillScope }> = [];
   if (opts.builtinDir) sources.push({ dir: opts.builtinDir, scope: 'builtin' });
   for (const dir of opts.pluginDirs ?? []) sources.push({ dir, scope: 'plugin' });
-  const userDir = opts.userDir ?? path.join(home, '.moxxy', 'skills');
+  const userDir = opts.userDir ?? defaultUserSkillsDir();
   sources.push({ dir: userDir, scope: 'user' });
   if (opts.projectDir) sources.push({ dir: opts.projectDir, scope: 'project' });
 

@@ -1,7 +1,7 @@
 import type { ModeDef } from '@moxxy/sdk';
 
 export class ModeRegistry {
-  private readonly strategies = new Map<string, ModeDef>();
+  private readonly modes = new Map<string, ModeDef>();
   private active: string | null = null;
   private readonly changeListeners = new Set<() => void>();
 
@@ -14,53 +14,53 @@ export class ModeRegistry {
   }
 
   /**
-   * Register a strategy. Throws on duplicate — use `replace()` for
+   * Register a mode. Throws on duplicate — use `replace()` for
    * overwrite. Auto-activates on first registration (modes need a default
    * for any session to work).
    */
-  register(strategy: ModeDef): void {
-    if (this.strategies.has(strategy.name)) {
-      throw new Error(`Mode already registered: ${strategy.name}`);
+  register(mode: ModeDef): void {
+    if (this.modes.has(mode.name)) {
+      throw new Error(`Mode already registered: ${mode.name}`);
     }
-    this.strategies.set(strategy.name, strategy);
-    if (!this.active) this.activate(strategy);
+    this.modes.set(mode.name, mode);
+    if (!this.active) this.activate(mode);
   }
 
-  replace(strategy: ModeDef): void {
-    this.strategies.set(strategy.name, strategy);
-    if (!this.active) this.activate(strategy);
+  replace(mode: ModeDef): void {
+    this.modes.set(mode.name, mode);
+    if (!this.active) this.activate(mode);
   }
 
   /**
-   * Remove a strategy. If it was active, the active slot is cleared —
+   * Remove a mode. If it was active, the active slot is cleared —
    * callers must `setActive()` explicitly rather than silently picking
-   * some arbitrary "next" strategy.
+   * some arbitrary "next" mode.
    */
   unregister(name: string): void {
-    this.strategies.delete(name);
+    this.modes.delete(name);
     if (this.active === name) this.active = null;
   }
 
   list(): ReadonlyArray<ModeDef> {
-    return [...this.strategies.values()];
+    return [...this.modes.values()];
   }
 
   setActive(name: string): void {
-    const strategy = this.strategies.get(name);
-    if (!strategy) throw new Error(`Mode not registered: ${name}`);
-    this.activate(strategy);
+    const mode = this.modes.get(name);
+    if (!mode) throw new Error(`Mode not registered: ${name}`);
+    this.activate(mode);
   }
 
   getActive(): ModeDef {
     if (!this.active) throw new Error('No active mode registered.');
-    const s = this.strategies.get(this.active);
-    if (!s) throw new Error(`Active mode missing: ${this.active}`);
-    return s;
+    const mode = this.modes.get(this.active);
+    if (!mode) throw new Error(`Active mode missing: ${this.active}`);
+    return mode;
   }
 
-  private activate(strategy: ModeDef): void {
-    if (this.active === strategy.name) return;
-    this.active = strategy.name;
+  private activate(mode: ModeDef): void {
+    if (this.active === mode.name) return;
+    this.active = mode.name;
     for (const fn of this.changeListeners) fn();
   }
 }

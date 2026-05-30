@@ -165,7 +165,7 @@ export class RequirementRegistry {
           : null;
       }
       case 'mode': {
-        const def = this.opts.modes.list().find((l) => l.name === name);
+        const def = this.opts.modes.list().find((m) => m.name === name);
         return def ? { kind, name, active: activeModeName(this.opts.modes) === name } : null;
       }
       case 'compactor': {
