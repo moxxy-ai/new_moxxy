@@ -24,6 +24,7 @@ import { api } from '@/lib/api';
 import { Icon } from '@/lib/Icon';
 import { Modal, ConfirmModal } from '@/lib/Modal';
 import { MarkdownBody } from '@/chat/MarkdownBody';
+import { TabHeader } from './TabHeader';
 import type { useSettings } from '@/lib/useSettings';
 import type { MoxxyEvent } from '@moxxy/sdk';
 
@@ -306,69 +307,54 @@ function SkillGallery({
     : skills;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Skills</h2>
-        <span
-          style={{
-            minWidth: 22,
-            textAlign: 'center',
-            padding: '1px 7px',
-            borderRadius: 999,
-            fontSize: 11,
-            fontWeight: 700,
-            color: 'var(--color-text-muted)',
-            background: 'rgba(148, 163, 184, 0.16)',
-          }}
-        >
-          {skills.length}
-        </span>
-        <span style={{ flex: 1 }} />
-        <button
-          type="button"
-          className="btn-chip"
-          onClick={onGenerate}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 7,
-            padding: '8px 13px',
-            fontSize: 13,
-            fontWeight: 600,
-            color: 'var(--color-text-muted)',
-            border: '1px solid var(--color-card-border)',
-            borderRadius: 10,
-            background: '#fff',
-          }}
-        >
-          <Icon name="spark" size={14} />
-          Generate with AI
-        </button>
-        <button
-          type="button"
-          className="btn-cta"
-          onClick={onCreate}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 7,
-            padding: '8px 14px',
-            fontSize: 13,
-            fontWeight: 600,
-            color: '#fff',
-            background: 'var(--grad-cta)',
-            borderRadius: 10,
-          }}
-        >
-          <Icon name="plus" size={14} />
-          New skill
-        </button>
-      </div>
-        <p style={{ margin: '4px 0 0', fontSize: 12.5, color: 'var(--color-text-dim)', lineHeight: 1.5 }}>
-          Reusable instructions the agent loads when your message matches a skill&apos;s triggers. Create
-          one, or generate it with AI.
-        </p>
-      </div>
+      <TabHeader
+        title="Skills"
+        count={skills.length}
+        description="Reusable instructions the agent loads when your message matches a skill's triggers. Create one, or generate it with AI."
+        actions={
+          <>
+            <button
+              type="button"
+              className="btn-chip"
+              onClick={onGenerate}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+                padding: '8px 13px',
+                fontSize: 13,
+                fontWeight: 600,
+                color: 'var(--color-text-muted)',
+                border: '1px solid var(--color-card-border)',
+                borderRadius: 10,
+                background: '#fff',
+              }}
+            >
+              <Icon name="spark" size={14} />
+              Generate with AI
+            </button>
+            <button
+              type="button"
+              className="btn-cta"
+              onClick={onCreate}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+                padding: '8px 14px',
+                fontSize: 13,
+                fontWeight: 600,
+                color: '#fff',
+                background: 'var(--grad-cta)',
+                borderRadius: 10,
+              }}
+            >
+              <Icon name="plus" size={14} />
+              New skill
+            </button>
+          </>
+        }
+      />
 
       {skills.length > 0 && (
         <div

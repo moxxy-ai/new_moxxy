@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useSettings } from '@/lib/useSettings';
 import { Skeleton } from '@/lib/Skeleton';
 import { Icon } from '@/lib/Icon';
+import { TabHeader } from './TabHeader';
 import { SkillsView } from './SkillsView';
 
 type Tab = 'providers' | 'mcp' | 'skills' | 'vault';
@@ -407,32 +408,7 @@ function Section({
 }): JSX.Element {
   return (
     <section style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>{title}</h2>
-          {count !== undefined && (
-            <span
-              style={{
-                minWidth: 22,
-                textAlign: 'center',
-                padding: '1px 7px',
-                borderRadius: 999,
-                fontSize: 11,
-                fontWeight: 700,
-                color: 'var(--color-text-muted)',
-                background: 'rgba(148, 163, 184, 0.16)',
-              }}
-            >
-              {count}
-            </span>
-          )}
-        </div>
-        {description && (
-          <p style={{ margin: '4px 0 0', fontSize: 12.5, color: 'var(--color-text-dim)', lineHeight: 1.5 }}>
-            {description}
-          </p>
-        )}
-      </div>
+      <TabHeader title={title} {...(count !== undefined ? { count } : {})} {...(description ? { description } : {})} />
       {search}
       {children}
     </section>
