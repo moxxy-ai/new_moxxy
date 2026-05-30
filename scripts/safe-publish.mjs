@@ -16,7 +16,10 @@
  *   2. Skip a package whose current version is already on npm (visible).
  *      This matches the behaviour of `changesets publish` for unchanged
  *      packages, so it's safe to run on every CI invocation.
- *   3. Run `npm publish` for everything else. When the registry rejects
+ *   3. Run `pnpm publish` for everything else (pnpm rewrites the
+ *      `workspace:*` / `catalog:` protocols to real version ranges; plain
+ *      `npm publish` ships them verbatim and the tarball becomes
+ *      uninstallable). When the registry rejects
  *      the version as tombstoned the script bumps the patch number,
  *      writes the new version to package.json, and tries again. The bump
  *      loop is capped (MAX_BUMP_ATTEMPTS) so a misconfiguration cannot
@@ -84,9 +87,19 @@ function alreadyPublished(name, version) {
 }
 
 function tryPublish(dir) {
-  const args = ['publish', '--access', 'public'];
+  // Publish with `pnpm publish`, NOT `npm publish`. pnpm rewrites the
+  // pnpm-only `workspace:*` and `catalog:` protocols in `dependencies` /
+  // `peerDependencies` to concrete version ranges in the published
+  // package.json. `npm publish` ships those protocols verbatim, producing a
+  // tarball that npm itself cannot install (EUNSUPPORTEDPROTOCOL
+  // 'Unsupported URL Type "workspace:"').
+  //
+  // --no-git-checks: this script rewrites package.json in place when walking
+  //   past tombstoned versions, which dirties the working tree. pnpm's
+  //   default pre-publish git checks would otherwise abort the publish.
+  const args = ['publish', '--access', 'public', '--no-git-checks'];
   if (process.env.GITHUB_ACTIONS === 'true') args.push('--provenance');
-  const r = spawnSync('npm', args, {
+  const r = spawnSync('pnpm', args, {
     cwd: dir,
     encoding: 'utf8',
     env: process.env,

@@ -128,6 +128,7 @@ Run `pnpm check:deps` to verify after structural changes.
 - **Wire every lifecycle hook.** `onEvent` needs `EventLog.subscribe → dispatcher.dispatchEvent`. `onShutdown` needs `Session.close()`. Declaring a hook without dispatching it is a silent dead-letter (we shipped that bug once — don't repeat).
 - **Use `Session.setPermissionResolver(r)`** to swap resolvers. Never `(session as unknown as {resolver}).resolver = ...`.
 - **Use `defineX(spec): XDef` factories.** They `Object.freeze` the spec and (for `definePlugin`) stamp `__moxxy: 'plugin'` and a default `version`.
+- **Add a changeset to every PR that changes a published package.** Run `pnpm changeset` (or hand-write `.changeset/<name>.md`) and pick the bump for `@moxxy/cli` / `@moxxy/sdk`. No changeset → no version bump → nothing publishes. See [Releasing](#releasing-changesets).
 
 ### Don't
 
@@ -140,6 +141,17 @@ Run `pnpm check:deps` to verify after structural changes.
 - **Don't `--no-verify` git commits or bypass dep-cruiser.** Fix the underlying issue.
 
 ---
+
+## Releasing (changesets)
+
+Versioning and publishing are driven by **changesets** — there is no manual `npm version` / `npm publish`. **Every PR that changes a published package must include a changeset**; a PR without one bumps nothing and ships nothing.
+
+- **Published packages:** only `@moxxy/cli` and `@moxxy/sdk` (everything else is `private` and bundled into the CLI binary by tsup). A changeset only ever lists those two.
+- **Add one:** `pnpm changeset` → pick the package(s) + bump (patch / minor / major) + write a one-line summary. This drops a file in `.changeset/`. Commit it with your PR.
+- **What happens on merge to `main`** (`.github/workflows/release.yml`):
+  1. Pending changesets → `changesets/action` opens/updates a **"Version Packages" PR** that bumps `package.json` versions, writes changelogs, and deletes the consumed changesets.
+  2. Merge that Version PR → the workflow re-runs with no pending changesets and **publishes** via `scripts/safe-publish.mjs`.
+- **Publish uses `pnpm publish`, not `npm publish`** — pnpm rewrites the `workspace:*` and `catalog:` protocols to real version ranges. `npm publish` ships them verbatim and the tarball becomes uninstallable (`EUNSUPPORTEDPROTOCOL "workspace:"`). Don't change `safe-publish.mjs` back to `npm publish`.
 
 ## Quick commands
 
