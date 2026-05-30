@@ -66,18 +66,23 @@ export function Active({
         <ActionButton onClick={onText} aria-label="Text">
           <PencilIcon />
         </ActionButton>
-        <ActionButton
-          onClick={() => void api().invoke('focus.restoreMain').catch(() => undefined)}
-          aria-label="Open main window"
-        >
-          <WindowIcon />
-        </ActionButton>
+        {/* Dismiss the floating bar (leaves the app where it was — does NOT
+            open the main window). Kept before the restore button so the LAST
+            icon is the "open main window" action. */}
         <ActionButton
           onClick={() => void api().invoke('focus.close').catch(() => undefined)}
           aria-label="Close focus mode"
           variant="danger"
         >
           <XIcon />
+        </ActionButton>
+        {/* Last icon: reopen the full app (restores + focuses the main window
+            and closes this bar). */}
+        <ActionButton
+          onClick={() => void api().invoke('focus.restoreMain').catch(() => undefined)}
+          aria-label="Open main window"
+        >
+          <WindowIcon />
         </ActionButton>
       </div>
     </div>
