@@ -296,6 +296,14 @@ function SkillGallery({
   readonly onCreate: () => void;
   readonly onGenerate: () => void;
 }): JSX.Element {
+  const [query, setQuery] = useState('');
+  const q = query.trim().toLowerCase();
+  const shown = q
+    ? skills.filter(
+        (sk) =>
+          sk.name.toLowerCase().includes(q) || (sk.description?.toLowerCase().includes(q) ?? false),
+      )
+    : skills;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -356,8 +364,43 @@ function SkillGallery({
         </button>
       </div>
 
+      {skills.length > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 9,
+            padding: '9px 12px',
+            background: '#fff',
+            border: '1px solid var(--color-card-border)',
+            borderRadius: 10,
+          }}
+        >
+          <Icon name="search" size={15} style={{ color: 'var(--color-text-dim)', flexShrink: 0 }} />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search skills…"
+            style={{
+              flex: 1,
+              minWidth: 0,
+              border: 'none',
+              outline: 'none',
+              background: 'transparent',
+              fontSize: 13,
+              color: 'var(--color-text)',
+            }}
+          />
+        </div>
+      )}
+
       {skills.length === 0 ? (
         <EmptyHero onCreate={onCreate} onGenerate={onGenerate} />
+      ) : shown.length === 0 ? (
+        <p style={{ margin: 0, padding: '24px 4px', fontSize: 13, color: 'var(--color-text-dim)' }}>
+          No skills match “{query}”.
+        </p>
       ) : (
         <div
           style={{
@@ -366,7 +409,7 @@ function SkillGallery({
             gap: 12,
           }}
         >
-          {skills.map((skill) => (
+          {shown.map((skill) => (
             <button
               key={skill.name}
               type="button"
@@ -378,6 +421,7 @@ function SkillGallery({
                 flexDirection: 'column',
                 gap: 10,
                 padding: 16,
+                minWidth: 0,
                 minHeight: 104,
                 background: 'var(--color-card-bg)',
                 border: '1px solid var(--color-card-border)',

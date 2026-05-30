@@ -25,6 +25,12 @@ const TABS: ReadonlyArray<{ id: Tab; label: string }> = [
 export function SettingsPanel(): JSX.Element {
   const s = useSettings();
   const [tab, setTab] = useState<Tab>('providers');
+  const [query, setQuery] = useState('');
+  const q = query.trim().toLowerCase();
+
+  const providers = q ? s.providers.filter((p) => p.name.toLowerCase().includes(q)) : s.providers;
+  const mcp = q ? s.mcp.filter((m) => m.name.toLowerCase().includes(q)) : s.mcp;
+  const vault = q ? s.vault.filter((v) => v.name.toLowerCase().includes(q)) : s.vault;
 
   return (
     <main
@@ -58,7 +64,10 @@ export function SettingsPanel(): JSX.Element {
                 type="button"
                 data-testid={`settings-tab-${t.id}`}
                 data-active={active}
-                onClick={() => setTab(t.id)}
+                onClick={() => {
+                  setTab(t.id);
+                  setQuery('');
+                }}
                 style={{
                   padding: '6px 15px',
                   fontSize: 13,
@@ -127,10 +136,17 @@ export function SettingsPanel(): JSX.Element {
         </div>
       ) : (
         <>
-          {tab === 'providers' && <ProvidersTab providers={s.providers} />}
-          {tab === 'mcp' && <McpTab servers={s.mcp} onToggle={s.toggleMcp} />}
+          {tab !== 'skills' && (
+            <SearchBox
+              value={query}
+              onChange={setQuery}
+              placeholder={`Search ${tab === 'mcp' ? 'MCP servers' : tab}…`}
+            />
+          )}
+          {tab === 'providers' && <ProvidersTab providers={providers} />}
+          {tab === 'mcp' && <McpTab servers={mcp} onToggle={s.toggleMcp} />}
           {tab === 'skills' && <SkillsView s={s} />}
-          {tab === 'vault' && <VaultTab vault={s.vault} />}
+          {tab === 'vault' && <VaultTab vault={vault} />}
         </>
       )}
     </main>
@@ -316,6 +332,47 @@ function VaultKeyCard({ name }: { readonly name: string }): JSX.Element {
 }
 
 // ---- shared list primitives ----------------------------------------------
+
+function SearchBox({
+  value,
+  onChange,
+  placeholder,
+}: {
+  readonly value: string;
+  readonly onChange: (v: string) => void;
+  readonly placeholder: string;
+}): JSX.Element {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 9,
+        padding: '9px 12px',
+        background: '#fff',
+        border: '1px solid var(--color-card-border)',
+        borderRadius: 10,
+      }}
+    >
+      <Icon name="search" size={15} style={{ color: 'var(--color-text-dim)', flexShrink: 0 }} />
+      <input
+        type="search"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        style={{
+          flex: 1,
+          minWidth: 0,
+          border: 'none',
+          outline: 'none',
+          background: 'transparent',
+          fontSize: 13,
+          color: 'var(--color-text)',
+        }}
+      />
+    </div>
+  );
+}
 
 function Section({
   title,
