@@ -96,7 +96,11 @@ export function Transcript({
       data={nodes as RenderNode[]}
       data-testid="transcript"
       style={{ flex: 1 }}
-      followOutput="auto"
+      // Only follow when the user is already at the bottom (scrolling up to
+      // read is never interrupted). A newly-committed line scrolls SMOOTHLY;
+      // during active streaming we pin instantly so rapid chunks don't stack
+      // overlapping smooth-scroll animations into jank.
+      followOutput={(atBottom) => (atBottom ? (streamingText ? 'auto' : 'smooth') : false)}
       firstItemIndex={firstItemIndex}
       initialTopMostItemIndex={Math.max(0, nodes.length - 1)}
       {...(hasOlder && onReachedTop ? { startReached: onReachedTop } : {})}
